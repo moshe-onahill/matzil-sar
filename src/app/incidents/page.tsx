@@ -7,16 +7,18 @@ import { useEffect, useMemo, useState } from "react";
 const CURRENT_TEST_EMAIL = "member2@matzilsar.org";
 const CURRENT_MANAGER_EMAIL = "manager@matzilsar.org";
 
+type ResponseUser = {
+  full_name: string;
+  call_sign: string;
+};
+
 type Response = {
   user_id: string;
   response_type: string;
   eta_minutes: number | null;
   available_at: string | null;
   responded_at: string | null;
-  users: {
-    full_name: string;
-    call_sign: string;
-  };
+  users: ResponseUser[] | null;
 };
 
 type Incident = {
@@ -55,7 +57,6 @@ export default function IncidentsPage() {
   useEffect(() => {
     loadPageData();
 
-    // Request notification permission
     if ("Notification" in window && Notification.permission !== "granted") {
       Notification.requestPermission();
     }
@@ -65,17 +66,21 @@ export default function IncidentsPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "incident_responses" },
-        loadPageData
+        () => {
+          void loadPageData();
+        }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "incidents" },
-        loadPageData
+        () => {
+          void loadPageData();
+        }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
   }, []);
 
@@ -88,7 +93,7 @@ export default function IncidentsPage() {
 
     if (user) setCurrentUserId(user.id);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("incidents")
       .select(`
         id,
@@ -112,7 +117,14 @@ export default function IncidentsPage() {
       `)
       .order("created_at", { ascending: false });
 
-    if (data) setIncidents(data as Incident[]);
+    if (error) {
+      alert(`Error loading incidents: ${error.message}`);
+      return;
+    }
+
+    if (data) {
+      setIncidents(data as unknown as Incident[]);
+    }
   }
 
   async function respondToIncident(
@@ -132,7 +144,9 @@ export default function IncidentsPage() {
     let etaMinutes: number | null = null;
 
     if (type === "Available At") {
-      const [h, m] = availableTime!.split(":");
+      if (!availableTime) return;
+
+      const [h, m] = availableTime.split(":");
       const d = new Date();
       d.setHours(Number(h), Number(m), 0, 0);
       availableAt = d.toISOString();
@@ -177,8 +191,7 @@ export default function IncidentsPage() {
       })
       .eq("id", id);
 
-    // 🔔 Notification
-    if (Notification.permission === "granted") {
+    if ("Notification" in window && Notification.permission === "granted") {
       new Notification("🚨 SAR CALLOUT", {
         body: "New incident activated. Open app and respond.",
       });
@@ -203,11 +216,13 @@ export default function IncidentsPage() {
 
   function saveTime() {
     if (!selectedIncidentId) return;
-    respondToIncident(
+
+    void respondToIncident(
       selectedIncidentId,
       "Available At",
       `${selectedHour}:${selectedMinute}`
     );
+
     setTimePickerOpen(false);
   }
 
@@ -239,25 +254,46 @@ export default function IncidentsPage() {
     return r.response_type;
   }
 
+  function getResponseName(r: Response) {
+    const user = r.users?.[0];
+    if (!user) return "Unknown User";
+    return `${user.call_sign} - ${user.full_name}`;
+  }
+
   return (
     <>
       <main className="min-h-screen bg-black text-white p-6">
         <div className="max-w-5xl mx-auto space-y-4">
-          <h1 className="text-3xl font-bold">Incidents</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold">Incidents</h1>
+            <Link
+              href="/"
+              className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
+            >
+              Home
+            </Link>
+          </div>
 
           {incidents.map((incident) => {
             const myResponse = getMyResponse(incident);
-            const active = myResponse && myResponse.response_type !== "Cancelled";
+            const active =
+              myResponse && myResponse.response_type !== "Cancelled";
 
             return (
-              <div key={incident.id} className="bg-gray-900 p-5 rounded-xl">
-                <div className="flex justify-between">
+              <div key={incident.id} className="rounded-xl bg-gray-900 p-5">
+                <div className="flex justify-between gap-4">
                   <div>
-                    <div className="text-gray-400 text-sm">
+                    <div className="text-sm text-gray-400">
                       {incident.incident_number}
                     </div>
                     <div className="text-xl">{incident.title}</div>
+                    {incident.short_description && (
+                      <div className="mt-1 text-sm text-gray-400">
+                        {incident.short_description}
+                      </div>
+                    )}
                   </div>
+
                   <div className="text-right text-sm">
                     <div>{incident.type}</div>
                     <div className="text-red-400">{incident.status}</div>
@@ -266,8 +302,8 @@ export default function IncidentsPage() {
 
                 {incident.status === "Pending" && (
                   <button
-                    onClick={() => approveIncident(incident.id)}
-                    className="mt-3 bg-green-600 px-3 py-2 rounded"
+                    onClick={() => void approveIncident(incident.id)}
+                    className="mt-3 rounded bg-green-600 px-3 py-2"
                   >
                     Approve Incident
                   </button>
@@ -275,31 +311,31 @@ export default function IncidentsPage() {
 
                 {incident.status === "Active" && incident.accepting_units && (
                   <button
-                    onClick={() => stopUnits(incident.id)}
-                    className="mt-3 bg-orange-600 px-3 py-2 rounded"
+                    onClick={() => void stopUnits(incident.id)}
+                    className="mt-3 rounded bg-orange-600 px-3 py-2"
                   >
                     No More Units
                   </button>
                 )}
 
-                <div className="mt-4 flex gap-2 flex-wrap">
+                <div className="mt-4 flex flex-wrap gap-2">
                   {incident.accepting_units ? (
                     <>
                       {!active ? (
                         <button
                           onClick={() =>
-                            respondToIncident(incident.id, "Responding")
+                            void respondToIncident(incident.id, "Responding")
                           }
-                          className="bg-red-600 px-3 py-2 rounded"
+                          className="rounded bg-red-600 px-3 py-2"
                         >
                           Respond
                         </button>
                       ) : (
                         <button
                           onClick={() =>
-                            respondToIncident(incident.id, "Cancelled")
+                            void respondToIncident(incident.id, "Cancelled")
                           }
-                          className="bg-yellow-600 px-3 py-2 rounded"
+                          className="rounded bg-yellow-600 px-3 py-2"
                         >
                           Cancel
                         </button>
@@ -307,16 +343,16 @@ export default function IncidentsPage() {
 
                       <button
                         onClick={() =>
-                          respondToIncident(incident.id, "Not Available")
+                          void respondToIncident(incident.id, "Not Available")
                         }
-                        className="bg-gray-600 px-3 py-2 rounded"
+                        className="rounded bg-gray-600 px-3 py-2"
                       >
                         Not Available
                       </button>
 
                       <button
                         onClick={() => openTimePicker(incident.id)}
-                        className="bg-blue-600 px-3 py-2 rounded"
+                        className="rounded bg-blue-600 px-3 py-2"
                       >
                         Available At
                       </button>
@@ -336,10 +372,8 @@ export default function IncidentsPage() {
 
                 <div className="mt-3 space-y-1">
                   {incident.incident_responses.map((r, i) => (
-                    <div key={i} className="text-sm flex justify-between">
-                      <span>
-                        {r.users.call_sign} - {r.users.full_name}
-                      </span>
+                    <div key={i} className="flex justify-between text-sm">
+                      <span>{getResponseName(r)}</span>
                       <span>{formatResponse(r)}</span>
                     </div>
                   ))}
@@ -351,22 +385,34 @@ export default function IncidentsPage() {
       </main>
 
       {timePickerOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center">
-          <div className="bg-gray-900 p-6 rounded-xl">
-            <div className="flex gap-2 mb-4">
-              <select value={selectedHour} onChange={(e) => setSelectedHour(e.target.value)}>
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80">
+          <div className="rounded-xl bg-gray-900 p-6">
+            <div className="mb-4 flex gap-2">
+              <select
+                value={selectedHour}
+                onChange={(e) => setSelectedHour(e.target.value)}
+                className="rounded bg-black px-3 py-2"
+              >
                 {hours.map((h) => (
                   <option key={h}>{h}</option>
                 ))}
               </select>
-              <select value={selectedMinute} onChange={(e) => setSelectedMinute(e.target.value)}>
+
+              <select
+                value={selectedMinute}
+                onChange={(e) => setSelectedMinute(e.target.value)}
+                className="rounded bg-black px-3 py-2"
+              >
                 {minutes.map((m) => (
                   <option key={m}>{m}</option>
                 ))}
               </select>
             </div>
 
-            <button onClick={saveTime} className="bg-blue-600 px-4 py-2 rounded">
+            <button
+              onClick={saveTime}
+              className="rounded bg-blue-600 px-4 py-2"
+            >
               Save
             </button>
           </div>
