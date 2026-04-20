@@ -55,10 +55,10 @@ export default function IncidentsPage() {
   );
 
   useEffect(() => {
-    loadPageData();
+    void loadPageData();
 
     if ("Notification" in window && Notification.permission !== "granted") {
-      Notification.requestPermission();
+      void Notification.requestPermission();
     }
 
     const channel = supabase
@@ -145,7 +145,6 @@ export default function IncidentsPage() {
 
     if (type === "Available At") {
       if (!availableTime) return;
-
       const [h, m] = availableTime.split(":");
       const d = new Date();
       d.setHours(Number(h), Number(m), 0, 0);
@@ -156,7 +155,7 @@ export default function IncidentsPage() {
       etaMinutes = 20;
     }
 
-    await supabase.from("incident_responses").upsert(
+    const { error } = await supabase.from("incident_responses").upsert(
       {
         incident_id: incidentId,
         user_id: user.id,
@@ -167,6 +166,11 @@ export default function IncidentsPage() {
       },
       { onConflict: "incident_id,user_id" }
     );
+
+    if (error) {
+      alert(`Response error: ${error.message}`);
+      return;
+    }
 
     await loadPageData();
   }
@@ -180,7 +184,7 @@ export default function IncidentsPage() {
 
     if (!manager) return;
 
-    await supabase
+    const { error } = await supabase
       .from("incidents")
       .update({
         status: "Active",
@@ -190,6 +194,11 @@ export default function IncidentsPage() {
         accepting_units: true,
       })
       .eq("id", id);
+
+    if (error) {
+      alert(`Approval error: ${error.message}`);
+      return;
+    }
 
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification("🚨 SAR CALLOUT", {
@@ -201,10 +210,55 @@ export default function IncidentsPage() {
   }
 
   async function stopUnits(id: string) {
-    await supabase
+    const { error } = await supabase
       .from("incidents")
       .update({ accepting_units: false })
       .eq("id", id);
+
+    if (error) {
+      alert(`No More Units error: ${error.message}`);
+      return;
+    }
+
+    await loadPageData();
+  }
+
+  async function closeIncident(id: string) {
+    const confirmed = window.confirm("Close this incident?");
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("incidents")
+      .update({
+        status: "Closed",
+        closed_at: new Date().toISOString(),
+        accepting_units: false,
+      })
+      .eq("id", id);
+
+    if (error) {
+      alert(`Close error: ${error.message}`);
+      return;
+    }
+
+    await loadPageData();
+  }
+
+  async function deleteIncident(id: string) {
+    const confirmed = window.confirm(
+      "Delete this incident? This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("incidents")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      alert(`Delete error: ${error.message}`);
+      return;
+    }
 
     await loadPageData();
   }
@@ -276,7 +330,11 @@ export default function IncidentsPage() {
 
           {incidents.map((incident) => {
             const myResponse = getMyResponse(incident);
-            const active =
+            const hasNonCancelledResponse =
+              myResponse && myResponse.response_type !== "Cancelled";
+            const canJoin =
+              incident.status !== "Closed" && incident.accepting_units;
+            const canCancel =
               myResponse && myResponse.response_type !== "Cancelled";
 
             return (
@@ -297,31 +355,54 @@ export default function IncidentsPage() {
                   <div className="text-right text-sm">
                     <div>{incident.type}</div>
                     <div className="text-red-400">{incident.status}</div>
+                    {!incident.accepting_units && incident.status !== "Closed" && (
+                      <div className="mt-1 text-orange-400">
+                        No more units
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {incident.status === "Pending" && (
-                  <button
-                    onClick={() => void approveIncident(incident.id)}
-                    className="mt-3 rounded bg-green-600 px-3 py-2"
-                  >
-                    Approve Incident
-                  </button>
-                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {incident.status === "Pending" && (
+                    <button
+                      onClick={() => void approveIncident(incident.id)}
+                      className="rounded bg-green-600 px-3 py-2"
+                    >
+                      Approve Incident
+                    </button>
+                  )}
 
-                {incident.status === "Active" && incident.accepting_units && (
+                  {incident.status === "Active" && incident.accepting_units && (
+                    <button
+                      onClick={() => void stopUnits(incident.id)}
+                      className="rounded bg-orange-600 px-3 py-2"
+                    >
+                      No More Units
+                    </button>
+                  )}
+
+                  {incident.status !== "Closed" && (
+                    <button
+                      onClick={() => void closeIncident(incident.id)}
+                      className="rounded bg-gray-700 px-3 py-2"
+                    >
+                      Close Incident
+                    </button>
+                  )}
+
                   <button
-                    onClick={() => void stopUnits(incident.id)}
-                    className="mt-3 rounded bg-orange-600 px-3 py-2"
+                    onClick={() => void deleteIncident(incident.id)}
+                    className="rounded bg-red-800 px-3 py-2"
                   >
-                    No More Units
+                    Delete Incident
                   </button>
-                )}
+                </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {incident.accepting_units ? (
+                  {canJoin ? (
                     <>
-                      {!active ? (
+                      {!hasNonCancelledResponse ? (
                         <button
                           onClick={() =>
                             void respondToIncident(incident.id, "Responding")
@@ -337,7 +418,7 @@ export default function IncidentsPage() {
                           }
                           className="rounded bg-yellow-600 px-3 py-2"
                         >
-                          Cancel
+                          Cancel Response
                         </button>
                       )}
 
@@ -357,9 +438,20 @@ export default function IncidentsPage() {
                         Available At
                       </button>
                     </>
+                  ) : canCancel ? (
+                    <button
+                      onClick={() =>
+                        void respondToIncident(incident.id, "Cancelled")
+                      }
+                      className="rounded bg-yellow-600 px-3 py-2"
+                    >
+                      Cancel Response
+                    </button>
                   ) : (
                     <div className="text-orange-400">
-                      No more units requested
+                      {incident.status === "Closed"
+                        ? "Incident closed"
+                        : "No more units requested"}
                     </div>
                   )}
                 </div>
@@ -409,12 +501,21 @@ export default function IncidentsPage() {
               </select>
             </div>
 
-            <button
-              onClick={saveTime}
-              className="rounded bg-blue-600 px-4 py-2"
-            >
-              Save
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTimePickerOpen(false)}
+                className="rounded bg-gray-700 px-4 py-2"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={saveTime}
+                className="rounded bg-blue-600 px-4 py-2"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}
