@@ -25,6 +25,7 @@ export default function RoleSwitcher() {
         className="rounded border border-gray-700 bg-black px-2 py-1 text-white"
       >
         <option value="Member">Member</option>
+        <option value="Dispatcher">Dispatcher</option>
         <option value="SAR Manager">SAR Manager</option>
         <option value="Global Admin">Global Admin</option>
       </select>
