@@ -15,11 +15,13 @@ export default function CreateIncidentPage() {
   const [type, setType] = useState("Emergency Callout");
 
   const [stagingName, setStagingName] = useState("");
+  const [stagingAddress, setStagingAddress] = useState("");
   const [stagingLat, setStagingLat] = useState("");
   const [stagingLatDir, setStagingLatDir] = useState<"N" | "S">("N");
   const [stagingLng, setStagingLng] = useState("");
   const [stagingLngDir, setStagingLngDir] = useState<"E" | "W">("W");
 
+  const [geocoding, setGeocoding] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -48,12 +50,64 @@ export default function CreateIncidentPage() {
     return dir === "W" ? -Math.abs(value) : Math.abs(value);
   }
 
+  function applyCoordinateValues(lat: number, lng: number) {
+    setStagingLat(Math.abs(lat).toString());
+    setStagingLatDir(lat < 0 ? "S" : "N");
+
+    setStagingLng(Math.abs(lng).toString());
+    setStagingLngDir(lng < 0 ? "W" : "E");
+  }
+
+  async function geocodeAddress() {
+    if (!stagingAddress.trim()) {
+      alert("Enter an address first.");
+      return;
+    }
+
+    setGeocoding(true);
+
+    try {
+      const encoded = encodeURIComponent(stagingAddress.trim());
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encoded}`;
+
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        alert("Address not found.");
+        setGeocoding(false);
+        return;
+      }
+
+      const lat = Number(data[0].lat);
+      const lng = Number(data[0].lon);
+
+      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        alert("Could not parse coordinates.");
+        setGeocoding(false);
+        return;
+      }
+
+      applyCoordinateValues(lat, lng);
+    } catch (error) {
+      alert("Geocoding failed.");
+    }
+
+    setGeocoding(false);
+  }
+
   async function createIncident() {
     if (!currentUserId) return;
 
     if (
       currentUserRole !== "SAR Manager" &&
-      currentUserRole !== "Global Admin"
+      currentUserRole !== "Global Admin" &&
+      currentUserRole !== "Dispatcher"
     ) {
       alert("You do not have permission to create incidents.");
       return;
@@ -110,6 +164,7 @@ export default function CreateIncidentPage() {
       accepting_units: isManager,
       created_by: currentUserId,
       staging_name: stagingName.trim(),
+      staging_address: stagingAddress.trim() || null,
       staging_lat: finalLat,
       staging_lng: finalLng,
     });
@@ -126,7 +181,8 @@ export default function CreateIncidentPage() {
 
   if (
     currentUserRole !== "SAR Manager" &&
-    currentUserRole !== "Global Admin"
+    currentUserRole !== "Global Admin" &&
+    currentUserRole !== "Dispatcher"
   ) {
     return (
       <main className="min-h-screen bg-black p-6 text-white">
@@ -151,7 +207,7 @@ export default function CreateIncidentPage() {
 
   return (
     <main className="min-h-screen bg-black p-6 text-white">
-      <div className="mx-auto max-w-xl space-y-4">
+      <div className="mx-auto max-w-2xl space-y-4">
         <div className="flex justify-between">
           <Link
             href="/incidents"
@@ -201,42 +257,69 @@ export default function CreateIncidentPage() {
             className="w-full rounded bg-black px-3 py-2"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2 rounded-lg bg-black/30 p-4">
+            <div className="font-medium">Staging Address</div>
+
             <input
-              value={stagingLat}
-              onChange={(e) => setStagingLat(e.target.value)}
-              placeholder="Latitude"
+              value={stagingAddress}
+              onChange={(e) => setStagingAddress(e.target.value)}
+              placeholder="Street, City, State"
               className="w-full rounded bg-black px-3 py-2"
             />
-            <select
-              value={stagingLatDir}
-              onChange={(e) => setStagingLatDir(e.target.value as "N" | "S")}
-              className="w-full rounded bg-black px-3 py-2"
+
+            <button
+              onClick={() => void geocodeAddress()}
+              disabled={geocoding}
+              className="rounded bg-blue-600 px-4 py-2"
             >
-              <option value="N">N</option>
-              <option value="S">S</option>
-            </select>
+              {geocoding ? "Getting Coordinates..." : "Get Coordinates"}
+            </button>
+
+            <div className="text-sm text-gray-400">
+              For demo mode this uses OpenStreetMap geocoding. Google API can be swapped in later.
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              value={stagingLng}
-              onChange={(e) => setStagingLng(e.target.value)}
-              placeholder="Longitude"
-              className="w-full rounded bg-black px-3 py-2"
-            />
-            <select
-              value={stagingLngDir}
-              onChange={(e) => setStagingLngDir(e.target.value as "E" | "W")}
-              className="w-full rounded bg-black px-3 py-2"
-            >
-              <option value="W">W</option>
-              <option value="E">E</option>
-            </select>
-          </div>
+          <div className="space-y-2 rounded-lg bg-black/30 p-4">
+            <div className="font-medium">Manual Coordinates Override</div>
 
-          <div className="text-sm text-gray-400">
-            Example for New Jersey: latitude 40.x with N, longitude 74.x with W
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                value={stagingLat}
+                onChange={(e) => setStagingLat(e.target.value)}
+                placeholder="Latitude"
+                className="w-full rounded bg-black px-3 py-2"
+              />
+              <select
+                value={stagingLatDir}
+                onChange={(e) => setStagingLatDir(e.target.value as "N" | "S")}
+                className="w-full rounded bg-black px-3 py-2"
+              >
+                <option value="N">N</option>
+                <option value="S">S</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                value={stagingLng}
+                onChange={(e) => setStagingLng(e.target.value)}
+                placeholder="Longitude"
+                className="w-full rounded bg-black px-3 py-2"
+              />
+              <select
+                value={stagingLngDir}
+                onChange={(e) => setStagingLngDir(e.target.value as "E" | "W")}
+                className="w-full rounded bg-black px-3 py-2"
+              >
+                <option value="W">W</option>
+                <option value="E">E</option>
+              </select>
+            </div>
+
+            <div className="text-sm text-gray-400">
+              Example for New Jersey: latitude 40.x with N, longitude 74.x with W
+            </div>
           </div>
 
           <button

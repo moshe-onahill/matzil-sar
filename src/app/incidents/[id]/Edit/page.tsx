@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
 import RoleSwitcher from "@/components/RoleSwitcher";
@@ -15,6 +16,7 @@ type Incident = {
   status: string;
   accepting_units: boolean;
   staging_name: string | null;
+  staging_address: string | null;
   staging_lat: number | null;
   staging_lng: number | null;
   updated_at?: string | null;
@@ -27,17 +29,16 @@ type Snapshot = {
   status: string;
   accepting_units: boolean;
   staging_name: string;
+  staging_address: string;
   staging_lat: string;
   staging_lat_dir: "N" | "S";
   staging_lng: string;
   staging_lng_dir: "E" | "W";
 };
 
-export default function EditIncidentPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function EditIncidentPage() {
+  const params = useParams<{ id: string }>();
+
   const [incidentId, setIncidentId] = useState<string | null>(null);
   const [incident, setIncident] = useState<Incident | null>(null);
   const [baselineUpdatedAt, setBaselineUpdatedAt] = useState<string | null>(null);
@@ -52,6 +53,7 @@ export default function EditIncidentPage({
   const [acceptingUnits, setAcceptingUnits] = useState(false);
 
   const [stagingName, setStagingName] = useState("");
+  const [stagingAddress, setStagingAddress] = useState("");
   const [stagingLat, setStagingLat] = useState("");
   const [stagingLatDir, setStagingLatDir] = useState<"N" | "S">("N");
   const [stagingLng, setStagingLng] = useState("");
@@ -59,13 +61,14 @@ export default function EditIncidentPage({
 
   const [notifyMembers, setNotifyMembers] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function init() {
-      const resolved = await params;
-      setIncidentId(resolved.id);
+    if (params?.id) {
+      setIncidentId(params.id);
     }
-    void init();
   }, [params]);
 
   useEffect(() => {
@@ -74,19 +77,28 @@ export default function EditIncidentPage({
   }, [incidentId]);
 
   async function loadPage() {
+    if (!incidentId) return;
+
+    setLoading(true);
+    setPageError(null);
+
     const email = getCurrentTestEmail();
     const role = getStoredRole();
     setCurrentUserRole(role);
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from("users")
       .select("id")
       .eq("email", email)
       .single();
 
-    if (user) {
-      setCurrentUserId(user.id);
+    if (userError || !user) {
+      setLoading(false);
+      setPageError("Could not load current user.");
+      return;
     }
+
+    setCurrentUserId(user.id);
 
     const { data, error } = await supabase
       .from("incidents")
@@ -99,6 +111,7 @@ export default function EditIncidentPage({
         status,
         accepting_units,
         staging_name,
+        staging_address,
         staging_lat,
         staging_lng,
         updated_at
@@ -107,6 +120,8 @@ export default function EditIncidentPage({
       .single();
 
     if (error || !data) {
+      setLoading(false);
+      setPageError(error?.message || "Incident not found.");
       return;
     }
 
@@ -120,15 +135,18 @@ export default function EditIncidentPage({
     setStatus(typed.status ?? "Pending");
     setAcceptingUnits(Boolean(typed.accepting_units));
     setStagingName(typed.staging_name ?? "");
+    setStagingAddress(typed.staging_address ?? "");
 
     const lat = typed.staging_lat ?? 0;
     const lng = typed.staging_lng ?? 0;
 
-    setStagingLat(Math.abs(lat).toString());
+    setStagingLat(lat ? Math.abs(lat).toString() : "");
     setStagingLatDir(lat < 0 ? "S" : "N");
 
-    setStagingLng(Math.abs(lng).toString());
-    setStagingLngDir(lng < 0 ? "E" : "W");
+    setStagingLng(lng ? Math.abs(lng).toString() : "");
+    setStagingLngDir(lng < 0 ? "W" : "E");
+
+    setLoading(false);
   }
 
   function canEdit() {
@@ -147,6 +165,54 @@ export default function EditIncidentPage({
     return dir === "W" ? -Math.abs(value) : Math.abs(value);
   }
 
+  function applyCoordinateValues(lat: number, lng: number) {
+    setStagingLat(Math.abs(lat).toString());
+    setStagingLatDir(lat < 0 ? "S" : "N");
+    setStagingLng(Math.abs(lng).toString());
+    setStagingLngDir(lng < 0 ? "W" : "E");
+  }
+
+  async function geocodeAddress() {
+    if (!stagingAddress.trim()) {
+      alert("Enter an address first.");
+      return;
+    }
+
+    setGeocoding(true);
+
+    try {
+      const encoded = encodeURIComponent(stagingAddress.trim());
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encoded}`;
+
+      const response = await fetch(url, {
+        headers: { Accept: "application/json" },
+      });
+
+      const data = await response.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        alert("Address not found.");
+        setGeocoding(false);
+        return;
+      }
+
+      const lat = Number(data[0].lat);
+      const lng = Number(data[0].lon);
+
+      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        alert("Could not parse coordinates.");
+        setGeocoding(false);
+        return;
+      }
+
+      applyCoordinateValues(lat, lng);
+    } catch {
+      alert("Geocoding failed.");
+    }
+
+    setGeocoding(false);
+  }
+
   const originalSnapshot: Snapshot | null = useMemo(() => {
     if (!incident) return null;
 
@@ -160,10 +226,11 @@ export default function EditIncidentPage({
       status: incident.status ?? "",
       accepting_units: Boolean(incident.accepting_units),
       staging_name: incident.staging_name ?? "",
-      staging_lat: Math.abs(lat).toString(),
+      staging_address: incident.staging_address ?? "",
+      staging_lat: lat ? Math.abs(lat).toString() : "",
       staging_lat_dir: lat < 0 ? "S" : "N",
-      staging_lng: Math.abs(lng).toString(),
-      staging_lng_dir: lng < 0 ? "E" : "W",
+      staging_lng: lng ? Math.abs(lng).toString() : "",
+      staging_lng_dir: lng < 0 ? "W" : "E",
     };
   }, [incident]);
 
@@ -175,6 +242,7 @@ export default function EditIncidentPage({
       status,
       accepting_units: acceptingUnits,
       staging_name: stagingName,
+      staging_address: stagingAddress,
       staging_lat: stagingLat,
       staging_lat_dir: stagingLatDir,
       staging_lng: stagingLng,
@@ -187,6 +255,7 @@ export default function EditIncidentPage({
       status,
       acceptingUnits,
       stagingName,
+      stagingAddress,
       stagingLat,
       stagingLatDir,
       stagingLng,
@@ -200,23 +269,11 @@ export default function EditIncidentPage({
     const rows: { label: string; from: string; to: string; key: string }[] = [];
 
     if (originalSnapshot.title !== currentSnapshot.title) {
-      rows.push({
-        key: "title",
-        label: "Title",
-        from: originalSnapshot.title || "—",
-        to: currentSnapshot.title || "—",
-      });
+      rows.push({ key: "title", label: "Title", from: originalSnapshot.title || "—", to: currentSnapshot.title || "—" });
     }
-
     if (originalSnapshot.type !== currentSnapshot.type) {
-      rows.push({
-        key: "type",
-        label: "Type",
-        from: originalSnapshot.type || "—",
-        to: currentSnapshot.type || "—",
-      });
+      rows.push({ key: "type", label: "Type", from: originalSnapshot.type || "—", to: currentSnapshot.type || "—" });
     }
-
     if (originalSnapshot.short_description !== currentSnapshot.short_description) {
       rows.push({
         key: "short_description",
@@ -225,16 +282,9 @@ export default function EditIncidentPage({
         to: currentSnapshot.short_description || "—",
       });
     }
-
     if (originalSnapshot.status !== currentSnapshot.status) {
-      rows.push({
-        key: "status",
-        label: "Status",
-        from: originalSnapshot.status || "—",
-        to: currentSnapshot.status || "—",
-      });
+      rows.push({ key: "status", label: "Status", from: originalSnapshot.status || "—", to: currentSnapshot.status || "—" });
     }
-
     if (originalSnapshot.accepting_units !== currentSnapshot.accepting_units) {
       rows.push({
         key: "accepting_units",
@@ -243,7 +293,6 @@ export default function EditIncidentPage({
         to: currentSnapshot.accepting_units ? "Yes" : "No",
       });
     }
-
     if (originalSnapshot.staging_name !== currentSnapshot.staging_name) {
       rows.push({
         key: "staging_name",
@@ -252,27 +301,25 @@ export default function EditIncidentPage({
         to: currentSnapshot.staging_name || "—",
       });
     }
-
-    const fromLat = `${originalSnapshot.staging_lat} ${originalSnapshot.staging_lat_dir}`;
-    const toLat = `${currentSnapshot.staging_lat} ${currentSnapshot.staging_lat_dir}`;
-    if (fromLat !== toLat) {
+    if (originalSnapshot.staging_address !== currentSnapshot.staging_address) {
       rows.push({
-        key: "staging_lat",
-        label: "Staging Latitude",
-        from: fromLat,
-        to: toLat,
+        key: "staging_address",
+        label: "Staging Address",
+        from: originalSnapshot.staging_address || "—",
+        to: currentSnapshot.staging_address || "—",
       });
     }
 
-    const fromLng = `${originalSnapshot.staging_lng} ${originalSnapshot.staging_lng_dir}`;
-    const toLng = `${currentSnapshot.staging_lng} ${currentSnapshot.staging_lng_dir}`;
+    const fromLat = `${originalSnapshot.staging_lat} ${originalSnapshot.staging_lat_dir}`.trim();
+    const toLat = `${currentSnapshot.staging_lat} ${currentSnapshot.staging_lat_dir}`.trim();
+    if (fromLat !== toLat) {
+      rows.push({ key: "staging_lat", label: "Staging Latitude", from: fromLat || "—", to: toLat || "—" });
+    }
+
+    const fromLng = `${originalSnapshot.staging_lng} ${originalSnapshot.staging_lng_dir}`.trim();
+    const toLng = `${currentSnapshot.staging_lng} ${currentSnapshot.staging_lng_dir}`.trim();
     if (fromLng !== toLng) {
-      rows.push({
-        key: "staging_lng",
-        label: "Staging Longitude",
-        from: fromLng,
-        to: toLng,
-      });
+      rows.push({ key: "staging_lng", label: "Staging Longitude", from: fromLng || "—", to: toLng || "—" });
     }
 
     return rows;
@@ -298,6 +345,11 @@ export default function EditIncidentPage({
 
     if (!stagingName.trim()) {
       alert("Staging name is required.");
+      return;
+    }
+
+    if (!stagingLat.trim() || !stagingLng.trim()) {
+      alert("Latitude and longitude are required.");
       return;
     }
 
@@ -328,13 +380,9 @@ export default function EditIncidentPage({
 
     const latestUpdatedAt = latestIncident?.updated_at ?? null;
 
-    if (
-      baselineUpdatedAt &&
-      latestUpdatedAt &&
-      baselineUpdatedAt !== latestUpdatedAt
-    ) {
+    if (baselineUpdatedAt && latestUpdatedAt && baselineUpdatedAt !== latestUpdatedAt) {
       const override = window.confirm(
-        "Another user made changes to this incident. Do you want to cancel your changes or override?"
+        "Another user made these changes, do you want to cancel your changes or override?"
       );
 
       if (!override) {
@@ -349,16 +397,11 @@ export default function EditIncidentPage({
     for (const change of changes) {
       if (change.key === "title") updatePayload.title = title.trim();
       if (change.key === "type") updatePayload.type = type;
-      if (change.key === "short_description") {
-        updatePayload.short_description = description.trim() || null;
-      }
+      if (change.key === "short_description") updatePayload.short_description = description.trim() || null;
       if (change.key === "status") updatePayload.status = status;
-      if (change.key === "accepting_units") {
-        updatePayload.accepting_units = acceptingUnits;
-      }
-      if (change.key === "staging_name") {
-        updatePayload.staging_name = stagingName.trim();
-      }
+      if (change.key === "accepting_units") updatePayload.accepting_units = acceptingUnits;
+      if (change.key === "staging_name") updatePayload.staging_name = stagingName.trim();
+      if (change.key === "staging_address") updatePayload.staging_address = stagingAddress.trim() || null;
       if (change.key === "staging_lat") updatePayload.staging_lat = finalLat;
       if (change.key === "staging_lng") updatePayload.staging_lng = finalLng;
     }
@@ -374,15 +417,9 @@ export default function EditIncidentPage({
       return;
     }
 
-    const summary = changes
-      .map((change) => `${change.label}: ${change.from} → ${change.to}`)
-      .join("\n");
-
-    const updateTitleValue =
-      changes.length === 1 ? `Edited ${changes[0].label}` : "Incident edited";
-
-    const updateBodyValue =
-      `${summary}${notifyMembers ? "\n\nNotify members: Yes" : ""}`;
+    const summary = changes.map((change) => `${change.label}: ${change.from} → ${change.to}`).join("\n");
+    const updateTitleValue = changes.length === 1 ? `Edited ${changes[0].label}` : "Incident edited";
+    const updateBodyValue = `${summary}${notifyMembers ? "\n\nNotify members: Yes" : ""}`;
 
     await supabase.from("incident_updates").insert({
       incident_id: incidentId,
@@ -396,15 +433,12 @@ export default function EditIncidentPage({
     window.location.href = `/incidents/${incidentId}`;
   }
 
-  if (!incident) {
+  if (loading) {
     return (
       <main className="min-h-screen bg-black p-6 text-white">
         <div className="mx-auto max-w-3xl space-y-4">
           <div className="flex justify-between">
-            <Link
-              href="/incidents"
-              className="rounded border border-gray-800 bg-gray-900 px-4 py-2"
-            >
+            <Link href="/incidents" className="rounded border border-gray-800 bg-gray-900 px-4 py-2">
               Back
             </Link>
             <RoleSwitcher />
@@ -416,6 +450,29 @@ export default function EditIncidentPage({
         </div>
       </main>
     );
+  }
+
+  if (pageError) {
+    return (
+      <main className="min-h-screen bg-black p-6 text-white">
+        <div className="mx-auto max-w-3xl space-y-4">
+          <div className="flex justify-between">
+            <Link href="/incidents" className="rounded border border-gray-800 bg-gray-900 px-4 py-2">
+              Back
+            </Link>
+            <RoleSwitcher />
+          </div>
+
+          <div className="rounded-xl bg-gray-900 p-6 text-red-300">
+            {pageError}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!incident) {
+    return null;
   }
 
   if (!canEdit()) {
@@ -511,38 +568,61 @@ export default function EditIncidentPage({
             className="w-full rounded bg-black px-3 py-2"
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2 rounded-lg bg-black/30 p-4">
+            <div className="font-medium">Staging Address</div>
+
             <input
-              value={stagingLat}
-              onChange={(e) => setStagingLat(e.target.value)}
-              placeholder="Latitude"
+              value={stagingAddress}
+              onChange={(e) => setStagingAddress(e.target.value)}
+              placeholder="Street, City, State"
               className="w-full rounded bg-black px-3 py-2"
             />
-            <select
-              value={stagingLatDir}
-              onChange={(e) => setStagingLatDir(e.target.value as "N" | "S")}
-              className="w-full rounded bg-black px-3 py-2"
+
+            <button
+              onClick={() => void geocodeAddress()}
+              disabled={geocoding}
+              className="rounded bg-blue-600 px-4 py-2"
             >
-              <option value="N">N</option>
-              <option value="S">S</option>
-            </select>
+              {geocoding ? "Getting Coordinates..." : "Get Coordinates"}
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              value={stagingLng}
-              onChange={(e) => setStagingLng(e.target.value)}
-              placeholder="Longitude"
-              className="w-full rounded bg-black px-3 py-2"
-            />
-            <select
-              value={stagingLngDir}
-              onChange={(e) => setStagingLngDir(e.target.value as "E" | "W")}
-              className="w-full rounded bg-black px-3 py-2"
-            >
-              <option value="W">W</option>
-              <option value="E">E</option>
-            </select>
+          <div className="space-y-2 rounded-lg bg-black/30 p-4">
+            <div className="font-medium">Manual Coordinates Override</div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                value={stagingLat}
+                onChange={(e) => setStagingLat(e.target.value)}
+                placeholder="Latitude"
+                className="w-full rounded bg-black px-3 py-2"
+              />
+              <select
+                value={stagingLatDir}
+                onChange={(e) => setStagingLatDir(e.target.value as "N" | "S")}
+                className="w-full rounded bg-black px-3 py-2"
+              >
+                <option value="N">N</option>
+                <option value="S">S</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                value={stagingLng}
+                onChange={(e) => setStagingLng(e.target.value)}
+                placeholder="Longitude"
+                className="w-full rounded bg-black px-3 py-2"
+              />
+              <select
+                value={stagingLngDir}
+                onChange={(e) => setStagingLngDir(e.target.value as "E" | "W")}
+                className="w-full rounded bg-black px-3 py-2"
+              >
+                <option value="W">W</option>
+                <option value="E">E</option>
+              </select>
+            </div>
           </div>
 
           <label className="flex items-center gap-2">
