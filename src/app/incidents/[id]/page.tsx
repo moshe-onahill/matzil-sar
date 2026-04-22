@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
 import RoleSwitcher from "@/components/RoleSwitcher";
@@ -37,6 +38,7 @@ type Incident = {
   status: string;
   accepting_units: boolean;
   staging_name: string | null;
+  staging_address: string | null;
   staging_lat: number | null;
   staging_lng: number | null;
   incident_responses: Response[];
@@ -45,11 +47,9 @@ type Incident = {
 
 type TabKey = "overview" | "updates" | "responders" | "attachments";
 
-export default function IncidentDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function IncidentDetailPage() {
+  const params = useParams<{ id: string }>();
+
   const [incidentId, setIncidentId] = useState<string | null>(null);
   const [incident, setIncident] = useState<Incident | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -66,6 +66,9 @@ export default function IncidentDetailPage({
   const [updateBody, setUpdateBody] = useState("");
   const [postingUpdate, setPostingUpdate] = useState(false);
 
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+
   const hours = useMemo(
     () => Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0")),
     []
@@ -80,11 +83,9 @@ export default function IncidentDetailPage({
   );
 
   useEffect(() => {
-    async function init() {
-      const resolvedParams = await params;
-      setIncidentId(resolvedParams.id);
+    if (params?.id) {
+      setIncidentId(params.id);
     }
-    void init();
   }, [params]);
 
   useEffect(() => {
@@ -119,8 +120,11 @@ export default function IncidentDetailPage({
   async function loadPageData() {
     if (!incidentId) return;
 
-    const email = getCurrentTestEmail();
+    setLoading(true);
+    setPageError(null);
     setCurrentUserRole(getStoredRole());
+
+    const email = getCurrentTestEmail();
 
     const { data: user, error: userError } = await supabase
       .from("users")
@@ -129,7 +133,8 @@ export default function IncidentDetailPage({
       .single();
 
     if (userError || !user) {
-      console.log("User lookup failed", email, userError);
+      setLoading(false);
+      setPageError("Could not load current user.");
       return;
     }
 
@@ -146,6 +151,7 @@ export default function IncidentDetailPage({
         status,
         accepting_units,
         staging_name,
+        staging_address,
         staging_lat,
         staging_lng,
         incident_responses (
@@ -170,12 +176,14 @@ export default function IncidentDetailPage({
       .eq("id", incidentId)
       .single();
 
-    if (error) {
-      console.log("Incident load failed", error);
+    if (error || !data) {
+      setLoading(false);
+      setPageError(error?.message || "Incident not found.");
       return;
     }
 
     setIncident(data as unknown as Incident);
+    setLoading(false);
   }
 
   async function approveIncident() {
@@ -418,7 +426,7 @@ export default function IncidentDetailPage({
   }
 
   function openNavigation() {
-    if (!incident?.staging_lat || !incident?.staging_lng) {
+    if (incident?.staging_lat === null || incident?.staging_lng === null) {
       alert("No staging coordinates available.");
       return;
     }
@@ -435,11 +443,11 @@ export default function IncidentDetailPage({
     );
   }
 
-  if (!incident) {
+  if (loading) {
     return (
-      <main className="min-h-screen bg-black p-6 text-white">
-        <div className="mx-auto max-w-4xl">
-          <div className="mb-6 flex justify-between">
+      <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
+        <div className="mx-auto max-w-4xl space-y-4">
+          <div className="flex justify-between">
             <Link
               href="/incidents"
               className="inline-block rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
@@ -457,16 +465,9 @@ export default function IncidentDetailPage({
     );
   }
 
-  const myResponse = getMyResponse();
-  const hasNonCancelledResponse =
-    myResponse && myResponse.response_type !== "Cancelled";
-
-  const canJoin = incident.status === "Active" && incident.accepting_units;
-  const canCancel = myResponse && myResponse.response_type !== "Cancelled";
-
-  return (
-    <>
-      <main className="min-h-screen bg-black p-6 text-white">
+  if (pageError) {
+    return (
+      <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
         <div className="mx-auto max-w-4xl space-y-4">
           <div className="flex justify-between">
             <Link
@@ -478,13 +479,46 @@ export default function IncidentDetailPage({
             <RoleSwitcher />
           </div>
 
+          <div className="rounded-xl bg-gray-900 p-5 text-red-300">
+            {pageError}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!incident) return null;
+
+  const myResponse = getMyResponse();
+  const hasNonCancelledResponse =
+    myResponse && myResponse.response_type !== "Cancelled";
+
+  const canJoin = incident.status === "Active" && incident.accepting_units;
+  const canCancel = myResponse && myResponse.response_type !== "Cancelled";
+
+  return (
+    <>
+      <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
+        <div className="mx-auto max-w-4xl space-y-4">
+          <div className="flex justify-between gap-3">
+            <Link
+              href="/incidents"
+              className="inline-block rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
+            >
+              Back to Incidents
+            </Link>
+            <RoleSwitcher />
+          </div>
+
           <div className="rounded-xl bg-gray-900 p-5">
-            <div className="flex justify-between gap-4">
-              <div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+              <div className="min-w-0">
                 <div className="text-sm text-gray-400">
                   {incident.incident_number}
                 </div>
-                <div className="mt-1 text-2xl font-bold">{incident.title}</div>
+                <div className="mt-1 break-words text-2xl font-bold">
+                  {incident.title}
+                </div>
                 {incident.short_description && (
                   <div className="mt-2 text-gray-400">
                     {incident.short_description}
@@ -492,7 +526,7 @@ export default function IncidentDetailPage({
                 )}
               </div>
 
-              <div className="flex flex-col items-end gap-3 text-right text-sm">
+              <div className="flex flex-col items-start gap-3 text-left text-sm sm:items-end sm:text-right">
                 <div>
                   <div>{incident.type}</div>
                   <div className="mt-1 text-red-400">{incident.status}</div>
@@ -576,6 +610,12 @@ export default function IncidentDetailPage({
               <div className="mt-1 font-medium">
                 {incident.staging_name || "No staging name set"}
               </div>
+
+              {incident.staging_address && (
+                <div className="mt-2 text-sm text-gray-400">
+                  {incident.staging_address}
+                </div>
+              )}
 
               {incident.staging_lat !== null && incident.staging_lng !== null ? (
                 <>
@@ -751,7 +791,7 @@ export default function IncidentDetailPage({
                         key={update.id}
                         className="rounded-lg bg-black/30 px-4 py-3"
                       >
-                        <div className="flex justify-between gap-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:gap-4">
                           <div>
                             <div className="text-sm text-red-300">
                               {update.update_type}
@@ -767,7 +807,7 @@ export default function IncidentDetailPage({
                         </div>
 
                         {update.body && (
-                          <div className="mt-2 text-gray-300">
+                          <div className="mt-2 whitespace-pre-wrap text-gray-300">
                             {update.body}
                           </div>
                         )}
@@ -789,7 +829,7 @@ export default function IncidentDetailPage({
                   incident.incident_responses.map((response, index) => (
                     <div
                       key={index}
-                      className="flex justify-between rounded-lg bg-black/30 px-4 py-3 text-sm"
+                      className="flex flex-col gap-2 rounded-lg bg-black/30 px-4 py-3 text-sm sm:flex-row sm:justify-between"
                     >
                       <span>{getResponseName(response)}</span>
                       <span className="text-gray-300">
@@ -811,13 +851,13 @@ export default function IncidentDetailPage({
       </main>
 
       {timePickerOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80">
-          <div className="rounded-xl bg-gray-900 p-6">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-gray-900 p-6">
             <div className="mb-4 flex gap-2">
               <select
                 value={selectedHour}
                 onChange={(e) => setSelectedHour(e.target.value)}
-                className="rounded bg-black px-3 py-2"
+                className="w-full rounded bg-black px-3 py-2"
               >
                 {hours.map((h) => (
                   <option key={h}>{h}</option>
@@ -827,7 +867,7 @@ export default function IncidentDetailPage({
               <select
                 value={selectedMinute}
                 onChange={(e) => setSelectedMinute(e.target.value)}
-                className="rounded bg-black px-3 py-2"
+                className="w-full rounded bg-black px-3 py-2"
               >
                 {minutes.map((m) => (
                   <option key={m}>{m}</option>
@@ -838,14 +878,14 @@ export default function IncidentDetailPage({
             <div className="flex gap-2">
               <button
                 onClick={() => setTimePickerOpen(false)}
-                className="rounded bg-gray-700 px-4 py-2"
+                className="w-full rounded bg-gray-700 px-4 py-2"
               >
                 Cancel
               </button>
 
               <button
                 onClick={saveTime}
-                className="rounded bg-blue-600 px-4 py-2"
+                className="w-full rounded bg-blue-600 px-4 py-2"
               >
                 Save
               </button>

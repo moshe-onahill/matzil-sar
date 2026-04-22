@@ -14,8 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="bg-black text-white">
-        <div className="min-h-screen pb-24">{children}</div>
+      <body className="min-h-screen overflow-x-hidden bg-black text-white">
+        <div className="min-h-screen w-full overflow-x-hidden pb-24">
+          {children}
+        </div>
         <AppBottomNav />
       </body>
     </html>

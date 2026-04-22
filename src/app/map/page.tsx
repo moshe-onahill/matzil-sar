@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
@@ -12,6 +12,7 @@ type ActiveIncident = {
   title: string;
   status: string;
   staging_name: string | null;
+  staging_address: string | null;
   staging_lat: number | null;
   staging_lng: number | null;
 };
@@ -52,9 +53,11 @@ type CustomPin = {
   id: string;
   title: string;
   notes: string | null;
+  address: string | null;
   lat: number;
   lng: number;
   created_at: string;
+  created_by: string | null;
 };
 
 type FocusItem =
@@ -95,6 +98,12 @@ type FocusItem =
       color: "black";
     };
 
+declare global {
+  interface Window {
+    L: any;
+  }
+}
+
 export default function MapPage() {
   const [currentRole, setCurrentRole] = useState<UserRole>("Member");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -108,9 +117,25 @@ export default function MapPage() {
 
   const [pinTitle, setPinTitle] = useState("");
   const [pinNotes, setPinNotes] = useState("");
+  const [pinAddress, setPinAddress] = useState("");
   const [pinLat, setPinLat] = useState("");
   const [pinLng, setPinLng] = useState("");
   const [creatingPin, setCreatingPin] = useState(false);
+  const [geocodingPin, setGeocodingPin] = useState(false);
+
+  const [editingPinId, setEditingPinId] = useState<string | null>(null);
+  const [editPinTitle, setEditPinTitle] = useState("");
+  const [editPinNotes, setEditPinNotes] = useState("");
+  const [editPinAddress, setEditPinAddress] = useState("");
+  const [editPinLat, setEditPinLat] = useState("");
+  const [editPinLng, setEditPinLng] = useState("");
+  const [savingEditPin, setSavingEditPin] = useState(false);
+  const [geocodingEditPin, setGeocodingEditPin] = useState(false);
+
+  const mapRef = useRef<any>(null);
+  const markersLayerRef = useRef<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const leafletReadyRef = useRef(false);
 
   useEffect(() => {
     void loadAll();
@@ -144,6 +169,80 @@ export default function MapPage() {
     };
   }, []);
 
+  useEffect(() => {
+    void ensureLeafletAndInit();
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!leafletReadyRef.current || !window.L || !mapRef.current) return;
+    renderMarkers();
+  }, [incidents, responders, vehicles, pins]);
+
+  useEffect(() => {
+    if (!focus || !mapRef.current) return;
+    mapRef.current.setView([focus.lat, focus.lng], 14);
+  }, [focus]);
+
+  async function ensureLeafletAndInit() {
+    if (typeof window === "undefined") return;
+
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    if (!window.L) {
+      await new Promise<void>((resolve, reject) => {
+        const existing = document.getElementById("leaflet-js");
+        if (existing) {
+          const wait = () => {
+            if (window.L) resolve();
+            else setTimeout(wait, 50);
+          };
+          wait();
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Failed to load Leaflet"));
+        document.body.appendChild(script);
+      });
+    }
+
+    if (!mapContainerRef.current || mapRef.current) {
+      leafletReadyRef.current = true;
+      return;
+    }
+
+    const L = window.L;
+
+    mapRef.current = L.map(mapContainerRef.current, {
+      zoomControl: true,
+    }).setView([40.0979, -74.2176], 10);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(mapRef.current);
+
+    markersLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    leafletReadyRef.current = true;
+    renderMarkers();
+  }
+
   async function loadAll() {
     setCurrentRole(getStoredRole());
 
@@ -163,7 +262,7 @@ export default function MapPage() {
       supabase
         .from("incidents")
         .select(
-          "id, incident_number, title, status, staging_name, staging_lat, staging_lng"
+          "id, incident_number, title, status, staging_name, staging_address, staging_lat, staging_lng"
         )
         .eq("status", "Active")
         .not("staging_lat", "is", null)
@@ -197,17 +296,22 @@ export default function MapPage() {
 
       supabase
         .from("custom_pins")
-        .select("id, title, notes, lat, lng, created_at")
+        .select("id, title, notes, address, lat, lng, created_at, created_by")
         .order("created_at", { ascending: false }),
     ]);
 
-    setIncidents((incidentRes.data as ActiveIncident[]) ?? []);
-    setResponders((responderRes.data as LiveLocation[]) ?? []);
-    setVehicles((vehicleRes.data as Vehicle[]) ?? []);
-    setPins((pinRes.data as CustomPin[]) ?? []);
+    const incidentData = (incidentRes.data as ActiveIncident[]) ?? [];
+    const responderData = (responderRes.data as LiveLocation[]) ?? [];
+    const vehicleData = (vehicleRes.data as Vehicle[]) ?? [];
+    const pinData = (pinRes.data as CustomPin[]) ?? [];
+
+    setIncidents(incidentData);
+    setResponders(responderData);
+    setVehicles(vehicleData);
+    setPins(pinData);
 
     if (!focus) {
-      const firstIncident = (incidentRes.data as ActiveIncident[] | null)?.find(
+      const firstIncident = incidentData.find(
         (i) => i.staging_lat !== null && i.staging_lng !== null
       );
 
@@ -220,7 +324,10 @@ export default function MapPage() {
           kind: "incident",
           id: firstIncident.id,
           title: firstIncident.title,
-          subtitle: firstIncident.staging_name || firstIncident.incident_number,
+          subtitle:
+            firstIncident.staging_name ||
+            firstIncident.staging_address ||
+            firstIncident.incident_number,
           lat: firstIncident.staging_lat,
           lng: firstIncident.staging_lng,
           color: "red",
@@ -240,6 +347,217 @@ export default function MapPage() {
   function openInGoogleMaps(lat: number, lng: number) {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
     window.open(url, "_blank");
+  }
+
+  function responderName(item: LiveLocation) {
+    const u = Array.isArray(item.users) ? item.users[0] : item.users;
+    return u?.call_sign
+      ? `${u.call_sign}${u?.full_name ? ` - ${u.full_name}` : ""}`
+      : u?.full_name || "Unknown responder";
+  }
+
+  function markerHtml(color: "red" | "blue" | "yellow" | "black", label: string) {
+    const bg =
+      color === "red"
+        ? "#dc2626"
+        : color === "blue"
+        ? "#2563eb"
+        : color === "yellow"
+        ? "#ca8a04"
+        : "#111111";
+
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div style="
+          width:18px;
+          height:18px;
+          border-radius:9999px;
+          background:${bg};
+          border:2px solid white;
+          box-shadow:0 0 0 2px rgba(0,0,0,0.25);
+        "></div>
+        <div style="
+          margin-top:4px;
+          background:rgba(0,0,0,0.75);
+          color:white;
+          font-size:11px;
+          padding:2px 6px;
+          border-radius:9999px;
+          white-space:nowrap;
+          max-width:120px;
+          overflow:hidden;
+          text-overflow:ellipsis;
+        ">${label}</div>
+      </div>
+    `;
+  }
+
+  function renderMarkers() {
+    if (!window.L || !mapRef.current || !markersLayerRef.current) return;
+
+    const L = window.L;
+    markersLayerRef.current.clearLayers();
+
+    const bounds: [number, number][] = [];
+
+    incidents.forEach((incident) => {
+      if (incident.staging_lat === null || incident.staging_lng === null) return;
+
+      const item: FocusItem = {
+        kind: "incident",
+        id: incident.id,
+        title: incident.title,
+        subtitle:
+          incident.staging_name ||
+          incident.staging_address ||
+          incident.incident_number,
+        lat: incident.staging_lat,
+        lng: incident.staging_lng,
+        color: "red",
+      };
+
+      const icon = L.divIcon({
+        className: "",
+        html: markerHtml("red", incident.incident_number),
+        iconSize: [120, 36],
+        iconAnchor: [60, 18],
+      });
+
+      const marker = L.marker([item.lat, item.lng], { icon });
+      marker.on("click", () => setFocus(item));
+      marker.addTo(markersLayerRef.current);
+      bounds.push([item.lat, item.lng]);
+    });
+
+    responders.forEach((responder) => {
+      const item: FocusItem = {
+        kind: "responder",
+        id: responder.id,
+        title: responderName(responder),
+        subtitle: responder.is_moving
+          ? `Moving • ${responder.speed_mph ?? 0} mph`
+          : "Stationary / unknown",
+        lat: responder.lat,
+        lng: responder.lng,
+        color: "blue",
+      };
+
+      const icon = L.divIcon({
+        className: "",
+        html: markerHtml("blue", responderName(responder)),
+        iconSize: [140, 36],
+        iconAnchor: [70, 18],
+      });
+
+      const marker = L.marker([item.lat, item.lng], { icon });
+      marker.on("click", () => setFocus(item));
+      marker.addTo(markersLayerRef.current);
+      bounds.push([item.lat, item.lng]);
+    });
+
+    vehicles.forEach((vehicle) => {
+      if (vehicle.lat === null || vehicle.lng === null) return;
+
+      const item: FocusItem = {
+        kind: "vehicle",
+        id: vehicle.id,
+        title: vehicle.name,
+        subtitle: vehicle.vehicle_type || "Vehicle",
+        lat: vehicle.lat,
+        lng: vehicle.lng,
+        color: "yellow",
+      };
+
+      const icon = L.divIcon({
+        className: "",
+        html: markerHtml("yellow", vehicle.name),
+        iconSize: [120, 36],
+        iconAnchor: [60, 18],
+      });
+
+      const marker = L.marker([item.lat, item.lng], { icon });
+      marker.on("click", () => setFocus(item));
+      marker.addTo(markersLayerRef.current);
+      bounds.push([item.lat, item.lng]);
+    });
+
+    pins.forEach((pin) => {
+      const item: FocusItem = {
+        kind: "pin",
+        id: pin.id,
+        title: pin.title,
+        subtitle: pin.notes || pin.address || "Custom pin",
+        lat: pin.lat,
+        lng: pin.lng,
+        color: "black",
+      };
+
+      const icon = L.divIcon({
+        className: "",
+        html: markerHtml("black", pin.title),
+        iconSize: [120, 36],
+        iconAnchor: [60, 18],
+      });
+
+      const marker = L.marker([item.lat, item.lng], { icon });
+      marker.on("click", () => setFocus(item));
+      marker.addTo(markersLayerRef.current);
+      bounds.push([item.lat, item.lng]);
+    });
+
+    if (bounds.length > 0) {
+      const leafletBounds = L.latLngBounds(bounds);
+      mapRef.current.fitBounds(leafletBounds, { padding: [30, 30] });
+    }
+  }
+
+  async function geocodeAddressToFields(
+    address: string,
+    setLat: (v: string) => void,
+    setLng: (v: string) => void,
+    setBusy: (v: boolean) => void
+  ) {
+    if (!address.trim()) {
+      alert("Enter an address first.");
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const encoded = encodeURIComponent(address.trim());
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encoded}`;
+
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        alert("Address not found.");
+        setBusy(false);
+        return;
+      }
+
+      const lat = Number(data[0].lat);
+      const lng = Number(data[0].lon);
+
+      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        alert("Could not parse coordinates.");
+        setBusy(false);
+        return;
+      }
+
+      setLat(String(lat));
+      setLng(String(lng));
+    } catch {
+      alert("Geocoding failed.");
+    }
+
+    setBusy(false);
   }
 
   async function createPin() {
@@ -266,6 +584,7 @@ export default function MapPage() {
     const { error } = await supabase.from("custom_pins").insert({
       title: pinTitle.trim(),
       notes: pinNotes.trim() || null,
+      address: pinAddress.trim() || null,
       lat,
       lng,
       created_by: currentUserId,
@@ -280,8 +599,67 @@ export default function MapPage() {
 
     setPinTitle("");
     setPinNotes("");
+    setPinAddress("");
     setPinLat("");
     setPinLng("");
+    await loadAll();
+  }
+
+  function startEditPin(pin: CustomPin) {
+    setEditingPinId(pin.id);
+    setEditPinTitle(pin.title);
+    setEditPinNotes(pin.notes || "");
+    setEditPinAddress(pin.address || "");
+    setEditPinLat(String(pin.lat));
+    setEditPinLng(String(pin.lng));
+  }
+
+  function cancelEditPin() {
+    setEditingPinId(null);
+    setEditPinTitle("");
+    setEditPinNotes("");
+    setEditPinAddress("");
+    setEditPinLat("");
+    setEditPinLng("");
+  }
+
+  async function saveEditPin() {
+    if (!editingPinId) return;
+
+    if (!editPinTitle.trim() || !editPinLat.trim() || !editPinLng.trim()) {
+      alert("Title, latitude, and longitude are required.");
+      return;
+    }
+
+    const lat = Number(editPinLat);
+    const lng = Number(editPinLng);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      alert("Latitude and longitude must be valid numbers.");
+      return;
+    }
+
+    setSavingEditPin(true);
+
+    const { error } = await supabase
+      .from("custom_pins")
+      .update({
+        title: editPinTitle.trim(),
+        notes: editPinNotes.trim() || null,
+        address: editPinAddress.trim() || null,
+        lat,
+        lng,
+      })
+      .eq("id", editingPinId);
+
+    setSavingEditPin(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    cancelEditPin();
     await loadAll();
   }
 
@@ -308,22 +686,10 @@ export default function MapPage() {
     await loadAll();
   }
 
-  function responderName(item: LiveLocation) {
-    const u = Array.isArray(item.users) ? item.users[0] : item.users;
-    return u?.call_sign
-      ? `${u.call_sign}${u?.full_name ? ` - ${u.full_name}` : ""}`
-      : u?.full_name || "Unknown responder";
-  }
-
-  const focusEmbedUrl = useMemo(() => {
-    if (!focus) return null;
-    return `https://www.google.com/maps?q=${focus.lat},${focus.lng}&z=14&output=embed`;
-  }, [focus]);
-
   return (
-    <main className="min-h-screen bg-black p-6 text-white">
+    <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
       <div className="mx-auto max-w-6xl space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm text-gray-500">Matzil SAR</p>
             <h1 className="text-3xl font-bold">Map</h1>
@@ -362,47 +728,10 @@ export default function MapPage() {
           <div className="space-y-4">
             <div className="overflow-hidden rounded-xl bg-gray-900">
               <div className="border-b border-gray-800 px-4 py-3 text-lg font-semibold">
-                Operations Focus
+                Operations Map
               </div>
 
-              {focus ? (
-                <div className="space-y-4 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xl font-semibold">{focus.title}</div>
-                      <div className="text-sm text-gray-400">
-                        {focus.subtitle}
-                      </div>
-                      <div className="mt-1 text-sm text-gray-500">
-                        {focus.lat}, {focus.lng}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => openInGoogleMaps(focus.lat, focus.lng)}
-                      className="rounded bg-blue-600 px-4 py-2"
-                    >
-                      Navigate
-                    </button>
-                  </div>
-
-                  <div className="overflow-hidden rounded-lg border border-gray-800">
-                    {focusEmbedUrl ? (
-                      <iframe
-                        title="Focused map"
-                        src={focusEmbedUrl}
-                        className="h-[420px] w-full"
-                      />
-                    ) : (
-                      <div className="p-6 text-gray-400">No map selected.</div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-6 text-gray-400">
-                  No active map items yet.
-                </div>
-              )}
+              <div ref={mapContainerRef} className="h-[520px] w-full" />
             </div>
 
             {canManagePins() && (
@@ -424,6 +753,28 @@ export default function MapPage() {
                     rows={3}
                     className="w-full rounded bg-black px-3 py-2"
                   />
+
+                  <input
+                    value={pinAddress}
+                    onChange={(e) => setPinAddress(e.target.value)}
+                    placeholder="Address (optional)"
+                    className="w-full rounded bg-black px-3 py-2"
+                  />
+
+                  <button
+                    onClick={() =>
+                      void geocodeAddressToFields(
+                        pinAddress,
+                        setPinLat,
+                        setPinLng,
+                        setGeocodingPin
+                      )
+                    }
+                    disabled={geocodingPin}
+                    className="rounded bg-blue-600 px-4 py-2"
+                  >
+                    {geocodingPin ? "Getting Coordinates..." : "Get Coordinates From Address"}
+                  </button>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <input
@@ -454,111 +805,28 @@ export default function MapPage() {
 
           <div className="space-y-4">
             <div className="rounded-xl bg-gray-900 p-4">
-              <div className="mb-3 text-lg font-semibold">Active Incidents</div>
+              <div className="mb-3 text-lg font-semibold">Focused Item</div>
 
-              <div className="space-y-2">
-                {incidents.length === 0 && (
-                  <div className="text-gray-400">No active incidents.</div>
-                )}
+              {focus ? (
+                <div className="space-y-3">
+                  <div className="text-xl font-semibold">{focus.title}</div>
+                  <div className="text-sm text-gray-400">{focus.subtitle}</div>
+                  <div className="text-sm text-gray-500">
+                    {focus.lat}, {focus.lng}
+                  </div>
 
-                {incidents.map((incident) => (
                   <button
-                    key={incident.id}
-                    onClick={() =>
-                      incident.staging_lat !== null &&
-                      incident.staging_lng !== null &&
-                      setFocus({
-                        kind: "incident",
-                        id: incident.id,
-                        title: incident.title,
-                        subtitle:
-                          incident.staging_name || incident.incident_number,
-                        lat: incident.staging_lat,
-                        lng: incident.staging_lng,
-                        color: "red",
-                      })
-                    }
-                    className="block w-full rounded bg-red-950/30 px-4 py-3 text-left hover:bg-red-950/50"
+                    onClick={() => openInGoogleMaps(focus.lat, focus.lng)}
+                    className="rounded bg-blue-600 px-4 py-2"
                   >
-                    <div className="font-medium">{incident.title}</div>
-                    <div className="text-sm text-gray-400">
-                      {incident.incident_number}
-                    </div>
+                    Navigate
                   </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-gray-900 p-4">
-              <div className="mb-3 text-lg font-semibold">Responders</div>
-
-              <div className="space-y-2">
-                {responders.length === 0 && (
-                  <div className="text-gray-400">No responder locations.</div>
-                )}
-
-                {responders.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() =>
-                      setFocus({
-                        kind: "responder",
-                        id: item.id,
-                        title: responderName(item),
-                        subtitle: item.is_moving
-                          ? `Moving • ${item.speed_mph ?? 0} mph`
-                          : "Stationary / unknown",
-                        lat: item.lat,
-                        lng: item.lng,
-                        color: "blue",
-                      })
-                    }
-                    className="block w-full rounded bg-blue-950/30 px-4 py-3 text-left hover:bg-blue-950/50"
-                  >
-                    <div className="font-medium">{responderName(item)}</div>
-                    <div className="text-sm text-gray-400">
-                      {item.is_moving
-                        ? `Moving • ${item.speed_mph ?? 0} mph`
-                        : "Stationary / unknown"}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-gray-900 p-4">
-              <div className="mb-3 text-lg font-semibold">Agency Vehicles</div>
-
-              <div className="space-y-2">
-                {vehicles.length === 0 && (
-                  <div className="text-gray-400">No vehicle locations.</div>
-                )}
-
-                {vehicles.map((vehicle) => (
-                  <button
-                    key={vehicle.id}
-                    onClick={() =>
-                      vehicle.lat !== null &&
-                      vehicle.lng !== null &&
-                      setFocus({
-                        kind: "vehicle",
-                        id: vehicle.id,
-                        title: vehicle.name,
-                        subtitle: vehicle.vehicle_type || "Vehicle",
-                        lat: vehicle.lat,
-                        lng: vehicle.lng,
-                        color: "yellow",
-                      })
-                    }
-                    className="block w-full rounded bg-yellow-950/30 px-4 py-3 text-left hover:bg-yellow-950/50"
-                  >
-                    <div className="font-medium">{vehicle.name}</div>
-                    <div className="text-sm text-gray-400">
-                      {vehicle.vehicle_type || "Vehicle"}
-                    </div>
-                  </button>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div className="text-gray-400">
+                  Click any marker to inspect it.
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl bg-gray-900 p-4">
@@ -570,40 +838,129 @@ export default function MapPage() {
                 )}
 
                 {pins.map((pin) => (
-                  <div
-                    key={pin.id}
-                    className="rounded bg-gray-800 px-4 py-3"
-                  >
-                    <button
-                      onClick={() =>
-                        setFocus({
-                          kind: "pin",
-                          id: pin.id,
-                          title: pin.title,
-                          subtitle: pin.notes || "Custom pin",
-                          lat: pin.lat,
-                          lng: pin.lng,
-                          color: "black",
-                        })
-                      }
-                      className="block w-full text-left"
-                    >
-                      <div className="font-medium">{pin.title}</div>
-                      <div className="text-sm text-gray-400">
-                        {pin.notes || "No notes"}
-                      </div>
-                    </button>
+                  <div key={pin.id} className="rounded bg-gray-800 px-4 py-3">
+                    {editingPinId === pin.id ? (
+                      <div className="space-y-3">
+                        <input
+                          value={editPinTitle}
+                          onChange={(e) => setEditPinTitle(e.target.value)}
+                          placeholder="Pin title"
+                          className="w-full rounded bg-black px-3 py-2"
+                        />
 
-                    {canManagePins() && (
-                      <button
-                        onClick={() => void deletePin(pin.id)}
-                        className="mt-2 rounded bg-red-900 px-3 py-1 text-sm"
-                      >
-                        Delete Pin
-                      </button>
+                        <textarea
+                          value={editPinNotes}
+                          onChange={(e) => setEditPinNotes(e.target.value)}
+                          placeholder="Notes"
+                          rows={3}
+                          className="w-full rounded bg-black px-3 py-2"
+                        />
+
+                        <input
+                          value={editPinAddress}
+                          onChange={(e) => setEditPinAddress(e.target.value)}
+                          placeholder="Address"
+                          className="w-full rounded bg-black px-3 py-2"
+                        />
+
+                        <button
+                          onClick={() =>
+                            void geocodeAddressToFields(
+                              editPinAddress,
+                              setEditPinLat,
+                              setEditPinLng,
+                              setGeocodingEditPin
+                            )
+                          }
+                          disabled={geocodingEditPin}
+                          className="rounded bg-blue-600 px-4 py-2"
+                        >
+                          {geocodingEditPin ? "Getting Coordinates..." : "Get Coordinates From Address"}
+                        </button>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <input
+                            value={editPinLat}
+                            onChange={(e) => setEditPinLat(e.target.value)}
+                            placeholder="Latitude"
+                            className="w-full rounded bg-black px-3 py-2"
+                          />
+                          <input
+                            value={editPinLng}
+                            onChange={(e) => setEditPinLng(e.target.value)}
+                            placeholder="Longitude"
+                            className="w-full rounded bg-black px-3 py-2"
+                          />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => void saveEditPin()}
+                            disabled={savingEditPin}
+                            className="rounded bg-green-600 px-4 py-2"
+                          >
+                            {savingEditPin ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            onClick={cancelEditPin}
+                            className="rounded bg-gray-700 px-4 py-2"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() =>
+                            setFocus({
+                              kind: "pin",
+                              id: pin.id,
+                              title: pin.title,
+                              subtitle: pin.notes || pin.address || "Custom pin",
+                              lat: pin.lat,
+                              lng: pin.lng,
+                              color: "black",
+                            })
+                          }
+                          className="block w-full text-left"
+                        >
+                          <div className="font-medium">{pin.title}</div>
+                          <div className="text-sm text-gray-400">
+                            {pin.notes || pin.address || "No notes"}
+                          </div>
+                        </button>
+
+                        {canManagePins() && (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              onClick={() => startEditPin(pin)}
+                              className="rounded bg-gray-700 px-3 py-1 text-sm"
+                            >
+                              Edit Pin
+                            </button>
+                            <button
+                              onClick={() => void deletePin(pin.id)}
+                              className="rounded bg-red-900 px-3 py-1 text-sm"
+                            >
+                              Delete Pin
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-gray-900 p-4">
+              <div className="mb-3 text-lg font-semibold">Map Counts</div>
+              <div className="space-y-2 text-sm text-gray-300">
+                <div>Active incidents: {incidents.length}</div>
+                <div>Responders: {responders.length}</div>
+                <div>Vehicles: {vehicles.length}</div>
+                <div>Custom pins: {pins.length}</div>
               </div>
             </div>
           </div>
