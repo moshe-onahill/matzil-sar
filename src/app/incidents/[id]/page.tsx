@@ -55,6 +55,7 @@ export default function IncidentDetailPage({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("Member");
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [selectedHour, setSelectedHour] = useState("18");
@@ -199,6 +200,7 @@ export default function IncidentDetailPage({
       return;
     }
 
+    setActionsOpen(false);
     await loadPageData();
   }
 
@@ -224,6 +226,7 @@ export default function IncidentDetailPage({
       return;
     }
 
+    setActionsOpen(false);
     await loadPageData();
   }
 
@@ -248,6 +251,7 @@ export default function IncidentDetailPage({
       return;
     }
 
+    setActionsOpen(false);
     await loadPageData();
   }
 
@@ -423,6 +427,14 @@ export default function IncidentDetailPage({
     window.open(url, "_blank");
   }
 
+  function canShowActions() {
+    return (
+      currentUserRole === "SAR Manager" ||
+      currentUserRole === "Global Admin" ||
+      currentUserRole === "Dispatcher"
+    );
+  }
+
   if (!incident) {
     return (
       <main className="min-h-screen bg-black p-6 text-white">
@@ -480,15 +492,82 @@ export default function IncidentDetailPage({
                 )}
               </div>
 
-              <div className="text-right text-sm">
-                <div>{incident.type}</div>
-                <div className="mt-1 text-red-400">{incident.status}</div>
-                {!incident.accepting_units &&
-                  incident.status === "Active" && (
-                    <div className="mt-1 text-orange-400">
-                      No more units
-                    </div>
-                  )}
+              <div className="flex flex-col items-end gap-3 text-right text-sm">
+                <div>
+                  <div>{incident.type}</div>
+                  <div className="mt-1 text-red-400">{incident.status}</div>
+                  {!incident.accepting_units &&
+                    incident.status === "Active" && (
+                      <div className="mt-1 text-orange-400">
+                        No more units
+                      </div>
+                    )}
+                </div>
+
+                {canShowActions() && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setActionsOpen((prev) => !prev)}
+                      className="rounded bg-gray-800 px-4 py-2"
+                    >
+                      Actions ▼
+                    </button>
+
+                    {actionsOpen && (
+                      <div className="absolute right-0 z-20 mt-2 w-52 rounded-lg border border-gray-800 bg-black p-2 shadow-xl">
+                        <Link
+                          href={`/incidents/${incident.id}/edit`}
+                          className="block rounded px-3 py-2 text-left hover:bg-gray-900"
+                        >
+                          Edit Incident
+                        </Link>
+
+                        {incident.status === "Pending" &&
+                          (currentUserRole === "SAR Manager" ||
+                            currentUserRole === "Global Admin") && (
+                            <button
+                              onClick={() => void approveIncident()}
+                              className="block w-full rounded px-3 py-2 text-left hover:bg-gray-900"
+                            >
+                              Approve Incident
+                            </button>
+                          )}
+
+                        {incident.status === "Active" &&
+                          incident.accepting_units &&
+                          (currentUserRole === "SAR Manager" ||
+                            currentUserRole === "Global Admin") && (
+                            <button
+                              onClick={() => void stopUnits()}
+                              className="block w-full rounded px-3 py-2 text-left hover:bg-gray-900"
+                            >
+                              No More Units
+                            </button>
+                          )}
+
+                        {incident.status !== "Closed" &&
+                          (currentUserRole === "SAR Manager" ||
+                            currentUserRole === "Global Admin") && (
+                            <button
+                              onClick={() => void closeIncident()}
+                              className="block w-full rounded px-3 py-2 text-left hover:bg-gray-900"
+                            >
+                              Close Incident
+                            </button>
+                          )}
+
+                        {currentUserRole === "Global Admin" && (
+                          <button
+                            onClick={() => void deleteIncident()}
+                            className="block w-full rounded px-3 py-2 text-left text-red-300 hover:bg-gray-900"
+                          >
+                            Delete Incident
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -515,51 +594,6 @@ export default function IncidentDetailPage({
                 <div className="mt-2 text-sm text-gray-500">
                   No staging coordinates set
                 </div>
-              )}
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {incident.status === "Pending" &&
-                (currentUserRole === "SAR Manager" ||
-                  currentUserRole === "Global Admin") && (
-                  <button
-                    onClick={() => void approveIncident()}
-                    className="rounded bg-green-600 px-4 py-2"
-                  >
-                    Approve Incident
-                  </button>
-                )}
-
-              {incident.status === "Active" &&
-                incident.accepting_units &&
-                (currentUserRole === "SAR Manager" ||
-                  currentUserRole === "Global Admin") && (
-                  <button
-                    onClick={() => void stopUnits()}
-                    className="rounded bg-orange-600 px-4 py-2"
-                  >
-                    No More Units
-                  </button>
-                )}
-
-              {incident.status !== "Closed" &&
-                (currentUserRole === "SAR Manager" ||
-                  currentUserRole === "Global Admin") && (
-                  <button
-                    onClick={() => void closeIncident()}
-                    className="rounded bg-gray-700 px-4 py-2"
-                  >
-                    Close Incident
-                  </button>
-                )}
-
-              {currentUserRole === "Global Admin" && (
-                <button
-                  onClick={() => void deleteIncident()}
-                  className="rounded bg-red-800 px-4 py-2"
-                >
-                  Delete Incident
-                </button>
               )}
             </div>
 
