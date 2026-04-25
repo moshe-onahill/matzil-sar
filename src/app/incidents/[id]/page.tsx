@@ -426,12 +426,18 @@ export default function IncidentDetailPage() {
   }
 
   function openNavigation() {
-    if (incident?.staging_lat === null || incident?.staging_lng === null) {
+    const currentIncident = incident;
+
+    if (
+      !currentIncident ||
+      currentIncident.staging_lat === null ||
+      currentIncident.staging_lng === null
+    ) {
       alert("No staging coordinates available.");
       return;
     }
 
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${incident.staging_lat},${incident.staging_lng}`;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${currentIncident.staging_lat},${currentIncident.staging_lng}`;
     window.open(url, "_blank");
   }
 
