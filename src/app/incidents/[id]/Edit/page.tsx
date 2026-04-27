@@ -19,6 +19,7 @@ type Incident = {
   staging_address: string | null;
   staging_lat: number | null;
   staging_lng: number | null;
+  team_needs: Record<string, number> | null;
   updated_at?: string | null;
 };
 
@@ -34,6 +35,10 @@ type Snapshot = {
   staging_lat_dir: "N" | "S";
   staging_lng: string;
   staging_lng_dir: "E" | "W";
+  water_needed: string;
+  wilderness_needed: string;
+  mru_needed: string;
+  support_needed: string;
 };
 
 export default function EditIncidentPage() {
@@ -59,6 +64,11 @@ export default function EditIncidentPage() {
   const [stagingLng, setStagingLng] = useState("");
   const [stagingLngDir, setStagingLngDir] = useState<"E" | "W">("W");
 
+  const [waterNeeded, setWaterNeeded] = useState("");
+  const [wildernessNeeded, setWildernessNeeded] = useState("");
+  const [mruNeeded, setMruNeeded] = useState("");
+  const [supportNeeded, setSupportNeeded] = useState("");
+
   const [notifyMembers, setNotifyMembers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
@@ -66,9 +76,7 @@ export default function EditIncidentPage() {
   const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (params?.id) {
-      setIncidentId(params.id);
-    }
+    if (params?.id) setIncidentId(params.id);
   }, [params]);
 
   useEffect(() => {
@@ -82,14 +90,13 @@ export default function EditIncidentPage() {
     setLoading(true);
     setPageError(null);
 
-    const email = getCurrentTestEmail();
     const role = getStoredRole();
     setCurrentUserRole(role);
 
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("id")
-      .eq("email", email)
+      .eq("email", getCurrentTestEmail())
       .single();
 
     if (userError || !user) {
@@ -114,6 +121,7 @@ export default function EditIncidentPage() {
         staging_address,
         staging_lat,
         staging_lng,
+        team_needs,
         updated_at
       `)
       .eq("id", incidentId)
@@ -146,6 +154,11 @@ export default function EditIncidentPage() {
     setStagingLng(lng ? Math.abs(lng).toString() : "");
     setStagingLngDir(lng < 0 ? "W" : "E");
 
+    setWaterNeeded(String(typed.team_needs?.Water ?? ""));
+    setWildernessNeeded(String(typed.team_needs?.Wilderness ?? ""));
+    setMruNeeded(String(typed.team_needs?.MRU ?? ""));
+    setSupportNeeded(String(typed.team_needs?.Support ?? ""));
+
     setLoading(false);
   }
 
@@ -155,6 +168,15 @@ export default function EditIncidentPage() {
       currentUserRole === "Global Admin" ||
       currentUserRole === "Dispatcher"
     );
+  }
+
+  function buildTeamNeeds() {
+    return {
+      Water: Number(waterNeeded || 0),
+      Wilderness: Number(wildernessNeeded || 0),
+      MRU: Number(mruNeeded || 0),
+      Support: Number(supportNeeded || 0),
+    };
   }
 
   function buildSignedLatitude(value: number, dir: "N" | "S") {
@@ -231,6 +253,10 @@ export default function EditIncidentPage() {
       staging_lat_dir: lat < 0 ? "S" : "N",
       staging_lng: lng ? Math.abs(lng).toString() : "",
       staging_lng_dir: lng < 0 ? "W" : "E",
+      water_needed: String(incident.team_needs?.Water ?? ""),
+      wilderness_needed: String(incident.team_needs?.Wilderness ?? ""),
+      mru_needed: String(incident.team_needs?.MRU ?? ""),
+      support_needed: String(incident.team_needs?.Support ?? ""),
     };
   }, [incident]);
 
@@ -247,6 +273,10 @@ export default function EditIncidentPage() {
       staging_lat_dir: stagingLatDir,
       staging_lng: stagingLng,
       staging_lng_dir: stagingLngDir,
+      water_needed: waterNeeded,
+      wilderness_needed: wildernessNeeded,
+      mru_needed: mruNeeded,
+      support_needed: supportNeeded,
     }),
     [
       title,
@@ -260,6 +290,10 @@ export default function EditIncidentPage() {
       stagingLatDir,
       stagingLng,
       stagingLngDir,
+      waterNeeded,
+      wildernessNeeded,
+      mruNeeded,
+      supportNeeded,
     ]
   );
 
@@ -268,23 +302,22 @@ export default function EditIncidentPage() {
 
     const rows: { label: string; from: string; to: string; key: string }[] = [];
 
-    if (originalSnapshot.title !== currentSnapshot.title) {
-      rows.push({ key: "title", label: "Title", from: originalSnapshot.title || "—", to: currentSnapshot.title || "—" });
+    function pushChange(key: string, label: string, from: string, to: string) {
+      if (from !== to) {
+        rows.push({ key, label, from: from || "—", to: to || "—" });
+      }
     }
-    if (originalSnapshot.type !== currentSnapshot.type) {
-      rows.push({ key: "type", label: "Type", from: originalSnapshot.type || "—", to: currentSnapshot.type || "—" });
-    }
-    if (originalSnapshot.short_description !== currentSnapshot.short_description) {
-      rows.push({
-        key: "short_description",
-        label: "Description",
-        from: originalSnapshot.short_description || "—",
-        to: currentSnapshot.short_description || "—",
-      });
-    }
-    if (originalSnapshot.status !== currentSnapshot.status) {
-      rows.push({ key: "status", label: "Status", from: originalSnapshot.status || "—", to: currentSnapshot.status || "—" });
-    }
+
+    pushChange("title", "Title", originalSnapshot.title, currentSnapshot.title);
+    pushChange("type", "Type", originalSnapshot.type, currentSnapshot.type);
+    pushChange(
+      "short_description",
+      "Description",
+      originalSnapshot.short_description,
+      currentSnapshot.short_description
+    );
+    pushChange("status", "Status", originalSnapshot.status, currentSnapshot.status);
+
     if (originalSnapshot.accepting_units !== currentSnapshot.accepting_units) {
       rows.push({
         key: "accepting_units",
@@ -293,34 +326,48 @@ export default function EditIncidentPage() {
         to: currentSnapshot.accepting_units ? "Yes" : "No",
       });
     }
-    if (originalSnapshot.staging_name !== currentSnapshot.staging_name) {
-      rows.push({
-        key: "staging_name",
-        label: "Staging Name",
-        from: originalSnapshot.staging_name || "—",
-        to: currentSnapshot.staging_name || "—",
-      });
-    }
-    if (originalSnapshot.staging_address !== currentSnapshot.staging_address) {
-      rows.push({
-        key: "staging_address",
-        label: "Staging Address",
-        from: originalSnapshot.staging_address || "—",
-        to: currentSnapshot.staging_address || "—",
-      });
-    }
 
-    const fromLat = `${originalSnapshot.staging_lat} ${originalSnapshot.staging_lat_dir}`.trim();
-    const toLat = `${currentSnapshot.staging_lat} ${currentSnapshot.staging_lat_dir}`.trim();
-    if (fromLat !== toLat) {
-      rows.push({ key: "staging_lat", label: "Staging Latitude", from: fromLat || "—", to: toLat || "—" });
-    }
+    pushChange(
+      "staging_name",
+      "Staging Name",
+      originalSnapshot.staging_name,
+      currentSnapshot.staging_name
+    );
+    pushChange(
+      "staging_address",
+      "Staging Address",
+      originalSnapshot.staging_address,
+      currentSnapshot.staging_address
+    );
 
-    const fromLng = `${originalSnapshot.staging_lng} ${originalSnapshot.staging_lng_dir}`.trim();
-    const toLng = `${currentSnapshot.staging_lng} ${currentSnapshot.staging_lng_dir}`.trim();
-    if (fromLng !== toLng) {
-      rows.push({ key: "staging_lng", label: "Staging Longitude", from: fromLng || "—", to: toLng || "—" });
-    }
+    pushChange(
+      "staging_lat",
+      "Staging Latitude",
+      `${originalSnapshot.staging_lat} ${originalSnapshot.staging_lat_dir}`.trim(),
+      `${currentSnapshot.staging_lat} ${currentSnapshot.staging_lat_dir}`.trim()
+    );
+
+    pushChange(
+      "staging_lng",
+      "Staging Longitude",
+      `${originalSnapshot.staging_lng} ${originalSnapshot.staging_lng_dir}`.trim(),
+      `${currentSnapshot.staging_lng} ${currentSnapshot.staging_lng_dir}`.trim()
+    );
+
+    pushChange(
+      "team_needs",
+      "Team Needs",
+      `Water ${originalSnapshot.water_needed || 0}, Wilderness ${
+        originalSnapshot.wilderness_needed || 0
+      }, MRU ${originalSnapshot.mru_needed || 0}, Support ${
+        originalSnapshot.support_needed || 0
+      }`,
+      `Water ${currentSnapshot.water_needed || 0}, Wilderness ${
+        currentSnapshot.wilderness_needed || 0
+      }, MRU ${currentSnapshot.mru_needed || 0}, Support ${
+        currentSnapshot.support_needed || 0
+      }`
+    );
 
     return rows;
   }, [originalSnapshot, currentSnapshot]);
@@ -392,23 +439,20 @@ export default function EditIncidentPage() {
       }
     }
 
-    const updatePayload: Record<string, any> = {};
-
-    for (const change of changes) {
-      if (change.key === "title") updatePayload.title = title.trim();
-      if (change.key === "type") updatePayload.type = type;
-      if (change.key === "short_description") updatePayload.short_description = description.trim() || null;
-      if (change.key === "status") updatePayload.status = status;
-      if (change.key === "accepting_units") updatePayload.accepting_units = acceptingUnits;
-      if (change.key === "staging_name") updatePayload.staging_name = stagingName.trim();
-      if (change.key === "staging_address") updatePayload.staging_address = stagingAddress.trim() || null;
-      if (change.key === "staging_lat") updatePayload.staging_lat = finalLat;
-      if (change.key === "staging_lng") updatePayload.staging_lng = finalLng;
-    }
-
     const { error } = await supabase
       .from("incidents")
-      .update(updatePayload)
+      .update({
+        title: title.trim(),
+        type,
+        short_description: description.trim() || null,
+        status,
+        accepting_units: acceptingUnits,
+        staging_name: stagingName.trim(),
+        staging_address: stagingAddress.trim() || null,
+        staging_lat: finalLat,
+        staging_lng: finalLng,
+        team_needs: buildTeamNeeds(),
+      })
       .eq("id", incidentId);
 
     if (error) {
@@ -417,15 +461,15 @@ export default function EditIncidentPage() {
       return;
     }
 
-    const summary = changes.map((change) => `${change.label}: ${change.from} → ${change.to}`).join("\n");
-    const updateTitleValue = changes.length === 1 ? `Edited ${changes[0].label}` : "Incident edited";
-    const updateBodyValue = `${summary}${notifyMembers ? "\n\nNotify members: Yes" : ""}`;
+    const summary = changes
+      .map((change) => `${change.label}: ${change.from} → ${change.to}`)
+      .join("\n");
 
     await supabase.from("incident_updates").insert({
       incident_id: incidentId,
       update_type: notifyMembers ? "Critical Edit" : "General Update",
-      title: updateTitleValue,
-      body: updateBodyValue,
+      title: changes.length === 1 ? `Edited ${changes[0].label}` : "Incident edited",
+      body: `${summary}${notifyMembers ? "\n\nNotify members: Yes" : ""}`,
       created_by: currentUserId,
     });
 
@@ -436,59 +480,28 @@ export default function EditIncidentPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-black p-6 text-white">
-        <div className="mx-auto max-w-3xl space-y-4">
-          <div className="flex justify-between">
-            <Link href="/incidents" className="rounded border border-gray-800 bg-gray-900 px-4 py-2">
-              Back
-            </Link>
-            <RoleSwitcher />
-          </div>
-
-          <div className="rounded-xl bg-gray-900 p-6 text-gray-400">
-            Loading incident...
-          </div>
-        </div>
+        Loading incident...
       </main>
     );
   }
 
   if (pageError) {
     return (
-      <main className="min-h-screen bg-black p-6 text-white">
-        <div className="mx-auto max-w-3xl space-y-4">
-          <div className="flex justify-between">
-            <Link href="/incidents" className="rounded border border-gray-800 bg-gray-900 px-4 py-2">
-              Back
-            </Link>
-            <RoleSwitcher />
-          </div>
-
-          <div className="rounded-xl bg-gray-900 p-6 text-red-300">
-            {pageError}
-          </div>
-        </div>
+      <main className="min-h-screen bg-black p-6 text-red-300">
+        {pageError}
       </main>
     );
   }
 
-  if (!incident) {
-    return null;
-  }
+  if (!incident) return null;
 
   if (!canEdit()) {
     return (
       <main className="min-h-screen bg-black p-6 text-white">
         <div className="mx-auto max-w-3xl space-y-4">
-          <div className="flex justify-between">
-            <Link
-              href={`/incidents/${incident.id}`}
-              className="rounded border border-gray-800 bg-gray-900 px-4 py-2"
-            >
-              Back
-            </Link>
-            <RoleSwitcher />
-          </div>
-
+          <Link href={`/incidents/${incident.id}`} className="rounded bg-gray-900 px-4 py-2">
+            Back
+          </Link>
           <div className="rounded-xl bg-gray-900 p-6 text-red-300">
             You do not have permission to edit incidents.
           </div>
@@ -498,154 +511,87 @@ export default function EditIncidentPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black p-6 text-white">
+    <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:p-6 sm:pb-28">
       <div className="mx-auto max-w-3xl space-y-4">
-        <div className="flex justify-between">
-          <Link
-            href={`/incidents/${incident.id}`}
-            className="rounded border border-gray-800 bg-gray-900 px-4 py-2"
-          >
+        <div className="flex flex-wrap justify-between gap-2">
+          <Link href={`/incidents/${incident.id}`} className="rounded bg-gray-900 px-4 py-2">
             Back
           </Link>
           <RoleSwitcher />
         </div>
 
-        <div className="rounded-xl bg-gray-900 p-6 space-y-4">
-          <div>
-            <h1 className="text-3xl font-bold">Edit Incident</h1>
-            <div className="mt-2 text-sm text-gray-400">
-              {incident.incident_number}
-            </div>
-          </div>
+        <div className="rounded-xl bg-gray-900 p-5 space-y-4">
+          <h1 className="text-3xl font-bold">Edit Incident</h1>
+          <div className="text-sm text-gray-400">{incident.incident_number}</div>
 
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Incident Title"
-            className="w-full rounded bg-black px-3 py-2"
-          />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded bg-black px-3 py-3" />
 
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description"
-            className="w-full rounded bg-black px-3 py-2"
-            rows={4}
-          />
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full rounded bg-black px-3 py-3" />
 
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="w-full rounded bg-black px-3 py-2"
-          >
+          <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded bg-black px-3 py-3">
             <option>Emergency Callout</option>
             <option>Deployment</option>
           </select>
 
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="w-full rounded bg-black px-3 py-2"
-          >
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded bg-black px-3 py-3">
             <option>Pending</option>
             <option>Active</option>
             <option>Closed</option>
           </select>
 
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={acceptingUnits}
-              onChange={(e) => setAcceptingUnits(e.target.checked)}
-            />
+            <input type="checkbox" checked={acceptingUnits} onChange={(e) => setAcceptingUnits(e.target.checked)} />
             <span>Accepting Units</span>
           </label>
 
-          <input
-            value={stagingName}
-            onChange={(e) => setStagingName(e.target.value)}
-            placeholder="Staging Name"
-            className="w-full rounded bg-black px-3 py-2"
-          />
-
-          <div className="space-y-2 rounded-lg bg-black/30 p-4">
-            <div className="font-medium">Staging Address</div>
-
-            <input
-              value={stagingAddress}
-              onChange={(e) => setStagingAddress(e.target.value)}
-              placeholder="Street, City, State"
-              className="w-full rounded bg-black px-3 py-2"
-            />
-
-            <button
-              onClick={() => void geocodeAddress()}
-              disabled={geocoding}
-              className="rounded bg-blue-600 px-4 py-2"
-            >
-              {geocoding ? "Getting Coordinates..." : "Get Coordinates"}
-            </button>
+          <div className="rounded-lg bg-black/30 p-4">
+            <div className="mb-3 font-semibold">Team Members Needed</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input value={waterNeeded} onChange={(e) => setWaterNeeded(e.target.value)} type="number" min="0" placeholder="Water" className="rounded bg-black px-4 py-3" />
+              <input value={wildernessNeeded} onChange={(e) => setWildernessNeeded(e.target.value)} type="number" min="0" placeholder="Wilderness" className="rounded bg-black px-4 py-3" />
+              <input value={mruNeeded} onChange={(e) => setMruNeeded(e.target.value)} type="number" min="0" placeholder="MRU" className="rounded bg-black px-4 py-3" />
+              <input value={supportNeeded} onChange={(e) => setSupportNeeded(e.target.value)} type="number" min="0" placeholder="Support" className="rounded bg-black px-4 py-3" />
+            </div>
           </div>
 
-          <div className="space-y-2 rounded-lg bg-black/30 p-4">
-            <div className="font-medium">Manual Coordinates Override</div>
+          <input value={stagingName} onChange={(e) => setStagingName(e.target.value)} placeholder="Staging Name" className="w-full rounded bg-black px-3 py-3" />
 
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                value={stagingLat}
-                onChange={(e) => setStagingLat(e.target.value)}
-                placeholder="Latitude"
-                className="w-full rounded bg-black px-3 py-2"
-              />
-              <select
-                value={stagingLatDir}
-                onChange={(e) => setStagingLatDir(e.target.value as "N" | "S")}
-                className="w-full rounded bg-black px-3 py-2"
-              >
-                <option value="N">N</option>
-                <option value="S">S</option>
-              </select>
-            </div>
+          <input value={stagingAddress} onChange={(e) => setStagingAddress(e.target.value)} placeholder="Address" className="w-full rounded bg-black px-3 py-3" />
 
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                value={stagingLng}
-                onChange={(e) => setStagingLng(e.target.value)}
-                placeholder="Longitude"
-                className="w-full rounded bg-black px-3 py-2"
-              />
-              <select
-                value={stagingLngDir}
-                onChange={(e) => setStagingLngDir(e.target.value as "E" | "W")}
-                className="w-full rounded bg-black px-3 py-2"
-              >
-                <option value="W">W</option>
-                <option value="E">E</option>
-              </select>
-            </div>
+          <button onClick={() => void geocodeAddress()} disabled={geocoding} className="rounded bg-blue-600 px-4 py-2">
+            {geocoding ? "Getting Coordinates..." : "Get Coordinates"}
+          </button>
+
+          <div className="grid grid-cols-2 gap-3">
+            <input value={stagingLat} onChange={(e) => setStagingLat(e.target.value)} placeholder="Latitude" className="rounded bg-black px-3 py-3" />
+            <select value={stagingLatDir} onChange={(e) => setStagingLatDir(e.target.value as "N" | "S")} className="rounded bg-black px-3 py-3">
+              <option value="N">N</option>
+              <option value="S">S</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <input value={stagingLng} onChange={(e) => setStagingLng(e.target.value)} placeholder="Longitude" className="rounded bg-black px-3 py-3" />
+            <select value={stagingLngDir} onChange={(e) => setStagingLngDir(e.target.value as "E" | "W")} className="rounded bg-black px-3 py-3">
+              <option value="W">W</option>
+              <option value="E">E</option>
+            </select>
           </div>
 
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={notifyMembers}
-              onChange={(e) => setNotifyMembers(e.target.checked)}
-            />
+            <input type="checkbox" checked={notifyMembers} onChange={(e) => setNotifyMembers(e.target.checked)} />
             <span>Notify members?</span>
           </label>
         </div>
 
-        <div className="rounded-xl bg-gray-900 p-6 space-y-3">
+        <div className="rounded-xl bg-gray-900 p-5 space-y-3">
           <div className="text-xl font-semibold">Changes Preview</div>
 
           {changes.length === 0 ? (
             <div className="text-gray-400">No changes yet.</div>
           ) : (
             changes.map((change) => (
-              <div
-                key={change.key}
-                className="rounded bg-black/30 px-4 py-3 text-sm"
-              >
+              <div key={change.key} className="rounded bg-black/30 px-4 py-3 text-sm">
                 <div className="font-medium">{change.label}</div>
                 <div className="mt-1 text-gray-400">
                   {change.from} → {change.to}
@@ -654,11 +600,7 @@ export default function EditIncidentPage() {
             ))
           )}
 
-          <button
-            onClick={() => void saveIncident()}
-            disabled={saving}
-            className="w-full rounded bg-red-600 px-4 py-2"
-          >
+          <button onClick={() => void saveIncident()} disabled={saving} className="w-full rounded bg-red-600 px-4 py-3">
             {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>

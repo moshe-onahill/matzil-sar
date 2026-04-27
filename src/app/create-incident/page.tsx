@@ -21,6 +21,11 @@ export default function CreateIncidentPage() {
   const [stagingLng, setStagingLng] = useState("");
   const [stagingLngDir, setStagingLngDir] = useState<"E" | "W">("W");
 
+  const [waterNeeded, setWaterNeeded] = useState("");
+  const [wildernessNeeded, setWildernessNeeded] = useState("");
+  const [mruNeeded, setMruNeeded] = useState("");
+  const [supportNeeded, setSupportNeeded] = useState("");
+
   const [geocoding, setGeocoding] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -56,6 +61,15 @@ export default function CreateIncidentPage() {
 
     setStagingLng(Math.abs(lng).toString());
     setStagingLngDir(lng < 0 ? "W" : "E");
+  }
+
+  function buildTeamNeeds() {
+    return {
+      Water: Number(waterNeeded || 0),
+      Wilderness: Number(wildernessNeeded || 0),
+      MRU: Number(mruNeeded || 0),
+      Support: Number(supportNeeded || 0),
+    };
   }
 
   async function geocodeAddress() {
@@ -94,7 +108,7 @@ export default function CreateIncidentPage() {
       }
 
       applyCoordinateValues(lat, lng);
-    } catch (error) {
+    } catch {
       alert("Geocoding failed.");
     }
 
@@ -167,6 +181,7 @@ export default function CreateIncidentPage() {
       staging_address: stagingAddress.trim() || null,
       staging_lat: finalLat,
       staging_lng: finalLng,
+      team_needs: buildTeamNeeds(),
     });
 
     setLoading(false);
@@ -185,12 +200,12 @@ export default function CreateIncidentPage() {
     currentUserRole !== "Dispatcher"
   ) {
     return (
-      <main className="min-h-screen bg-black p-6 text-white">
+      <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:p-6 sm:pb-28">
         <div className="mx-auto max-w-xl space-y-4">
-          <div className="flex justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Link
               href="/incidents"
-              className="rounded border border-gray-800 bg-gray-900 px-4 py-2"
+              className="rounded border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
             >
               Back
             </Link>
@@ -206,19 +221,19 @@ export default function CreateIncidentPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black p-6 text-white">
+    <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:p-6 sm:pb-28">
       <div className="mx-auto max-w-2xl space-y-4">
-        <div className="flex justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Link
             href="/incidents"
-            className="rounded border border-gray-800 bg-gray-900 px-4 py-2"
+            className="rounded border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
           >
             Back
           </Link>
           <RoleSwitcher />
         </div>
 
-        <div className="rounded-xl bg-gray-900 p-6 space-y-4">
+        <div className="rounded-xl bg-gray-900 p-5 sm:p-6 space-y-4">
           <div>
             <h1 className="text-3xl font-bold">Create Incident</h1>
             <div className="mt-2 text-sm text-gray-400">
@@ -230,31 +245,73 @@ export default function CreateIncidentPage() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Incident Title"
-            className="w-full rounded bg-black px-3 py-2"
+            className="w-full rounded bg-black px-3 py-3"
           />
 
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description"
-            className="w-full rounded bg-black px-3 py-2"
+            className="w-full rounded bg-black px-3 py-3"
             rows={4}
           />
 
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="w-full rounded bg-black px-3 py-2"
+            className="w-full rounded bg-black px-3 py-3"
           >
             <option>Emergency Callout</option>
             <option>Deployment</option>
           </select>
 
+          <div className="rounded-lg bg-black/30 p-4">
+            <div className="mb-3 font-semibold">Team Members Needed</div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input
+                value={waterNeeded}
+                onChange={(e) => setWaterNeeded(e.target.value)}
+                type="number"
+                min="0"
+                placeholder="Water"
+                className="w-full rounded bg-black px-4 py-3"
+              />
+
+              <input
+                value={wildernessNeeded}
+                onChange={(e) => setWildernessNeeded(e.target.value)}
+                type="number"
+                min="0"
+                placeholder="Wilderness"
+                className="w-full rounded bg-black px-4 py-3"
+              />
+
+              <input
+                value={mruNeeded}
+                onChange={(e) => setMruNeeded(e.target.value)}
+                type="number"
+                min="0"
+                placeholder="MRU"
+                className="w-full rounded bg-black px-4 py-3"
+              />
+
+              <input
+                value={supportNeeded}
+                onChange={(e) => setSupportNeeded(e.target.value)}
+                type="number"
+                min="0"
+                placeholder="Support"
+                className="w-full rounded bg-black px-4 py-3"
+              />
+            </div>
+          </div>
+
           <input
             value={stagingName}
             onChange={(e) => setStagingName(e.target.value)}
             placeholder="Staging Name"
-            className="w-full rounded bg-black px-3 py-2"
+            className="w-full rounded bg-black px-3 py-3"
           />
 
           <div className="space-y-2 rounded-lg bg-black/30 p-4">
@@ -264,7 +321,7 @@ export default function CreateIncidentPage() {
               value={stagingAddress}
               onChange={(e) => setStagingAddress(e.target.value)}
               placeholder="Street, City, State"
-              className="w-full rounded bg-black px-3 py-2"
+              className="w-full rounded bg-black px-3 py-3"
             />
 
             <button
@@ -276,7 +333,7 @@ export default function CreateIncidentPage() {
             </button>
 
             <div className="text-sm text-gray-400">
-              For demo mode this uses OpenStreetMap geocoding. Google API can be swapped in later.
+              Demo mode uses OpenStreetMap geocoding. Google API can be swapped in later.
             </div>
           </div>
 
@@ -288,12 +345,12 @@ export default function CreateIncidentPage() {
                 value={stagingLat}
                 onChange={(e) => setStagingLat(e.target.value)}
                 placeholder="Latitude"
-                className="w-full rounded bg-black px-3 py-2"
+                className="w-full rounded bg-black px-3 py-3"
               />
               <select
                 value={stagingLatDir}
                 onChange={(e) => setStagingLatDir(e.target.value as "N" | "S")}
-                className="w-full rounded bg-black px-3 py-2"
+                className="w-full rounded bg-black px-3 py-3"
               >
                 <option value="N">N</option>
                 <option value="S">S</option>
@@ -305,12 +362,12 @@ export default function CreateIncidentPage() {
                 value={stagingLng}
                 onChange={(e) => setStagingLng(e.target.value)}
                 placeholder="Longitude"
-                className="w-full rounded bg-black px-3 py-2"
+                className="w-full rounded bg-black px-3 py-3"
               />
               <select
                 value={stagingLngDir}
                 onChange={(e) => setStagingLngDir(e.target.value as "E" | "W")}
-                className="w-full rounded bg-black px-3 py-2"
+                className="w-full rounded bg-black px-3 py-3"
               >
                 <option value="W">W</option>
                 <option value="E">E</option>
@@ -325,7 +382,7 @@ export default function CreateIncidentPage() {
           <button
             onClick={() => void createIncident()}
             disabled={loading}
-            className="w-full rounded bg-red-600 px-4 py-2"
+            className="w-full rounded bg-red-600 px-4 py-3 font-medium"
           >
             {loading ? "Creating..." : "Create Incident"}
           </button>
