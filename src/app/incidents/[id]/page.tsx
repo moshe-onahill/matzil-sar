@@ -451,14 +451,14 @@ export default function IncidentDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
+      <main className="min-h-screen bg-black px-4 py-5 text-white sm:p-6">
         <div className="mx-auto max-w-4xl space-y-4">
-          <div className="flex justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Link
               href="/incidents"
-              className="inline-block rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
+              className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
             >
-              Back to Incidents
+              Back
             </Link>
             <RoleSwitcher />
           </div>
@@ -473,14 +473,14 @@ export default function IncidentDetailPage() {
 
   if (pageError) {
     return (
-      <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
+      <main className="min-h-screen bg-black px-4 py-5 text-white sm:p-6">
         <div className="mx-auto max-w-4xl space-y-4">
-          <div className="flex justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Link
               href="/incidents"
-              className="inline-block rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
+              className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
             >
-              Back to Incidents
+              Back
             </Link>
             <RoleSwitcher />
           </div>
@@ -504,36 +504,36 @@ export default function IncidentDetailPage() {
 
   return (
     <>
-      <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
+      <main className="min-h-screen bg-black px-4 py-5 text-white sm:p-6">
         <div className="mx-auto max-w-4xl space-y-4">
-          <div className="flex justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Link
               href="/incidents"
-              className="inline-block rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
+              className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
             >
-              Back to Incidents
+              Back
             </Link>
             <RoleSwitcher />
           </div>
 
-          <div className="rounded-xl bg-gray-900 p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+          <div className="rounded-xl bg-gray-900 p-4 sm:p-5">
+            <div className="space-y-4">
               <div className="min-w-0">
                 <div className="text-sm text-gray-400">
                   {incident.incident_number}
                 </div>
-                <div className="mt-1 break-words text-2xl font-bold">
+                <div className="mt-1 break-words text-3xl font-bold leading-tight sm:text-2xl">
                   {incident.title}
                 </div>
                 {incident.short_description && (
-                  <div className="mt-2 text-gray-400">
+                  <div className="mt-3 break-words text-base leading-relaxed text-gray-400">
                     {incident.short_description}
                   </div>
                 )}
               </div>
 
-              <div className="flex flex-col items-start gap-3 text-left text-sm sm:items-end sm:text-right">
-                <div>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="text-sm">
                   <div>{incident.type}</div>
                   <div className="mt-1 text-red-400">{incident.status}</div>
                   {!incident.accepting_units &&
@@ -554,7 +554,7 @@ export default function IncidentDetailPage() {
                     </button>
 
                     {actionsOpen && (
-                      <div className="absolute right-0 z-20 mt-2 w-52 rounded-lg border border-gray-800 bg-black p-2 shadow-xl">
+                      <div className="absolute right-0 z-20 mt-2 w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-800 bg-black p-2 shadow-xl">
                         <Link
                           href={`/incidents/${incident.id}/edit`}
                           className="block rounded px-3 py-2 text-left hover:bg-gray-900"
@@ -609,68 +609,69 @@ export default function IncidentDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
 
-            <div className="mt-4 rounded-lg bg-black/30 p-4">
-              <div className="text-sm text-gray-400">Staging Location</div>
-              <div className="mt-1 font-medium">
-                {incident.staging_name || "No staging name set"}
+              <div className="rounded-lg bg-black/30 p-4">
+                <div className="text-sm text-gray-400">Staging Location</div>
+                <div className="mt-1 break-words font-medium">
+                  {incident.staging_name || "No staging name set"}
+                </div>
+
+                {incident.staging_address && (
+                  <div className="mt-2 break-words text-sm text-gray-400">
+                    {incident.staging_address}
+                  </div>
+                )}
+
+                {incident.staging_lat !== null &&
+                incident.staging_lng !== null ? (
+                  <>
+                    <div className="mt-2 break-words text-sm text-gray-400">
+                      {incident.staging_lat}, {incident.staging_lng}
+                    </div>
+
+                    <button
+                      onClick={openNavigation}
+                      className="mt-3 rounded bg-blue-600 px-4 py-2"
+                    >
+                      Navigate
+                    </button>
+                  </>
+                ) : (
+                  <div className="mt-2 text-sm text-gray-500">
+                    No staging coordinates set
+                  </div>
+                )}
               </div>
 
-              {incident.staging_address && (
-                <div className="mt-2 text-sm text-gray-400">
-                  {incident.staging_address}
-                </div>
-              )}
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                <button
+                  onClick={() => setActiveTab("overview")}
+                  className={tabButtonClass("overview")}
+                >
+                  Overview
+                </button>
 
-              {incident.staging_lat !== null && incident.staging_lng !== null ? (
-                <>
-                  <div className="mt-2 text-sm text-gray-400">
-                    {incident.staging_lat}, {incident.staging_lng}
-                  </div>
+                <button
+                  onClick={() => setActiveTab("updates")}
+                  className={tabButtonClass("updates")}
+                >
+                  Updates
+                </button>
 
-                  <button
-                    onClick={openNavigation}
-                    className="mt-3 rounded bg-blue-600 px-4 py-2"
-                  >
-                    Navigate
-                  </button>
-                </>
-              ) : (
-                <div className="mt-2 text-sm text-gray-500">
-                  No staging coordinates set
-                </div>
-              )}
-            </div>
+                <button
+                  onClick={() => setActiveTab("responders")}
+                  className={tabButtonClass("responders")}
+                >
+                  Responders
+                </button>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                onClick={() => setActiveTab("overview")}
-                className={tabButtonClass("overview")}
-              >
-                Overview
-              </button>
-
-              <button
-                onClick={() => setActiveTab("updates")}
-                className={tabButtonClass("updates")}
-              >
-                Updates
-              </button>
-
-              <button
-                onClick={() => setActiveTab("responders")}
-                className={tabButtonClass("responders")}
-              >
-                Responders
-              </button>
-
-              <button
-                onClick={() => setActiveTab("attachments")}
-                className={tabButtonClass("attachments")}
-              >
-                Attachments
-              </button>
+                <button
+                  onClick={() => setActiveTab("attachments")}
+                  className={tabButtonClass("attachments")}
+                >
+                  Attachments
+                </button>
+              </div>
             </div>
           </div>
 

@@ -168,7 +168,6 @@ export default function RespondersPage() {
     const merged: ResponderView[] = users.map((user) => {
       const response = latestResponseByUser.get(user.id) ?? null;
       const location = latestLocationByUser.get(user.id) ?? null;
-
       const units = extractNames(user.user_units ?? [], "units");
 
       let incident: ResponderView["incident"] = null;
@@ -220,10 +219,13 @@ export default function RespondersPage() {
 
     if (row.response_type === "Available At") {
       if (row.available_at) {
-        return `Available At • ${new Date(row.available_at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}`;
+        return `Available At • ${new Date(row.available_at).toLocaleTimeString(
+          [],
+          {
+            hour: "2-digit",
+            minute: "2-digit",
+          }
+        )}`;
       }
       return "Available At";
     }
@@ -259,37 +261,40 @@ export default function RespondersPage() {
   }, [responders, search, statusFilter]);
 
   return (
-    <main className="min-h-screen bg-black p-6 text-white">
+    <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:p-6 sm:pb-28">
       <div className="mx-auto max-w-5xl space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="space-y-3">
           <div>
             <p className="text-sm text-gray-500">Matzil SAR</p>
-            <h1 className="text-3xl font-bold">Responders</h1>
+            <h1 className="text-4xl font-bold leading-tight sm:text-3xl">
+              Responders
+            </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <RoleSwitcher />
+
             <Link
               href="/"
-              className="rounded border border-gray-800 bg-gray-900 px-4 py-2"
+              className="rounded border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
             >
               Dashboard
             </Link>
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, call sign, or unit"
-            className="rounded bg-gray-900 px-3 py-2"
+            className="w-full rounded bg-gray-900 px-3 py-3 text-base"
           />
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded bg-gray-900 px-3 py-2"
+            className="w-full rounded bg-gray-900 px-3 py-3 text-base"
           >
             <option>All</option>
             <option>None</option>
@@ -307,15 +312,16 @@ export default function RespondersPage() {
           )}
 
           {filtered.map((row) => (
-            <div
-              key={row.id}
-              className="rounded-xl bg-gray-900 p-5"
-            >
+            <div key={row.id} className="rounded-xl bg-gray-900 p-4 sm:p-5">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <div className="text-xl font-medium">{row.call_sign}</div>
-                  <div className="text-sm text-gray-400">{row.full_name}</div>
-                  <div className="mt-2 text-sm text-gray-400">
+                <div className="min-w-0">
+                  <div className="break-words text-2xl font-semibold sm:text-xl">
+                    {row.call_sign}
+                  </div>
+                  <div className="mt-1 break-words text-sm text-gray-400">
+                    {row.full_name}
+                  </div>
+                  <div className="mt-2 break-words text-sm text-gray-400">
                     Units: {row.units.length ? row.units.join(", ") : "None"}
                   </div>
                 </div>
@@ -341,7 +347,9 @@ export default function RespondersPage() {
               {row.incident && (
                 <div className="mt-4 rounded-lg bg-black/30 p-4">
                   <div className="text-sm text-gray-400">Assigned Incident</div>
-                  <div className="mt-1 font-medium">{row.incident.title}</div>
+                  <div className="mt-1 break-words font-medium">
+                    {row.incident.title}
+                  </div>
                   <div className="text-sm text-gray-400">
                     {row.incident.incident_number} • {row.incident.status}
                   </div>

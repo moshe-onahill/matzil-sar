@@ -76,23 +76,29 @@ export default function IncidentsPage() {
     return "text-white";
   }
 
+  const canCreate =
+    currentUserRole === "SAR Manager" ||
+    currentUserRole === "Global Admin" ||
+    currentUserRole === "Dispatcher";
+
   return (
-    <main className="min-h-screen bg-black p-6 text-white">
+    <main className="min-h-screen bg-black px-4 py-5 text-white sm:p-6">
       <div className="mx-auto max-w-5xl space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="space-y-3">
           <div>
             <p className="text-sm text-gray-500">Matzil SAR</p>
-            <h1 className="text-3xl font-bold">Incidents</h1>
+            <h1 className="text-4xl font-bold leading-tight sm:text-3xl">
+              Incidents
+            </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <RoleSwitcher />
 
-            {(currentUserRole === "SAR Manager" ||
-              currentUserRole === "Global Admin") && (
+            {canCreate && (
               <Link
                 href="/create-incident"
-                className="rounded bg-red-600 px-4 py-2 font-medium hover:bg-red-700"
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-700"
               >
                 Create Incident
               </Link>
@@ -100,7 +106,7 @@ export default function IncidentsPage() {
 
             <Link
               href="/"
-              className="rounded border border-gray-800 bg-gray-900 px-4 py-2 hover:bg-gray-800"
+              className="rounded border border-gray-800 bg-gray-900 px-4 py-2 text-sm hover:bg-gray-800"
             >
               Dashboard
             </Link>
@@ -124,20 +130,22 @@ export default function IncidentsPage() {
               href={`/incidents/${incident.id}`}
               className="block rounded-xl bg-gray-900 p-5 transition hover:bg-gray-800"
             >
-              <div className="flex justify-between gap-4">
-                <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                <div className="min-w-0">
                   <div className="text-sm text-gray-400">
                     {incident.incident_number}
                   </div>
-                  <div className="text-xl">{incident.title}</div>
+                  <div className="mt-1 break-words text-2xl font-medium sm:text-xl">
+                    {incident.title}
+                  </div>
                   {incident.short_description && (
-                    <div className="mt-1 text-sm text-gray-400">
+                    <div className="mt-2 text-base text-gray-400 sm:text-sm">
                       {incident.short_description}
                     </div>
                   )}
                 </div>
 
-                <div className="text-right text-sm">
+                <div className="shrink-0 text-left text-sm sm:text-right">
                   <div>{incident.type}</div>
                   <div className={getStatusColor(incident.status)}>
                     {incident.status}

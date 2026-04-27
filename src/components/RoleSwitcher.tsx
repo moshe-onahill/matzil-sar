@@ -17,12 +17,13 @@ export default function RoleSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="text-gray-400">Role</span>
+    <div className="flex min-w-0 items-center gap-2 text-sm">
+      <span className="shrink-0 text-gray-400">Role</span>
+
       <select
         value={role}
         onChange={(e) => onChangeRole(e.target.value as UserRole)}
-        className="rounded border border-gray-700 bg-black px-2 py-1 text-white"
+        className="max-w-[170px] rounded border border-gray-700 bg-black px-2 py-2 text-white sm:max-w-none"
       >
         <option value="Member">Member</option>
         <option value="Dispatcher">Dispatcher</option>
