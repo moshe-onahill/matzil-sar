@@ -14,19 +14,20 @@ type Notification = {
 export default function NotificationListener() {
   const [popup, setPopup] = useState<Notification | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const channelNameRef = useRef<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     audioRef.current = new Audio(
       "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
     );
-
-    let channel: any;
 
     async function init() {
       const { data: authData } = await supabase.auth.getUser();
       const email = authData.user?.email;
 
-      if (!email) return;
+      if (!email || !mounted) return;
 
       const { data: user } = await supabase
         .from("users")
@@ -34,10 +35,20 @@ export default function NotificationListener() {
         .ilike("email", email)
         .maybeSingle();
 
-      if (!user?.id) return;
+      if (!user?.id || !mounted) return;
 
-      channel = supabase
-        .channel("notification-popup")
+      const channelName = `notification-popup-${user.id}`;
+
+      if (channelNameRef.current) {
+        await supabase.removeChannel(
+          supabase.channel(channelNameRef.current)
+        );
+      }
+
+      channelNameRef.current = channelName;
+
+      const channel = supabase
+        .channel(channelName)
         .on(
           "postgres_changes",
           {
@@ -65,15 +76,26 @@ export default function NotificationListener() {
               setPopup(null);
             }, 8000);
           }
-        )
-        .subscribe();
+        );
+
+      channel.subscribe();
     }
 
     void init();
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
+      mounted = false;
+
+      if (channelNameRef.current) {
+        const channel = supabase
+          .getChannels()
+          .find((c) => c.topic === `realtime:${channelNameRef.current}`);
+
+        if (channel) {
+          void supabase.removeChannel(channel);
+        }
+
+        channelNameRef.current = null;
       }
     };
   }, []);

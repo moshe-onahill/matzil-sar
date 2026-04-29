@@ -17,14 +17,29 @@ type NotificationLog = {
   related_incident_id: string | null;
 };
 
+type User = {
+  id: string;
+  full_name: string | null;
+  call_sign: string | null;
+};
+
 export default function NotificationsPage() {
   const [logs, setLogs] = useState<NotificationLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // NEW STATE
+  const [selectedUser, setSelectedUser] = useState("");
+  const [channel, setChannel] = useState("app");
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     void loadNotifications();
+    void loadUsers();
 
-    const channel = supabase
+    const channelSub = supabase
       .channel("notification-logs-live")
       .on(
         "postgres_changes",
@@ -34,31 +49,21 @@ export default function NotificationsPage() {
       .subscribe();
 
     return () => {
-      void supabase.removeChannel(channel);
+      void supabase.removeChannel(channelSub);
     };
   }, []);
 
+  async function loadUsers() {
+    const { data } = await supabase
+      .from("users")
+      .select("id, full_name, call_sign")
+      .order("full_name");
+
+    setUsers((data as User[]) ?? []);
+  }
+
   async function loadNotifications() {
     setLoading(true);
-
-    const { data: authData } = await supabase.auth.getUser();
-    const email = authData.user?.email;
-
-    if (!email) {
-      setLoading(false);
-      return;
-    }
-
-    const { data: user } = await supabase
-      .from("users")
-      .select("id")
-      .ilike("email", email)
-      .maybeSingle();
-
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
 
     const { data } = await supabase
       .from("notification_logs")
@@ -73,11 +78,40 @@ export default function NotificationsPage() {
         sent_at,
         related_incident_id
       `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     setLogs((data as NotificationLog[]) ?? []);
     setLoading(false);
+  }
+
+  async function sendNotification() {
+    if (!selectedUser || !title.trim()) {
+      alert("User and title required");
+      return;
+    }
+
+    setSending(true);
+
+    const { error } = await supabase.from("notification_logs").insert({
+      user_id: selectedUser,
+      channel,
+      notification_type: "manual",
+      title: title.trim(),
+      body: body.trim() || null,
+      status: "pending",
+    });
+
+    setSending(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setTitle("");
+    setBody("");
+    alert("Notification sent");
   }
 
   function formatDateTime(date: string) {
@@ -108,6 +142,57 @@ export default function NotificationsPage() {
           <h1 className="text-3xl font-bold">Notifications</h1>
         </div>
 
+        {/* 🔥 NEW SEND PANEL */}
+        <div className="rounded-xl bg-gray-900 p-5 space-y-3">
+          <div className="text-lg font-semibold">Send Notification</div>
+
+          <select
+            value={selectedUser}
+            onChange={(e) => setSelectedUser(e.target.value)}
+            className="w-full rounded bg-black px-3 py-2"
+          >
+            <option value="">Select user</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.call_sign || "No Call Sign"} - {u.full_name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={channel}
+            onChange={(e) => setChannel(e.target.value)}
+            className="w-full rounded bg-black px-3 py-2"
+          >
+            <option value="app">App</option>
+            <option value="email">Email</option>
+            <option value="sms">SMS</option>
+          </select>
+
+          <input
+            placeholder="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full rounded bg-black px-3 py-2"
+          />
+
+          <textarea
+            placeholder="Message"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            className="w-full rounded bg-black px-3 py-2"
+          />
+
+          <button
+            onClick={() => void sendNotification()}
+            disabled={sending}
+            className="w-full rounded bg-red-600 py-2"
+          >
+            {sending ? "Sending..." : "Send"}
+          </button>
+        </div>
+
+        {/* EXISTING LOG VIEW (UNCHANGED) */}
         {loading ? (
           <div className="rounded-xl bg-gray-900 p-5 text-gray-400">
             Loading notifications...
