@@ -2,28 +2,41 @@ import { NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
+  const vapidEmail = process.env.VAPID_EMAIL || "mailto:briefmoshe@gmail.com";
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const { user_id, title, body: message, url } = body;
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    return NextResponse.json({ error: "Missing VAPID keys" }, { status: 500 });
+  }
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json(
+      { error: "Missing Supabase server credentials" },
+      { status: 500 }
+    );
+  }
+
+  webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+  try {
+    const { user_id, title, body, url } = await req.json();
 
     if (!user_id || !title) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing user_id or title" },
+        { status: 400 }
+      );
     }
 
-    const { data: subs, error } = await supabase
+    const { data: subs, error } = await supabaseAdmin
       .from("push_subscriptions")
       .select("subscription")
       .eq("user_id", user_id);
@@ -38,7 +51,7 @@ export async function POST(req: Request) {
 
     const payload = JSON.stringify({
       title,
-      body: message,
+      body: body || "",
       url: url || "/",
     });
 
@@ -52,6 +65,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Unknown error" },
+      { status: 500 }
+    );
   }
 }
