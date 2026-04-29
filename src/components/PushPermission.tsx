@@ -10,7 +10,24 @@ export default function PushPermission() {
     void checkPermission();
   }, []);
 
-  async function savePermissionStatus(status: NotificationPermission | "unsupported") {
+  async function getCurrentRosterUserId() {
+    const { data: authData } = await supabase.auth.getUser();
+    const email = authData.user?.email;
+
+    if (!email) return null;
+
+    const { data: user } = await supabase
+      .from("users")
+      .select("id")
+      .ilike("email", email)
+      .maybeSingle();
+
+    return user?.id ?? null;
+  }
+
+  async function savePermissionStatus(
+    status: NotificationPermission | "unsupported"
+  ) {
     const { data: authData } = await supabase.auth.getUser();
     const email = authData.user?.email;
 
@@ -21,7 +38,20 @@ export default function PushPermission() {
       .update({
         push_permission_status: status,
       })
-      .eq("email", email);
+      .ilike("email", email);
+  }
+
+  async function savePlaceholderPushToken() {
+    const userId = await getCurrentRosterUserId();
+
+    if (!userId) return;
+
+    await supabase.from("user_push_tokens").insert({
+      user_id: userId,
+      token: "web-push-placeholder",
+      platform: "web-pwa",
+      is_active: true,
+    });
   }
 
   async function checkPermission() {
@@ -35,6 +65,10 @@ export default function PushPermission() {
     if (Notification.permission === "default") {
       setVisible(true);
     }
+
+    if (Notification.permission === "granted") {
+      await savePlaceholderPushToken();
+    }
   }
 
   async function requestPermission() {
@@ -47,6 +81,10 @@ export default function PushPermission() {
     const permission = await Notification.requestPermission();
 
     await savePermissionStatus(permission);
+
+    if (permission === "granted") {
+      await savePlaceholderPushToken();
+    }
 
     setVisible(false);
   }

@@ -345,20 +345,44 @@ export default function IncidentDetailPage() {
 
     setPostingUpdate(true);
 
+    const cleanedTitle = updateTitle.trim();
+    const cleanedBody = updateBody.trim();
+
     const { error } = await supabase.from("incident_updates").insert({
       incident_id: incidentId,
       update_type: updateType,
-      title: updateTitle.trim(),
-      body: updateBody.trim() || null,
+      title: cleanedTitle,
+      body: cleanedBody || null,
       created_by: currentUserId,
     });
 
-    setPostingUpdate(false);
-
     if (error) {
+      setPostingUpdate(false);
       alert(`Update error: ${error.message}`);
       return;
     }
+
+    const { data: responders, error: respondersError } = await supabase
+      .from("incident_responses")
+      .select("user_id")
+      .eq("incident_id", incidentId)
+      .eq("response_type", "Responding");
+
+    if (!respondersError && responders && responders.length > 0) {
+      const logs = responders.map((responder) => ({
+        user_id: responder.user_id,
+        channel: "app",
+        notification_type: "incident_update",
+        title: `Update: ${cleanedTitle}`,
+        body: cleanedBody || "New incident update",
+        related_incident_id: incidentId,
+        status: "pending",
+      }));
+
+      await supabase.from("notification_logs").insert(logs);
+    }
+
+    setPostingUpdate(false);
 
     setUpdateType("General Update");
     setUpdateTitle("");

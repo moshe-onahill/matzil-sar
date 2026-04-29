@@ -70,7 +70,6 @@ type ResponderView = {
 export default function RespondersPage() {
   const [responders, setResponders] = useState<ResponderView[]>([]);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
 
   useEffect(() => {
     void loadPage();
@@ -133,7 +132,7 @@ export default function RespondersPage() {
             status
           )
         `)
-        .neq("response_type", "Cancelled")
+        .eq("response_type", "Responding")
         .order("responded_at", { ascending: false }),
 
       supabase
@@ -165,37 +164,39 @@ export default function RespondersPage() {
       }
     }
 
-    const merged: ResponderView[] = users.map((user) => {
-      const response = latestResponseByUser.get(user.id) ?? null;
-      const location = latestLocationByUser.get(user.id) ?? null;
-      const units = extractNames(user.user_units ?? [], "units");
+    const respondingUsers = users
+      .filter((user) => latestResponseByUser.has(user.id))
+      .map((user) => {
+        const response = latestResponseByUser.get(user.id) ?? null;
+        const location = latestLocationByUser.get(user.id) ?? null;
+        const units = extractNames(user.user_units ?? [], "units");
 
-      let incident: ResponderView["incident"] = null;
-      if (response?.incidents) {
-        if (Array.isArray(response.incidents)) {
-          incident = response.incidents[0] ?? null;
-        } else {
-          incident = response.incidents;
+        let incident: ResponderView["incident"] = null;
+        if (response?.incidents) {
+          if (Array.isArray(response.incidents)) {
+            incident = response.incidents[0] ?? null;
+          } else {
+            incident = response.incidents;
+          }
         }
-      }
 
-      return {
-        id: user.id,
-        full_name: user.full_name || "Unknown",
-        call_sign: user.call_sign || "No Call Sign",
-        units,
-        response_type: response?.response_type ?? null,
-        eta_minutes: response?.eta_minutes ?? null,
-        available_at: response?.available_at ?? null,
-        responded_at: response?.responded_at ?? null,
-        incident,
-        last_location_at: location?.updated_at ?? null,
-        is_moving: location?.is_moving ?? null,
-        speed_mph: location?.speed_mph ?? null,
-      };
-    });
+        return {
+          id: user.id,
+          full_name: user.full_name || "Unknown",
+          call_sign: user.call_sign || "No Call Sign",
+          units,
+          response_type: response?.response_type ?? null,
+          eta_minutes: response?.eta_minutes ?? null,
+          available_at: response?.available_at ?? null,
+          responded_at: response?.responded_at ?? null,
+          incident,
+          last_location_at: location?.updated_at ?? null,
+          is_moving: location?.is_moving ?? null,
+          speed_mph: location?.speed_mph ?? null,
+        };
+      });
 
-    setResponders(merged);
+    setResponders(respondingUsers);
   }
 
   function extractNames(items: any[], key: "units") {
@@ -207,58 +208,53 @@ export default function RespondersPage() {
     });
   }
 
-  function formatResponseLabel(row: ResponderView) {
-    if (!row.response_type) return "Not responding";
+  function formatEta(row: ResponderView) {
+  if (row.eta_minutes !== null && row.responded_at) {
+    const eta = new Date(row.responded_at);
+    eta.setMinutes(eta.getMinutes() + row.eta_minutes);
 
-    if (row.response_type === "Responding") {
-      if (row.eta_minutes !== null) {
-        return `Responding • ETA ${row.eta_minutes} min`;
-      }
-      return "Responding";
-    }
-
-    if (row.response_type === "Available At") {
-      if (row.available_at) {
-        return `Available At • ${new Date(row.available_at).toLocaleTimeString(
-          [],
-          {
-            hour: "2-digit",
-            minute: "2-digit",
-          }
-        )}`;
-      }
-      return "Available At";
-    }
-
-    return row.response_type;
+    return `ETA ${eta.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })}`;
   }
 
+  return "Responding";
+}
+
   function formatLocationLabel(row: ResponderView) {
-    if (!row.last_location_at) return "No live location";
+    if (!row.last_location_at) return "No location";
+
     if (row.is_moving) {
       return `Moving${row.speed_mph ? ` • ${row.speed_mph} mph` : ""}`;
     }
-    return "Stationary / last known";
+
+    return "Stationary";
+  }
+
+  function formatUpdatedTime(row: ResponderView) {
+    if (!row.last_location_at) return null;
+
+    return new Date(row.last_location_at).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   const filtered = useMemo(() => {
     return responders.filter((row) => {
       const q = search.toLowerCase();
 
-      const matchesSearch =
+      return (
         row.full_name.toLowerCase().includes(q) ||
         row.call_sign.toLowerCase().includes(q) ||
-        row.units.join(", ").toLowerCase().includes(q);
-
-      const normalizedStatus = row.response_type ?? "None";
-      const matchesStatus =
-        statusFilter === "All" ||
-        (statusFilter === "None" && normalizedStatus === "None") ||
-        normalizedStatus === statusFilter;
-
-      return matchesSearch && matchesStatus;
+        row.units.join(", ").toLowerCase().includes(q) ||
+        row.incident?.title.toLowerCase().includes(q) ||
+        row.incident?.incident_number.toLowerCase().includes(q)
+      );
     });
-  }, [responders, search, statusFilter]);
+  }, [responders, search]);
 
   return (
     <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:p-6 sm:pb-28">
@@ -267,7 +263,7 @@ export default function RespondersPage() {
           <div>
             <p className="text-sm text-gray-500">Matzil SAR</p>
             <h1 className="text-4xl font-bold leading-tight sm:text-3xl">
-              Responders
+              Responding Units
             </h1>
           </div>
 
@@ -283,84 +279,74 @@ export default function RespondersPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, call sign, or unit"
-            className="w-full rounded bg-gray-900 px-3 py-3 text-base"
-          />
+        <div className="rounded-xl bg-gray-900 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm text-gray-400">Currently Responding</div>
+              <div className="text-2xl font-bold">{filtered.length}</div>
+            </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full rounded bg-gray-900 px-3 py-3 text-base"
-          >
-            <option>All</option>
-            <option>None</option>
-            <option>Responding</option>
-            <option>Available At</option>
-            <option>Not Available</option>
-          </select>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search"
+              className="w-40 rounded bg-black px-3 py-2 text-sm sm:w-64"
+            />
+          </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           {filtered.length === 0 && (
             <div className="rounded-xl bg-gray-900 p-5 text-gray-400">
-              No responders found.
+              No units are currently responding.
             </div>
           )}
 
           {filtered.map((row) => (
-            <div key={row.id} className="rounded-xl bg-gray-900 p-4 sm:p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div key={row.id} className="rounded-lg bg-gray-900 p-3">
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="break-words text-2xl font-semibold sm:text-xl">
-                    {row.call_sign}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="break-words text-lg font-semibold leading-tight">
+                      {row.call_sign}
+                    </div>
+
+                    <span className="rounded bg-red-950/50 px-2 py-0.5 text-xs text-red-200">
+                      {formatEta(row)}
+                    </span>
                   </div>
-                  <div className="mt-1 break-words text-sm text-gray-400">
+
+                  <div className="mt-0.5 break-words text-sm text-gray-400">
                     {row.full_name}
                   </div>
-                  <div className="mt-2 break-words text-sm text-gray-400">
-                    Units: {row.units.length ? row.units.join(", ") : "None"}
+
+                  <div className="mt-1 break-words text-xs text-gray-500">
+                    {row.units.length ? row.units.join(", ") : "No unit listed"}
                   </div>
                 </div>
 
-                <div className="text-sm md:text-right">
-                  <div className="text-blue-300">{formatResponseLabel(row)}</div>
-                  <div className="mt-1 text-gray-400">
-                    {formatLocationLabel(row)}
-                  </div>
-
-                  {row.last_location_at && (
-                    <div className="mt-1 text-gray-500">
-                      Updated{" "}
-                      {new Date(row.last_location_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                <div className="shrink-0 text-right text-xs text-gray-400">
+                  <div>{formatLocationLabel(row)}</div>
+                  {formatUpdatedTime(row) && (
+                    <div className="mt-0.5 text-gray-500">
+                      {formatUpdatedTime(row)}
                     </div>
                   )}
                 </div>
               </div>
 
               {row.incident && (
-                <div className="mt-4 rounded-lg bg-black/30 p-4">
-                  <div className="text-sm text-gray-400">Assigned Incident</div>
-                  <div className="mt-1 break-words font-medium">
+                <Link
+                  href={`/incidents/${row.incident.id}`}
+                  className="mt-2 block rounded bg-black/30 px-3 py-2 text-sm"
+                >
+                  <div className="truncate font-medium">
                     {row.incident.title}
                   </div>
-                  <div className="text-sm text-gray-400">
+                  <div className="text-xs text-gray-500">
                     {row.incident.incident_number} • {row.incident.status}
                   </div>
-
-                  <Link
-                    href={`/incidents/${row.incident.id}`}
-                    className="mt-3 inline-block rounded bg-red-600 px-4 py-2 text-sm"
-                  >
-                    Open Incident
-                  </Link>
-                </div>
+                </Link>
               )}
             </div>
           ))}

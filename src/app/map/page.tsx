@@ -98,6 +98,13 @@ type FocusItem =
       color: "black";
     };
 
+type LayerToggles = {
+  incidents: boolean;
+  responders: boolean;
+  vehicles: boolean;
+  pins: boolean;
+};
+
 declare global {
   interface Window {
     L: any;
@@ -114,6 +121,14 @@ export default function MapPage() {
   const [pins, setPins] = useState<CustomPin[]>([]);
 
   const [focus, setFocus] = useState<FocusItem | null>(null);
+
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [layers, setLayers] = useState<LayerToggles>({
+    incidents: true,
+    responders: true,
+    vehicles: true,
+    pins: true,
+  });
 
   const [pinTitle, setPinTitle] = useState("");
   const [pinNotes, setPinNotes] = useState("");
@@ -171,6 +186,7 @@ export default function MapPage() {
 
   useEffect(() => {
     void ensureLeafletAndInit();
+
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -182,7 +198,7 @@ export default function MapPage() {
   useEffect(() => {
     if (!leafletReadyRef.current || !window.L || !mapRef.current) return;
     renderMarkers();
-  }, [incidents, responders, vehicles, pins]);
+  }, [incidents, responders, vehicles, pins, layers]);
 
   useEffect(() => {
     if (!focus || !mapRef.current) return;
@@ -203,11 +219,13 @@ export default function MapPage() {
     if (!window.L) {
       await new Promise<void>((resolve, reject) => {
         const existing = document.getElementById("leaflet-js");
+
         if (existing) {
           const wait = () => {
             if (window.L) resolve();
             else setTimeout(wait, 50);
           };
+
           wait();
           return;
         }
@@ -344,6 +362,13 @@ export default function MapPage() {
     );
   }
 
+  function toggleLayer(key: keyof LayerToggles) {
+    setLayers((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }
+
   function openInGoogleMaps(lat: number, lng: number) {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
     window.open(url, "_blank");
@@ -351,6 +376,7 @@ export default function MapPage() {
 
   function responderName(item: LiveLocation) {
     const u = Array.isArray(item.users) ? item.users[0] : item.users;
+
     return u?.call_sign
       ? `${u.call_sign}${u?.full_name ? ` - ${u.full_name}` : ""}`
       : u?.full_name || "Unknown responder";
@@ -400,110 +426,118 @@ export default function MapPage() {
 
     const bounds: [number, number][] = [];
 
-    incidents.forEach((incident) => {
-      if (incident.staging_lat === null || incident.staging_lng === null) return;
+    if (layers.incidents) {
+      incidents.forEach((incident) => {
+        if (incident.staging_lat === null || incident.staging_lng === null) return;
 
-      const item: FocusItem = {
-        kind: "incident",
-        id: incident.id,
-        title: incident.title,
-        subtitle:
-          incident.staging_name ||
-          incident.staging_address ||
-          incident.incident_number,
-        lat: incident.staging_lat,
-        lng: incident.staging_lng,
-        color: "red",
-      };
+        const item: FocusItem = {
+          kind: "incident",
+          id: incident.id,
+          title: incident.title,
+          subtitle:
+            incident.staging_name ||
+            incident.staging_address ||
+            incident.incident_number,
+          lat: incident.staging_lat,
+          lng: incident.staging_lng,
+          color: "red",
+        };
 
-      const icon = L.divIcon({
-        className: "",
-        html: markerHtml("red", incident.incident_number),
-        iconSize: [120, 36],
-        iconAnchor: [60, 18],
+        const icon = L.divIcon({
+          className: "",
+          html: markerHtml("red", incident.incident_number),
+          iconSize: [120, 36],
+          iconAnchor: [60, 18],
+        });
+
+        const marker = L.marker([item.lat, item.lng], { icon });
+        marker.on("click", () => setFocus(item));
+        marker.addTo(markersLayerRef.current);
+        bounds.push([item.lat, item.lng]);
       });
+    }
 
-      const marker = L.marker([item.lat, item.lng], { icon });
-      marker.on("click", () => setFocus(item));
-      marker.addTo(markersLayerRef.current);
-      bounds.push([item.lat, item.lng]);
-    });
+    if (layers.responders) {
+      responders.forEach((responder) => {
+        const item: FocusItem = {
+          kind: "responder",
+          id: responder.id,
+          title: responderName(responder),
+          subtitle: responder.is_moving
+            ? `Moving • ${responder.speed_mph ?? 0} mph`
+            : "Stationary / unknown",
+          lat: responder.lat,
+          lng: responder.lng,
+          color: "blue",
+        };
 
-    responders.forEach((responder) => {
-      const item: FocusItem = {
-        kind: "responder",
-        id: responder.id,
-        title: responderName(responder),
-        subtitle: responder.is_moving
-          ? `Moving • ${responder.speed_mph ?? 0} mph`
-          : "Stationary / unknown",
-        lat: responder.lat,
-        lng: responder.lng,
-        color: "blue",
-      };
+        const icon = L.divIcon({
+          className: "",
+          html: markerHtml("blue", responderName(responder)),
+          iconSize: [140, 36],
+          iconAnchor: [70, 18],
+        });
 
-      const icon = L.divIcon({
-        className: "",
-        html: markerHtml("blue", responderName(responder)),
-        iconSize: [140, 36],
-        iconAnchor: [70, 18],
+        const marker = L.marker([item.lat, item.lng], { icon });
+        marker.on("click", () => setFocus(item));
+        marker.addTo(markersLayerRef.current);
+        bounds.push([item.lat, item.lng]);
       });
+    }
 
-      const marker = L.marker([item.lat, item.lng], { icon });
-      marker.on("click", () => setFocus(item));
-      marker.addTo(markersLayerRef.current);
-      bounds.push([item.lat, item.lng]);
-    });
+    if (layers.vehicles) {
+      vehicles.forEach((vehicle) => {
+        if (vehicle.lat === null || vehicle.lng === null) return;
 
-    vehicles.forEach((vehicle) => {
-      if (vehicle.lat === null || vehicle.lng === null) return;
+        const item: FocusItem = {
+          kind: "vehicle",
+          id: vehicle.id,
+          title: vehicle.name,
+          subtitle: vehicle.vehicle_type || "Vehicle",
+          lat: vehicle.lat,
+          lng: vehicle.lng,
+          color: "yellow",
+        };
 
-      const item: FocusItem = {
-        kind: "vehicle",
-        id: vehicle.id,
-        title: vehicle.name,
-        subtitle: vehicle.vehicle_type || "Vehicle",
-        lat: vehicle.lat,
-        lng: vehicle.lng,
-        color: "yellow",
-      };
+        const icon = L.divIcon({
+          className: "",
+          html: markerHtml("yellow", vehicle.name),
+          iconSize: [120, 36],
+          iconAnchor: [60, 18],
+        });
 
-      const icon = L.divIcon({
-        className: "",
-        html: markerHtml("yellow", vehicle.name),
-        iconSize: [120, 36],
-        iconAnchor: [60, 18],
+        const marker = L.marker([item.lat, item.lng], { icon });
+        marker.on("click", () => setFocus(item));
+        marker.addTo(markersLayerRef.current);
+        bounds.push([item.lat, item.lng]);
       });
+    }
 
-      const marker = L.marker([item.lat, item.lng], { icon });
-      marker.on("click", () => setFocus(item));
-      marker.addTo(markersLayerRef.current);
-      bounds.push([item.lat, item.lng]);
-    });
+    if (layers.pins) {
+      pins.forEach((pin) => {
+        const item: FocusItem = {
+          kind: "pin",
+          id: pin.id,
+          title: pin.title,
+          subtitle: pin.notes || pin.address || "Custom pin",
+          lat: pin.lat,
+          lng: pin.lng,
+          color: "black",
+        };
 
-    pins.forEach((pin) => {
-      const item: FocusItem = {
-        kind: "pin",
-        id: pin.id,
-        title: pin.title,
-        subtitle: pin.notes || pin.address || "Custom pin",
-        lat: pin.lat,
-        lng: pin.lng,
-        color: "black",
-      };
+        const icon = L.divIcon({
+          className: "",
+          html: markerHtml("black", pin.title),
+          iconSize: [120, 36],
+          iconAnchor: [60, 18],
+        });
 
-      const icon = L.divIcon({
-        className: "",
-        html: markerHtml("black", pin.title),
-        iconSize: [120, 36],
-        iconAnchor: [60, 18],
+        const marker = L.marker([item.lat, item.lng], { icon });
+        marker.on("click", () => setFocus(item));
+        marker.addTo(markersLayerRef.current);
+        bounds.push([item.lat, item.lng]);
       });
-
-      const marker = L.marker([item.lat, item.lng], { icon });
-      marker.on("click", () => setFocus(item));
-      marker.addTo(markersLayerRef.current);
-      bounds.push([item.lat, item.lng]);
-    });
+    }
 
     if (bounds.length > 0) {
       const leafletBounds = L.latLngBounds(bounds);
@@ -669,10 +703,7 @@ export default function MapPage() {
     const confirmed = window.confirm("Delete this custom pin?");
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("custom_pins")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("custom_pins").delete().eq("id", id);
 
     if (error) {
       alert(error.message);
@@ -686,8 +717,10 @@ export default function MapPage() {
     await loadAll();
   }
 
+  const activeLayerCount = Object.values(layers).filter(Boolean).length;
+
   return (
-    <main className="min-h-screen bg-black p-4 sm:p-6 text-white">
+    <main className="min-h-screen bg-black p-4 text-white sm:p-6">
       <div className="mx-auto max-w-6xl space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -706,22 +739,68 @@ export default function MapPage() {
           </div>
         </div>
 
-        <div className="rounded-xl bg-gray-900 p-4">
-          <div className="mb-3 text-lg font-semibold">Legend</div>
-          <div className="flex flex-wrap gap-3 text-sm">
-            <div className="rounded bg-red-900/40 px-3 py-2 text-red-300">
-              Red = Active Incidents
+        <div className="rounded-xl bg-gray-900">
+          <button
+            onClick={() => setPanelOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <div>
+              <div className="font-semibold">Map Layers</div>
+              <div className="text-sm text-gray-400">
+                {activeLayerCount} active layer{activeLayerCount === 1 ? "" : "s"}
+              </div>
             </div>
-            <div className="rounded bg-blue-900/40 px-3 py-2 text-blue-300">
-              Blue = Responders
+
+            <div className="text-gray-400">{panelOpen ? "▲" : "▼"}</div>
+          </button>
+
+          {panelOpen && (
+            <div className="grid gap-2 border-t border-gray-800 p-4 sm:grid-cols-4">
+              <button
+                onClick={() => toggleLayer("incidents")}
+                className={`rounded px-3 py-2 text-sm ${
+                  layers.incidents
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-800 text-gray-400"
+                }`}
+              >
+                Incidents
+              </button>
+
+              <button
+                onClick={() => toggleLayer("responders")}
+                className={`rounded px-3 py-2 text-sm ${
+                  layers.responders
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-800 text-gray-400"
+                }`}
+              >
+                Responders
+              </button>
+
+              <button
+                onClick={() => toggleLayer("vehicles")}
+                className={`rounded px-3 py-2 text-sm ${
+                  layers.vehicles
+                    ? "bg-yellow-700 text-white"
+                    : "bg-gray-800 text-gray-400"
+                }`}
+              >
+                Vehicles
+              </button>
+
+              <button
+                onClick={() => toggleLayer("pins")}
+                className={`rounded px-3 py-2 text-sm ${
+                  layers.pins
+                    ? "bg-black text-white ring-1 ring-gray-600"
+                    : "bg-gray-800 text-gray-400"
+                }`}
+              >
+                Custom Pins
+              </button>
             </div>
-            <div className="rounded bg-yellow-900/40 px-3 py-2 text-yellow-300">
-              Yellow = Vehicles
-            </div>
-            <div className="rounded bg-gray-800 px-3 py-2 text-gray-200">
-              Black = Custom Pins
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
@@ -736,7 +815,9 @@ export default function MapPage() {
 
             {canManagePins() && (
               <div className="rounded-xl bg-gray-900 p-4">
-                <div className="mb-3 text-lg font-semibold">Create Custom Pin</div>
+                <div className="mb-3 text-lg font-semibold">
+                  Create Custom Pin
+                </div>
 
                 <div className="space-y-3">
                   <input
@@ -773,7 +854,9 @@ export default function MapPage() {
                     disabled={geocodingPin}
                     className="rounded bg-blue-600 px-4 py-2"
                   >
-                    {geocodingPin ? "Getting Coordinates..." : "Get Coordinates From Address"}
+                    {geocodingPin
+                      ? "Getting Coordinates..."
+                      : "Get Coordinates From Address"}
                   </button>
 
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -875,7 +958,9 @@ export default function MapPage() {
                           disabled={geocodingEditPin}
                           className="rounded bg-blue-600 px-4 py-2"
                         >
-                          {geocodingEditPin ? "Getting Coordinates..." : "Get Coordinates From Address"}
+                          {geocodingEditPin
+                            ? "Getting Coordinates..."
+                            : "Get Coordinates From Address"}
                         </button>
 
                         <div className="grid gap-3 sm:grid-cols-2">
