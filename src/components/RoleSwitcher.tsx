@@ -10,11 +10,6 @@ export default function RoleSwitcher() {
     setRole(getStoredRole());
   }, []);
 
-  // 🚫 HIDE for non-admins
-  if (role !== "Global Admin") {
-    return null;
-  }
-
   function updateRole(newRole: UserRole) {
     setStoredRole(newRole);
     setRole(newRole);

@@ -11,6 +11,7 @@ export default function NewUserPage() {
   const router = useRouter();
 
   const [fullName, setFullName] = useState("");
+  const [callSign, setCallSign] = useState("");
   const [email, setEmail] = useState("");
 
   const [roles, setRoles] = useState<Item[]>([]);
@@ -20,7 +21,7 @@ export default function NewUserPage() {
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   async function loadData() {
@@ -40,8 +41,8 @@ export default function NewUserPage() {
   }
 
   async function createUser() {
-    if (!fullName.trim() || !email.trim()) {
-      alert("Name and email required");
+    if (!fullName.trim() || !callSign.trim() || !email.trim()) {
+      alert("Name, call sign, and email required");
       return;
     }
 
@@ -49,7 +50,8 @@ export default function NewUserPage() {
       .from("users")
       .insert({
         full_name: fullName.trim(),
-        email: email.trim(),
+        call_sign: callSign.trim(),
+        email: email.trim().toLowerCase(),
         is_active: true,
         is_invited: true,
       })
@@ -109,6 +111,13 @@ export default function NewUserPage() {
           />
 
           <input
+            placeholder="Call Sign"
+            value={callSign}
+            onChange={(e) => setCallSign(e.target.value)}
+            className="w-full rounded bg-black px-3 py-2"
+          />
+
+          <input
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -148,7 +157,7 @@ export default function NewUserPage() {
           </div>
 
           <button
-            onClick={createUser}
+            onClick={() => void createUser()}
             className="w-full rounded bg-green-600 py-2"
           >
             Create User
