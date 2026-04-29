@@ -1,110 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function PushPermission() {
-  const [visible, setVisible] = useState(false);
-
   useEffect(() => {
-    void checkPermission();
+    async function setupPush() {
+      if (!("serviceWorker" in navigator)) return;
+
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return;
+
+      const reg = await navigator.serviceWorker.register("/sw.js");
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
+        ),
+      });
+
+      const { data: authData } = await supabase.auth.getUser();
+      const email = authData.user?.email;
+
+      if (!email) return;
+
+      const { data: user } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("email", email)
+        .maybeSingle();
+
+      if (!user?.id) return;
+
+      await supabase.from("push_subscriptions").upsert({
+        user_id: user.id,
+        subscription: sub,
+      });
+    }
+
+    void setupPush();
   }, []);
 
-  async function getCurrentRosterUserId() {
-    const { data: authData } = await supabase.auth.getUser();
-    const email = authData.user?.email;
+  return null;
+}
 
-    if (!email) return null;
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
 
-    const { data: user } = await supabase
-      .from("users")
-      .select("id")
-      .ilike("email", email)
-      .maybeSingle();
-
-    return user?.id ?? null;
-  }
-
-  async function savePermissionStatus(
-    status: NotificationPermission | "unsupported"
-  ) {
-    const { data: authData } = await supabase.auth.getUser();
-    const email = authData.user?.email;
-
-    if (!email) return;
-
-    await supabase
-      .from("users")
-      .update({
-        push_permission_status: status,
-      })
-      .ilike("email", email);
-  }
-
-  async function savePlaceholderPushToken() {
-    const userId = await getCurrentRosterUserId();
-
-    if (!userId) return;
-
-    await supabase.from("user_push_tokens").insert({
-      user_id: userId,
-      token: "web-push-placeholder",
-      platform: "web-pwa",
-      is_active: true,
-    });
-  }
-
-  async function checkPermission() {
-    if (!("Notification" in window)) {
-      await savePermissionStatus("unsupported");
-      return;
-    }
-
-    await savePermissionStatus(Notification.permission);
-
-    if (Notification.permission === "default") {
-      setVisible(true);
-    }
-
-    if (Notification.permission === "granted") {
-      await savePlaceholderPushToken();
-    }
-  }
-
-  async function requestPermission() {
-    if (!("Notification" in window)) {
-      await savePermissionStatus("unsupported");
-      setVisible(false);
-      return;
-    }
-
-    const permission = await Notification.requestPermission();
-
-    await savePermissionStatus(permission);
-
-    if (permission === "granted") {
-      await savePlaceholderPushToken();
-    }
-
-    setVisible(false);
-  }
-
-  if (!visible) return null;
-
-  return (
-    <div className="fixed bottom-28 left-4 right-4 z-[100] mx-auto max-w-md rounded-xl border border-gray-800 bg-gray-900 p-5 text-white shadow-xl">
-      <div className="text-lg font-semibold">Enable Notifications</div>
-
-      <div className="mt-2 text-sm text-gray-400">
-        Get alerts for incidents, deployments, and important updates.
-      </div>
-
-      <button
-        onClick={() => void requestPermission()}
-        className="mt-4 w-full rounded bg-red-600 px-4 py-3 font-medium"
-      >
-        Enable Notifications
-      </button>
-    </div>
-  );
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
