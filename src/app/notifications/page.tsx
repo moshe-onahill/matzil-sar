@@ -17,19 +17,21 @@ type NotificationLog = {
   related_incident_id: string | null;
 };
 
-type User = {
+type Unit = {
   id: string;
-  full_name: string | null;
-  call_sign: string | null;
+  name: string;
+};
+
+type UserUnitRow = {
+  user_id: string;
 };
 
 export default function NotificationsPage() {
   const [logs, setLogs] = useState<NotificationLog[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // NEW STATE
-  const [selectedUser, setSelectedUser] = useState("");
+  const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
   const [channel, setChannel] = useState("app");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -37,7 +39,7 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     void loadNotifications();
-    void loadUsers();
+    void loadUnits();
 
     const channelSub = supabase
       .channel("notification-logs-live")
@@ -53,13 +55,13 @@ export default function NotificationsPage() {
     };
   }, []);
 
-  async function loadUsers() {
+  async function loadUnits() {
     const { data } = await supabase
-      .from("users")
-      .select("id, full_name, call_sign")
-      .order("full_name");
+      .from("units")
+      .select("id, name")
+      .order("name");
 
-    setUsers((data as User[]) ?? []);
+    setUnits((data as Unit[]) ?? []);
   }
 
   async function loadNotifications() {
@@ -85,22 +87,53 @@ export default function NotificationsPage() {
     setLoading(false);
   }
 
+  function toggleUnit(unitId: string) {
+    setSelectedUnits((prev) =>
+      prev.includes(unitId)
+        ? prev.filter((id) => id !== unitId)
+        : [...prev, unitId]
+    );
+  }
+
   async function sendNotification() {
-    if (!selectedUser || !title.trim()) {
-      alert("User and title required");
+    if (selectedUnits.length === 0 || !title.trim()) {
+      alert("Select at least one team and enter a title.");
       return;
     }
 
     setSending(true);
 
-    const { error } = await supabase.from("notification_logs").insert({
-      user_id: selectedUser,
-      channel,
-      notification_type: "manual",
-      title: title.trim(),
-      body: body.trim() || null,
-      status: "pending",
-    });
+    const { data: userUnitRows, error: userUnitError } = await supabase
+      .from("user_units")
+      .select("user_id")
+      .in("unit_id", selectedUnits);
+
+    if (userUnitError) {
+      setSending(false);
+      alert(userUnitError.message);
+      return;
+    }
+
+    const uniqueUserIds = Array.from(
+      new Set(((userUnitRows as UserUnitRow[]) ?? []).map((row) => row.user_id))
+    );
+
+    if (uniqueUserIds.length === 0) {
+      setSending(false);
+      alert("No users found in selected team(s).");
+      return;
+    }
+
+    const { error } = await supabase.from("notification_logs").insert(
+      uniqueUserIds.map((userId) => ({
+        user_id: userId,
+        channel,
+        notification_type: "manual_team",
+        title: title.trim(),
+        body: body.trim() || null,
+        status: "pending",
+      }))
+    );
 
     setSending(false);
 
@@ -111,7 +144,9 @@ export default function NotificationsPage() {
 
     setTitle("");
     setBody("");
-    alert("Notification sent");
+    setSelectedUnits([]);
+    alert(`Notification sent to ${uniqueUserIds.length} user(s).`);
+    await loadNotifications();
   }
 
   function formatDateTime(date: string) {
@@ -142,22 +177,34 @@ export default function NotificationsPage() {
           <h1 className="text-3xl font-bold">Notifications</h1>
         </div>
 
-        {/* 🔥 NEW SEND PANEL */}
-        <div className="rounded-xl bg-gray-900 p-5 space-y-3">
-          <div className="text-lg font-semibold">Send Notification</div>
+        <div className="space-y-3 rounded-xl bg-gray-900 p-5">
+          <div className="text-lg font-semibold">Send Team Notification</div>
 
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="w-full rounded bg-black px-3 py-2"
-          >
-            <option value="">Select user</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.call_sign || "No Call Sign"} - {u.full_name}
-              </option>
-            ))}
-          </select>
+          <div className="rounded-lg bg-black/30 p-4">
+            <div className="mb-3 text-sm font-medium text-gray-300">
+              Select Team(s)
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              {units.map((unit) => (
+                <label
+                  key={unit.id}
+                  className={`flex items-center gap-2 rounded px-3 py-2 text-sm ${
+                    selectedUnits.includes(unit.id)
+                      ? "bg-red-600"
+                      : "bg-gray-800"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedUnits.includes(unit.id)}
+                    onChange={() => toggleUnit(unit.id)}
+                  />
+                  <span>{unit.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
 
           <select
             value={channel}
@@ -181,18 +228,18 @@ export default function NotificationsPage() {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             className="w-full rounded bg-black px-3 py-2"
+            rows={4}
           />
 
           <button
             onClick={() => void sendNotification()}
             disabled={sending}
-            className="w-full rounded bg-red-600 py-2"
+            className="w-full rounded bg-red-600 py-2 disabled:opacity-60"
           >
-            {sending ? "Sending..." : "Send"}
+            {sending ? "Sending..." : "Send to Selected Teams"}
           </button>
         </div>
 
-        {/* EXISTING LOG VIEW (UNCHANGED) */}
         {loading ? (
           <div className="rounded-xl bg-gray-900 p-5 text-gray-400">
             Loading notifications...

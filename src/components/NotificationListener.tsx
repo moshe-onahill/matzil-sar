@@ -8,26 +8,65 @@ type Notification = {
   title: string;
   body: string | null;
   related_incident_id: string | null;
-  notification_type: string;
+  user_id: string;
 };
 
 export default function NotificationListener() {
   const [popup, setPopup] = useState<Notification | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const channelNameRef = useRef<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  function unlockSound() {
+    const AudioContextClass =
+      window.AudioContext || (window as any).webkitAudioContext;
+
+    if (!AudioContextClass) {
+      alert("Audio alerts are not supported on this device.");
+      return;
+    }
+
+    const ctx = new AudioContextClass();
+    audioContextRef.current = ctx;
+    setSoundEnabled(true);
+    playAlertSound();
+  }
+
+  function playAlertSound() {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+
+    const beep = (start: number, frequency: number) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      oscillator.type = "square";
+      oscillator.frequency.value = frequency;
+
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.35);
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscillator.start(ctx.currentTime + start);
+      oscillator.stop(ctx.currentTime + start + 0.4);
+    };
+
+    beep(0, 880);
+    beep(0.5, 880);
+    beep(1.0, 880);
+  }
 
   useEffect(() => {
-    let mounted = true;
-
-    audioRef.current = new Audio(
-      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
-    );
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let active = true;
 
     async function init() {
       const { data: authData } = await supabase.auth.getUser();
       const email = authData.user?.email;
 
-      if (!email || !mounted) return;
+      if (!email || !active) return;
 
       const { data: user } = await supabase
         .from("users")
@@ -35,104 +74,98 @@ export default function NotificationListener() {
         .ilike("email", email)
         .maybeSingle();
 
-      if (!user?.id || !mounted) return;
+      if (!user?.id || !active) return;
 
-      const channelName = `notification-popup-${user.id}`;
-
-      if (channelNameRef.current) {
-        await supabase.removeChannel(
-          supabase.channel(channelNameRef.current)
-        );
-      }
-
-      channelNameRef.current = channelName;
-
-      const channel = supabase
-        .channel(channelName)
+      channel = supabase
+        .channel(`notification-listener-${user.id}`)
         .on(
           "postgres_changes",
           {
             event: "INSERT",
             schema: "public",
             table: "notification_logs",
-            filter: `user_id=eq.${user.id}`,
           },
           (payload) => {
-            const n = payload.new as Notification;
+            const notification = payload.new as Notification;
 
+            if (notification.user_id !== user.id) return;
             if (user.is_on_duty === false) return;
 
-            setPopup(n);
+            setPopup(notification);
 
             if ("vibrate" in navigator) {
-              navigator.vibrate([300, 150, 300]);
+              navigator.vibrate([500, 200, 500, 200, 500]);
             }
 
-            audioRef.current?.play().catch(() => {
-              console.log("Audio blocked until user interacts with page.");
-            });
+            playAlertSound();
 
             setTimeout(() => {
               setPopup(null);
-            }, 8000);
+            }, 9000);
           }
-        );
-
-      channel.subscribe();
+        )
+        .subscribe();
     }
 
     void init();
 
     return () => {
-      mounted = false;
+      active = false;
 
-      if (channelNameRef.current) {
-        const channel = supabase
-          .getChannels()
-          .find((c) => c.topic === `realtime:${channelNameRef.current}`);
-
-        if (channel) {
-          void supabase.removeChannel(channel);
-        }
-
-        channelNameRef.current = null;
+      if (channel) {
+        void supabase.removeChannel(channel);
       }
     };
   }, []);
 
-  if (!popup) return null;
-
   return (
-    <div className="fixed left-4 right-4 top-6 z-[200] mx-auto max-w-md rounded-xl border border-red-400 bg-red-600 p-4 text-white shadow-xl">
-      <div className="text-xs font-semibold uppercase tracking-wide text-red-100">
-        Dispatch Alert
-      </div>
-
-      <div className="mt-1 text-lg font-semibold">{popup.title}</div>
-
-      {popup.body && (
-        <div className="mt-1 text-sm text-red-100">{popup.body}</div>
+    <>
+      {!soundEnabled && (
+        <button
+          onClick={unlockSound}
+          className="fixed bottom-24 left-4 z-[190] rounded-full bg-gray-900 px-4 py-2 text-xs text-white shadow-xl"
+        >
+          Enable Alert Sound
+        </button>
       )}
 
-      <div className="mt-3 flex gap-2">
-        {popup.related_incident_id && (
-          <button
-            onClick={() => {
-              window.location.href = `/incidents/${popup.related_incident_id}`;
-            }}
-            className="rounded bg-black/30 px-3 py-2 text-sm font-medium"
-          >
-            Open Incident
-          </button>
-        )}
+      {popup && (
+        <div className="fixed left-4 right-4 top-5 z-[200] mx-auto max-w-md overflow-hidden rounded-2xl border border-red-400 bg-red-700 text-white shadow-2xl">
+          <div className="bg-red-900 px-4 py-2 text-xs font-bold uppercase tracking-wide">
+            Dispatch Alert
+          </div>
 
-        <button
-          onClick={() => setPopup(null)}
-          className="rounded bg-black/20 px-3 py-2 text-sm"
-        >
-          Dismiss
-        </button>
-      </div>
-    </div>
+          <div className="p-4">
+            <div className="text-lg font-bold leading-tight">{popup.title}</div>
+
+            {popup.body && (
+              <div className="mt-2 whitespace-pre-wrap text-sm text-red-50">
+                {popup.body}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {popup.related_incident_id && (
+                <button
+                  onClick={() => {
+                    window.location.href = `/incidents/${popup.related_incident_id}`;
+                  }}
+                  className="rounded-lg bg-black/30 px-4 py-2 text-sm font-semibold"
+                >
+                  Open Incident
+                </button>
+              )}
+
+              <button
+                onClick={() => setPopup(null)}
+                className="rounded-lg bg-black/20 px-4 py-2 text-sm"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
