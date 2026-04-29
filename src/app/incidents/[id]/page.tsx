@@ -367,10 +367,7 @@ export default function IncidentDetailPage() {
   }
 
   function saveTime() {
-    void respondToIncident(
-      "Available At",
-      `${selectedHour}:${selectedMinute}`
-    );
+    void respondToIncident("Available At", `${selectedHour}:${selectedMinute}`);
     setTimePickerOpen(false);
   }
 
@@ -449,6 +446,14 @@ export default function IncidentDetailPage() {
     );
   }
 
+  function mapSnapshotUrl() {
+    if (!incident || incident.staging_lat === null || incident.staging_lng === null) {
+      return null;
+    }
+
+    return `https://www.google.com/maps?q=${incident.staging_lat},${incident.staging_lng}&z=15&output=embed`;
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-black px-4 py-5 text-white sm:p-6">
@@ -501,6 +506,7 @@ export default function IncidentDetailPage() {
 
   const canJoin = incident.status === "Active" && incident.accepting_units;
   const canCancel = myResponse && myResponse.response_type !== "Cancelled";
+  const snapshotUrl = mapSnapshotUrl();
 
   return (
     <>
@@ -538,9 +544,7 @@ export default function IncidentDetailPage() {
                   <div className="mt-1 text-red-400">{incident.status}</div>
                   {!incident.accepting_units &&
                     incident.status === "Active" && (
-                      <div className="mt-1 text-orange-400">
-                        No more units
-                      </div>
+                      <div className="mt-1 text-orange-400">No more units</div>
                     )}
                 </div>
 
@@ -628,6 +632,17 @@ export default function IncidentDetailPage() {
                     <div className="mt-2 break-words text-sm text-gray-400">
                       {incident.staging_lat}, {incident.staging_lng}
                     </div>
+
+                    {snapshotUrl && (
+                      <div className="mt-3 overflow-hidden rounded-lg border border-gray-800">
+                        <iframe
+                          title="Staging location map"
+                          src={snapshotUrl}
+                          className="h-56 w-full sm:h-72"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
 
                     <button
                       onClick={openNavigation}

@@ -4,13 +4,6 @@ export type UserRole =
   | "SAR Manager"
   | "Global Admin";
 
-export const TEST_USERS: Record<UserRole, string> = {
-  Member: "member2@matzilsar.org",
-  Dispatcher: "dispatcher@matzilsar.org",
-  "SAR Manager": "manager@matzilsar.org",
-  "Global Admin": "admin@matzilsar.org",
-};
-
 export function getStoredRole(): UserRole {
   if (typeof window === "undefined") return "Member";
 
@@ -34,5 +27,10 @@ export function setStoredRole(role: UserRole) {
 }
 
 export function getCurrentTestEmail(): string {
-  return TEST_USERS[getStoredRole()];
+  if (typeof window === "undefined") return "";
+
+  return (
+    window.localStorage.getItem("auth-email") ||
+    "briefmoshe@gmail.com"
+  );
 }

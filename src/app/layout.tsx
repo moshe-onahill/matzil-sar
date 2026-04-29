@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import AppBottomNav from "@/components/AppBottomNav";
+import AuthGate from "@/components/AuthGate";
+import PushPermission from "@/components/PushPermission";
 
 export const metadata: Metadata = {
   title: "Matzil SAR",
@@ -15,10 +17,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen overflow-x-hidden bg-black text-white">
-        <div className="min-h-screen w-full overflow-x-hidden pb-24">
-          {children}
-        </div>
-        <AppBottomNav />
+        <AuthGate>
+          <PushPermission />
+          <div className="min-h-screen w-full overflow-x-hidden pb-24">
+            {children}
+          </div>
+          <AppBottomNav />
+        </AuthGate>
       </body>
     </html>
   );
