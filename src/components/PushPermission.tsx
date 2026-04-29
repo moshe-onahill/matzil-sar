@@ -4,60 +4,153 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function PushPermission() {
-  const [ready, setReady] = useState(false);
+  const [showButton, setShowButton] = useState(false);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    async function setupPush() {
-      if (!("serviceWorker" in navigator)) return;
+    void checkStatus();
+  }, []);
 
-      const reg = await navigator.serviceWorker.register("/sw.js");
+  async function checkStatus() {
+    if (!("serviceWorker" in navigator)) return;
+    if (!("Notification" in window)) return;
+    if (!("PushManager" in window)) return;
 
-      // 🔥 CHECK IF ALREADY SUBSCRIBED
-      const existingSub = await reg.pushManager.getSubscription();
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    const existingSub = await reg.pushManager.getSubscription();
 
-      if (existingSub) {
-        console.log("Already subscribed");
-        setReady(true);
-        return;
+    if (existingSub) {
+      await saveSubscription(existingSub);
+      setShowButton(false);
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      setShowButton(true);
+      setMessage("Notifications allowed. Tap to finish setup.");
+      return;
+    }
+
+    if (Notification.permission === "default") {
+      setShowButton(true);
+      setMessage("Enable phone notifications.");
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      setShowButton(false);
+      setMessage("");
+    }
+  }
+
+  async function enablePush() {
+    try {
+      setSaving(true);
+      setMessage("Setting up notifications...");
+
+      if (!("serviceWorker" in navigator)) {
+        throw new Error("Service workers are not supported.");
+      }
+
+      if (!("Notification" in window)) {
+        throw new Error("Notifications are not supported.");
+      }
+
+      if (!("PushManager" in window)) {
+        throw new Error("Push notifications are not supported.");
       }
 
       const permission = await Notification.requestPermission();
-      if (permission !== "granted") return;
 
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-        ),
-      });
+      if (permission !== "granted") {
+        throw new Error("Notification permission was not granted.");
+      }
 
-      const { data: authData } = await supabase.auth.getUser();
-      const email = authData.user?.email;
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
-      if (!email) return;
+      if (!vapidKey) {
+        throw new Error("Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY.");
+      }
 
-      const { data: user } = await supabase
-        .from("users")
-        .select("id")
-        .ilike("email", email)
-        .maybeSingle();
+      const reg = await navigator.serviceWorker.register("/sw.js");
 
-      if (!user?.id) return;
+      let sub = await reg.pushManager.getSubscription();
 
-      await supabase.from("push_subscriptions").upsert({
-        user_id: user.id,
-        subscription: sub,
-      });
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+      }
 
-      console.log("Push subscription saved");
+      await saveSubscription(sub);
 
-      setReady(true);
+      setShowButton(false);
+      setMessage("");
+      alert("Phone notifications enabled.");
+    } catch (err: any) {
+      setMessage(err?.message || "Push setup failed.");
+      alert(err?.message || "Push setup failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveSubscription(sub: PushSubscription) {
+    const { data: authData } = await supabase.auth.getUser();
+    const email = authData.user?.email;
+
+    if (!email) {
+      throw new Error("No logged-in email found.");
     }
 
-    void setupPush();
-  }, []);
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .ilike("email", email)
+      .maybeSingle();
 
-  return null;
+    if (userError) {
+      throw new Error(userError.message);
+    }
+
+    if (!user?.id) {
+      throw new Error("No matching roster user found.");
+    }
+
+    const { error } = await supabase.from("push_subscriptions").upsert(
+      {
+        user_id: user.id,
+        subscription: sub.toJSON(),
+      },
+      {
+        onConflict: "user_id",
+      }
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  if (!showButton) return null;
+
+  return (
+    <div className="fixed bottom-24 left-4 right-4 z-[190] mx-auto max-w-md rounded-xl border border-gray-800 bg-gray-900 p-4 text-white shadow-xl">
+      <div className="font-semibold">Phone Notifications</div>
+
+      {message && <div className="mt-1 text-sm text-gray-400">{message}</div>}
+
+      <button
+        onClick={() => void enablePush()}
+        disabled={saving}
+        className="mt-3 w-full rounded bg-red-600 px-4 py-3 font-medium disabled:opacity-60"
+      >
+        {saving ? "Setting Up..." : "Enable Notifications"}
+      </button>
+    </div>
+  );
 }
 
 function urlBase64ToUint8Array(base64String: string) {

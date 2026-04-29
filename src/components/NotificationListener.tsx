@@ -16,6 +16,13 @@ export default function NotificationListener() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem("matzil-alert-sound-enabled");
+    if (saved === "true") {
+      setSoundEnabled(true);
+    }
+  }, []);
+
   function unlockSound() {
     const AudioContextClass =
       window.AudioContext || (window as any).webkitAudioContext;
@@ -27,12 +34,28 @@ export default function NotificationListener() {
 
     const ctx = new AudioContextClass();
     audioContextRef.current = ctx;
+
+    window.localStorage.setItem("matzil-alert-sound-enabled", "true");
     setSoundEnabled(true);
+
     playAlertSound();
   }
 
+  function ensureAudioContext() {
+    if (audioContextRef.current) return audioContextRef.current;
+
+    const AudioContextClass =
+      window.AudioContext || (window as any).webkitAudioContext;
+
+    if (!AudioContextClass) return null;
+
+    const ctx = new AudioContextClass();
+    audioContextRef.current = ctx;
+    return ctx;
+  }
+
   function playAlertSound() {
-    const ctx = audioContextRef.current;
+    const ctx = ensureAudioContext();
     if (!ctx) return;
 
     const beep = (start: number, frequency: number) => {
@@ -43,8 +66,14 @@ export default function NotificationListener() {
       oscillator.frequency.value = frequency;
 
       gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.35);
+      gain.gain.exponentialRampToValueAtTime(
+        0.25,
+        ctx.currentTime + start + 0.02
+      );
+      gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        ctx.currentTime + start + 0.35
+      );
 
       oscillator.connect(gain);
       gain.connect(ctx.destination);
@@ -97,7 +126,12 @@ export default function NotificationListener() {
               navigator.vibrate([500, 200, 500, 200, 500]);
             }
 
-            playAlertSound();
+            if (
+              window.localStorage.getItem("matzil-alert-sound-enabled") ===
+              "true"
+            ) {
+              playAlertSound();
+            }
 
             setTimeout(() => {
               setPopup(null);
