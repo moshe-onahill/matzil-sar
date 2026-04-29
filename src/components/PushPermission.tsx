@@ -1,17 +1,28 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function PushPermission() {
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
     async function setupPush() {
       if (!("serviceWorker" in navigator)) return;
 
+      const reg = await navigator.serviceWorker.register("/sw.js");
+
+      // 🔥 CHECK IF ALREADY SUBSCRIBED
+      const existingSub = await reg.pushManager.getSubscription();
+
+      if (existingSub) {
+        console.log("Already subscribed");
+        setReady(true);
+        return;
+      }
+
       const permission = await Notification.requestPermission();
       if (permission !== "granted") return;
-
-      const reg = await navigator.serviceWorker.register("/sw.js");
 
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -37,6 +48,10 @@ export default function PushPermission() {
         user_id: user.id,
         subscription: sub,
       });
+
+      console.log("Push subscription saved");
+
+      setReady(true);
     }
 
     void setupPush();
