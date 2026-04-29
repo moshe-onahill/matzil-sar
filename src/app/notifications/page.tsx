@@ -95,6 +95,21 @@ export default function NotificationsPage() {
     );
   }
 
+  async function sendPushToUser(userId: string, titleText: string, bodyText: string) {
+    await fetch("/api/send-push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        title: titleText,
+        body: bodyText,
+        url: "/notifications",
+      }),
+    });
+  }
+
   async function sendNotification() {
     if (selectedUnits.length === 0 || !title.trim()) {
       alert("Select at least one team and enter a title.");
@@ -124,24 +139,35 @@ export default function NotificationsPage() {
       return;
     }
 
+    const cleanTitle = title.trim();
+    const cleanBody = body.trim();
+
     const { error } = await supabase.from("notification_logs").insert(
       uniqueUserIds.map((userId) => ({
         user_id: userId,
         channel,
         notification_type: "manual_team",
-        title: title.trim(),
-        body: body.trim() || null,
+        title: cleanTitle,
+        body: cleanBody || null,
         status: "pending",
       }))
     );
 
-    setSending(false);
-
     if (error) {
+      setSending(false);
       alert(error.message);
       return;
     }
 
+    if (channel === "app") {
+      await Promise.all(
+        uniqueUserIds.map((userId) =>
+          sendPushToUser(userId, cleanTitle, cleanBody || "New Matzil SAR alert")
+        )
+      );
+    }
+
+    setSending(false);
     setTitle("");
     setBody("");
     setSelectedUnits([]);
@@ -211,7 +237,7 @@ export default function NotificationsPage() {
             onChange={(e) => setChannel(e.target.value)}
             className="w-full rounded bg-black px-3 py-2"
           >
-            <option value="app">App</option>
+            <option value="app">App / Push</option>
             <option value="email">Email</option>
             <option value="sms">SMS</option>
           </select>
