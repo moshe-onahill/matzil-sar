@@ -1,73 +1,138 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
+import * as admin from "firebase-admin";
 
 export const runtime = "nodejs";
 
+function getFirebaseApp() {
+  if (admin.apps.length > 0) return admin.apps[0]!;
+
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  return admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey,
+    }),
+  });
+}
+
 export async function POST(req: Request) {
-  const vapidEmail = process.env.VAPID_EMAIL || "mailto:briefmoshe@gmail.com";
-  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!vapidPublicKey || !vapidPrivateKey) {
-    return NextResponse.json({ error: "Missing VAPID keys" }, { status: 500 });
-  }
-
   if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Missing Supabase server credentials" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Missing Supabase server credentials" }, { status: 500 });
   }
-
-  webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
+  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean };
   try {
-    const { user_id, title, body, url } = await req.json();
-
-    if (!user_id || !title) {
-      return NextResponse.json(
-        { error: "Missing user_id or title" },
-        { status: 400 }
-      );
-    }
-
-    const { data: subs, error } = await supabaseAdmin
-      .from("push_subscriptions")
-      .select("subscription")
-      .eq("user_id", user_id);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    if (!subs || subs.length === 0) {
-      return NextResponse.json({ ok: true, message: "No subscriptions" });
-    }
-
-    const payload = JSON.stringify({
-      title,
-      body: body || "",
-      url: url || "/",
-    });
-
-    await Promise.all(
-      subs.map((s) =>
-        webpush.sendNotification(s.subscription, payload).catch((err) => {
-          console.error("Push error:", err);
-        })
-      )
-    );
-
-    return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Unknown error" },
-      { status: 500 }
-    );
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+
+  const { user_id, title, body: msgBody, url, critical = false } = body;
+
+  if (!user_id || !title) {
+    return NextResponse.json({ error: "Missing user_id or title" }, { status: 400 });
+  }
+
+  const results = { fcm: 0, vapid: 0, errors: [] as string[] };
+
+  // --- FCM (native iOS/Android) ---
+  const fcmConfigured =
+    process.env.FIREBASE_PROJECT_ID &&
+    process.env.FIREBASE_CLIENT_EMAIL &&
+    process.env.FIREBASE_PRIVATE_KEY;
+
+  if (fcmConfigured) {
+    try {
+      const firebaseApp = getFirebaseApp();
+      const messaging = admin.messaging(firebaseApp);
+
+      const { data: tokens } = await supabaseAdmin
+        .from("fcm_tokens")
+        .select("token, platform")
+        .eq("user_id", user_id);
+
+      if (tokens && tokens.length > 0) {
+        await Promise.all(
+          tokens.map(async (row: { token: string; platform: string }) => {
+            const message: admin.messaging.Message = {
+              token: row.token,
+              notification: { title: title, body: msgBody || "" },
+              data: { url: url || "/" },
+              ...(row.platform === "ios"
+                ? {
+                    apns: {
+                      payload: {
+                        aps: {
+                          sound: critical
+                            ? { critical: 1, name: "default", volume: 1.0 }
+                            : "default",
+                          badge: 1,
+                        },
+                      },
+                    },
+                  }
+                : {
+                    android: {
+                      priority: "high" as const,
+                      notification: { sound: "default", priority: "max" as const },
+                    },
+                  }),
+            };
+
+            try {
+              await messaging.send(message);
+              results.fcm++;
+            } catch (err: any) {
+              results.errors.push(`FCM: ${err.message}`);
+            }
+          })
+        );
+      }
+    } catch (err: any) {
+      results.errors.push(`FCM setup: ${err.message}`);
+    }
+  }
+
+  // --- VAPID web push (keep existing web subscribers working) ---
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const vapidEmail = process.env.VAPID_EMAIL || "mailto:briefmoshe@gmail.com";
+
+  if (vapidPublicKey && vapidPrivateKey) {
+    try {
+      webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
+
+      const { data: subs } = await supabaseAdmin
+        .from("push_subscriptions")
+        .select("subscription")
+        .eq("user_id", user_id);
+
+      if (subs && subs.length > 0) {
+        const payload = JSON.stringify({ title, body: msgBody || "", url: url || "/" });
+
+        await Promise.all(
+          subs.map((s: { subscription: any }) =>
+            webpush.sendNotification(s.subscription, payload).then(() => {
+              results.vapid++;
+            }).catch((err: any) => {
+              results.errors.push(`VAPID: ${err.message}`);
+            })
+          )
+        );
+      }
+    } catch (err: any) {
+      results.errors.push(`VAPID setup: ${err.message}`);
+    }
+  }
+
+  return NextResponse.json({ ok: true, ...results });
 }

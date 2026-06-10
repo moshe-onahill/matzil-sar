@@ -13,6 +13,15 @@ export default function PushPermission() {
   }, []);
 
   async function checkStatus() {
+    // On native Capacitor, register FCM token silently on mount
+    const { Capacitor } = await import("@capacitor/core");
+    if (Capacitor.isNativePlatform()) {
+      const { registerFcmToken } = await import("@/lib/push-notifications");
+      await registerFcmToken().catch(console.error);
+      return;
+    }
+
+    // Web: existing VAPID flow
     if (!("serviceWorker" in navigator)) return;
     if (!("Notification" in window)) return;
     if (!("PushManager" in window)) return;
@@ -49,32 +58,17 @@ export default function PushPermission() {
       setSaving(true);
       setMessage("Setting up notifications...");
 
-      if (!("serviceWorker" in navigator)) {
-        throw new Error("Service workers are not supported.");
-      }
-
-      if (!("Notification" in window)) {
-        throw new Error("Notifications are not supported.");
-      }
-
-      if (!("PushManager" in window)) {
-        throw new Error("Push notifications are not supported.");
-      }
+      if (!("serviceWorker" in navigator)) throw new Error("Service workers are not supported.");
+      if (!("Notification" in window)) throw new Error("Notifications are not supported.");
+      if (!("PushManager" in window)) throw new Error("Push notifications are not supported.");
 
       const permission = await Notification.requestPermission();
-
-      if (permission !== "granted") {
-        throw new Error("Notification permission was not granted.");
-      }
+      if (permission !== "granted") throw new Error("Notification permission was not granted.");
 
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-
-      if (!vapidKey) {
-        throw new Error("Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY.");
-      }
+      if (!vapidKey) throw new Error("Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY.");
 
       const reg = await navigator.serviceWorker.register("/sw.js");
-
       let sub = await reg.pushManager.getSubscription();
 
       if (!sub) {
@@ -85,7 +79,6 @@ export default function PushPermission() {
       }
 
       await saveSubscription(sub);
-
       setShowButton(false);
       setMessage("");
       alert("Phone notifications enabled.");
@@ -100,10 +93,7 @@ export default function PushPermission() {
   async function saveSubscription(sub: PushSubscription) {
     const { data: authData } = await supabase.auth.getUser();
     const email = authData.user?.email;
-
-    if (!email) {
-      throw new Error("No logged-in email found.");
-    }
+    if (!email) throw new Error("No logged-in email found.");
 
     const { data: user, error: userError } = await supabase
       .from("users")
@@ -111,27 +101,15 @@ export default function PushPermission() {
       .ilike("email", email)
       .maybeSingle();
 
-    if (userError) {
-      throw new Error(userError.message);
-    }
-
-    if (!user?.id) {
-      throw new Error("No matching roster user found.");
-    }
+    if (userError) throw new Error(userError.message);
+    if (!user?.id) throw new Error("No matching roster user found.");
 
     const { error } = await supabase.from("push_subscriptions").upsert(
-      {
-        user_id: user.id,
-        subscription: sub.toJSON(),
-      },
-      {
-        onConflict: "user_id",
-      }
+      { user_id: user.id, subscription: sub.toJSON() },
+      { onConflict: "user_id" }
     );
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
   }
 
   if (!showButton) return null;
@@ -139,9 +117,7 @@ export default function PushPermission() {
   return (
     <div className="fixed bottom-24 left-4 right-4 z-[190] mx-auto max-w-md rounded-xl border border-gray-800 bg-gray-900 p-4 text-white shadow-xl">
       <div className="font-semibold">Phone Notifications</div>
-
       {message && <div className="mt-1 text-sm text-gray-400">{message}</div>}
-
       <button
         onClick={() => void enablePush()}
         disabled={saving}
@@ -156,7 +132,6 @@ export default function PushPermission() {
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-
   const rawData = window.atob(base64);
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
