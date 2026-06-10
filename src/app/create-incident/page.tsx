@@ -235,7 +235,7 @@ export default function CreateIncidentPage() {
 
         <div className="rounded-xl bg-gray-900 p-5 sm:p-6 space-y-4">
           <div>
-            <h1 className="text-3xl font-bold">Create Incident</h1>
+            <h1 className="text-3xl font-bold">Send Alert</h1>
             <div className="mt-2 text-sm text-gray-400">
               Current Role: {currentUserRole}
             </div>
@@ -384,7 +384,7 @@ export default function CreateIncidentPage() {
             disabled={loading}
             className="w-full rounded bg-red-600 px-4 py-3 font-medium"
           >
-            {loading ? "Creating..." : "Create Incident"}
+            {loading ? "Sending..." : "Send Alert"}
           </button>
         </div>
       </div>

@@ -144,7 +144,7 @@ export default function RosterPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-500">Matzil SAR</p>
-            <h1 className="text-3xl font-bold">Roster</h1>
+            <h1 className="text-3xl font-bold">Member Info</h1>
           </div>
 
           <div className="flex items-center gap-3">

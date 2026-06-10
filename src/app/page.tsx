@@ -248,11 +248,72 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm text-gray-500">Matzil SAR</p>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <h1 className="text-3xl font-bold">Home</h1>
           </div>
 
           <RoleSwitcher />
         </div>
+
+        {/* Active Call hero button */}
+        {activeIncidents.length > 0 ? (
+          <Link
+            href={`/incidents/${activeIncidents[0].id}`}
+            className="flex items-center justify-between rounded-2xl bg-red-600 p-5 shadow-lg"
+          >
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-red-200">Active Call</div>
+              <div className="mt-1 text-xl font-bold">{activeIncidents[0].title}</div>
+              <div className="mt-1 text-sm text-red-200">{responderCount(activeIncidents[0])} responders</div>
+            </div>
+            <div className="text-4xl">🚨</div>
+          </Link>
+        ) : (
+          <div className="flex items-center justify-between rounded-2xl bg-gray-900 p-5">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-gray-500">Status</div>
+              <div className="mt-1 text-xl font-semibold text-gray-300">No Active Calls</div>
+            </div>
+            <div className="text-4xl opacity-30">🚨</div>
+          </div>
+        )}
+
+        {/* Quick actions grid */}
+        <div className="grid grid-cols-3 gap-3">
+          <Link href="/roster" className="flex flex-col items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-sm hover:bg-gray-800">
+            <span className="text-2xl">🧑</span>
+            <span className="text-center text-xs text-gray-300">Member Info</span>
+          </Link>
+          <Link href="/events" className="flex flex-col items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-sm hover:bg-gray-800">
+            <span className="text-2xl">📅</span>
+            <span className="text-center text-xs text-gray-300">Calendar</span>
+          </Link>
+          <Link href="/notifications" className="flex flex-col items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-sm hover:bg-gray-800">
+            <span className="text-2xl">🔔</span>
+            <span className="text-center text-xs text-gray-300">Alerts</span>
+          </Link>
+          <Link href="/map" className="flex flex-col items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-sm hover:bg-gray-800">
+            <span className="text-2xl">🗺️</span>
+            <span className="text-center text-xs text-gray-300">Map</span>
+          </Link>
+          <Link href="/responders" className="flex flex-col items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-sm hover:bg-gray-800">
+            <span className="text-2xl">👥</span>
+            <span className="text-center text-xs text-gray-300">Responders</span>
+          </Link>
+          <Link href="/settings" className="flex flex-col items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-sm hover:bg-gray-800">
+            <span className="text-2xl">⚙️</span>
+            <span className="text-center text-xs text-gray-300">Settings</span>
+          </Link>
+        </div>
+
+        {/* Role-based Send Alert button */}
+        {canCreate && (
+          <Link
+            href="/create-incident"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-700 py-4 text-base font-semibold hover:bg-red-600"
+          >
+            <span>📢</span> Send Alert
+          </Link>
+        )}
 
         {announcements.length > 0 && (
           <div className="space-y-2 rounded-xl bg-blue-900/40 p-4">
@@ -268,11 +329,11 @@ export default function Dashboard() {
         )}
 
         <section className="space-y-3">
-          <div className="text-lg font-semibold">Active Incidents</div>
+          <div className="text-lg font-semibold">Active Calls</div>
 
           {activeIncidents.length === 0 && (
             <div className="rounded-xl bg-gray-900 p-5 text-gray-400">
-              No active incidents.
+              No active calls.
             </div>
           )}
 
@@ -402,7 +463,7 @@ export default function Dashboard() {
                     href="/create-incident"
                     className="block rounded bg-black/40 px-3 py-2 hover:bg-black"
                   >
-                    Create Incident
+                    Send Alert
                   </Link>
 
                   <Link

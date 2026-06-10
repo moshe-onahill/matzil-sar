@@ -193,7 +193,7 @@ export default function IncidentsPage() {
           <div>
             <p className="text-sm text-gray-500">Matzil SAR</p>
             <h1 className="text-4xl font-bold leading-tight sm:text-3xl">
-              Incidents
+              Active Calls
             </h1>
           </div>
 
@@ -205,7 +205,7 @@ export default function IncidentsPage() {
                 href="/create-incident"
                 className="rounded bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-700"
               >
-                Create Incident
+                Send Alert
               </Link>
             )}
 
@@ -272,7 +272,7 @@ export default function IncidentsPage() {
                 Closed Incidents
               </div>
               <div className="text-sm text-gray-500">
-                {closedIncidents.length} archived incident
+                {closedIncidents.length} archived call
                 {closedIncidents.length === 1 ? "" : "s"}
               </div>
             </div>

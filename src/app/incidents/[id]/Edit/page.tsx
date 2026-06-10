@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
 import RoleSwitcher from "@/components/RoleSwitcher";
 
+export const dynamic = 'force-static';
+
 type Incident = {
   id: string;
   incident_number: string;
@@ -310,12 +312,7 @@ export default function EditIncidentPage() {
 
     pushChange("title", "Title", originalSnapshot.title, currentSnapshot.title);
     pushChange("type", "Type", originalSnapshot.type, currentSnapshot.type);
-    pushChange(
-      "short_description",
-      "Description",
-      originalSnapshot.short_description,
-      currentSnapshot.short_description
-    );
+    pushChange("short_description", "Description", originalSnapshot.short_description, currentSnapshot.short_description);
     pushChange("status", "Status", originalSnapshot.status, currentSnapshot.status);
 
     if (originalSnapshot.accepting_units !== currentSnapshot.accepting_units) {
@@ -327,46 +324,13 @@ export default function EditIncidentPage() {
       });
     }
 
-    pushChange(
-      "staging_name",
-      "Staging Name",
-      originalSnapshot.staging_name,
-      currentSnapshot.staging_name
-    );
-    pushChange(
-      "staging_address",
-      "Staging Address",
-      originalSnapshot.staging_address,
-      currentSnapshot.staging_address
-    );
-
-    pushChange(
-      "staging_lat",
-      "Staging Latitude",
-      `${originalSnapshot.staging_lat} ${originalSnapshot.staging_lat_dir}`.trim(),
-      `${currentSnapshot.staging_lat} ${currentSnapshot.staging_lat_dir}`.trim()
-    );
-
-    pushChange(
-      "staging_lng",
-      "Staging Longitude",
-      `${originalSnapshot.staging_lng} ${originalSnapshot.staging_lng_dir}`.trim(),
-      `${currentSnapshot.staging_lng} ${currentSnapshot.staging_lng_dir}`.trim()
-    );
-
-    pushChange(
-      "team_needs",
-      "Team Needs",
-      `Water ${originalSnapshot.water_needed || 0}, Wilderness ${
-        originalSnapshot.wilderness_needed || 0
-      }, MRU ${originalSnapshot.mru_needed || 0}, Support ${
-        originalSnapshot.support_needed || 0
-      }`,
-      `Water ${currentSnapshot.water_needed || 0}, Wilderness ${
-        currentSnapshot.wilderness_needed || 0
-      }, MRU ${currentSnapshot.mru_needed || 0}, Support ${
-        currentSnapshot.support_needed || 0
-      }`
+    pushChange("staging_name", "Staging Name", originalSnapshot.staging_name, currentSnapshot.staging_name);
+    pushChange("staging_address", "Staging Address", originalSnapshot.staging_address, currentSnapshot.staging_address);
+    pushChange("staging_lat", "Staging Latitude", `${originalSnapshot.staging_lat} ${originalSnapshot.staging_lat_dir}`.trim(), `${currentSnapshot.staging_lat} ${currentSnapshot.staging_lat_dir}`.trim());
+    pushChange("staging_lng", "Staging Longitude", `${originalSnapshot.staging_lng} ${originalSnapshot.staging_lng_dir}`.trim(), `${currentSnapshot.staging_lng} ${currentSnapshot.staging_lng_dir}`.trim());
+    pushChange("team_needs", "Team Needs",
+      `Water ${originalSnapshot.water_needed || 0}, Wilderness ${originalSnapshot.wilderness_needed || 0}, MRU ${originalSnapshot.mru_needed || 0}, Support ${originalSnapshot.support_needed || 0}`,
+      `Water ${currentSnapshot.water_needed || 0}, Wilderness ${currentSnapshot.wilderness_needed || 0}, MRU ${currentSnapshot.mru_needed || 0}, Support ${currentSnapshot.support_needed || 0}`
     );
 
     return rows;
@@ -429,7 +393,7 @@ export default function EditIncidentPage() {
 
     if (baselineUpdatedAt && latestUpdatedAt && baselineUpdatedAt !== latestUpdatedAt) {
       const override = window.confirm(
-        "Another user made these changes, do you want to cancel your changes or override?"
+        "Another user made changes. Override them?"
       );
 
       if (!override) {
@@ -525,7 +489,6 @@ export default function EditIncidentPage() {
           <div className="text-sm text-gray-400">{incident.incident_number}</div>
 
           <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded bg-black px-3 py-3" />
-
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full rounded bg-black px-3 py-3" />
 
           <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded bg-black px-3 py-3">
@@ -555,7 +518,6 @@ export default function EditIncidentPage() {
           </div>
 
           <input value={stagingName} onChange={(e) => setStagingName(e.target.value)} placeholder="Staging Name" className="w-full rounded bg-black px-3 py-3" />
-
           <input value={stagingAddress} onChange={(e) => setStagingAddress(e.target.value)} placeholder="Address" className="w-full rounded bg-black px-3 py-3" />
 
           <button onClick={() => void geocodeAddress()} disabled={geocoding} className="rounded bg-blue-600 px-4 py-2">

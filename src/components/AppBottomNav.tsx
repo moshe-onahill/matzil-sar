@@ -5,15 +5,15 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const mainItems = [
-  { href: "/incidents", label: "Incidents", icon: "🚨" },
+  { href: "/incidents", label: "Active Calls", icon: "🚨" },
   { href: "/responders", label: "Units", icon: "👥" },
   { href: "/map", label: "Map", icon: "🗺️" },
   { href: "/notifications", label: "Alerts", icon: "🔔" },
 ];
 
 const moreItems = [
-  { href: "/events", label: "Events", icon: "📅" },
-  { href: "/roster", label: "Roster", icon: "🧑" },
+  { href: "/events", label: "Calendar", icon: "📅" },
+  { href: "/roster", label: "Member Info", icon: "🧑" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
