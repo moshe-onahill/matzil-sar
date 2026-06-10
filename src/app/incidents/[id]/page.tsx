@@ -1,6 +1,7 @@
 "use client";
 
 export const dynamic = 'force-static';
+export function generateStaticParams() { return []; }
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
