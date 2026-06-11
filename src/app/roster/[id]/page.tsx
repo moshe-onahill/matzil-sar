@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import RosterMemberClient from "./RosterMemberClient";
 
 export async function generateStaticParams() {
@@ -13,4 +13,3 @@ export async function generateStaticParams() {
 export default function RosterMemberPage() {
   return <RosterMemberClient />;
 }
-

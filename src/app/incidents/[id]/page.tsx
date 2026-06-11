@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import IncidentDetailClient from "./IncidentDetailClient";
 
 export async function generateStaticParams() {
@@ -13,4 +13,3 @@ export async function generateStaticParams() {
 export default function IncidentDetailPage() {
   return <IncidentDetailClient />;
 }
-
