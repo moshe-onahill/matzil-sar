@@ -9,7 +9,7 @@ workflows:
         BUNDLE_ID: "org.matzil.sar"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-      node: v20
+      node: v22
     scripts:
       - name: Install Node dependencies
         script: npm ci
