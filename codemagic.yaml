@@ -26,6 +26,12 @@ workflows:
       - name: Set up keychain
         script: keychain initialize
 
+      - name: Register App ID if missing
+        script: |
+          app-store-connect bundle-ids create "$BUNDLE_ID" \
+            --name "Matzil SAR" \
+            --platform IOS || true
+
       - name: Fetch signing files
         script: |
           app-store-connect fetch-signing-files \
