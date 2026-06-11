@@ -10,6 +10,9 @@ workflows:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
       node: v22
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: org.matzil.sar
     scripts:
       - name: Install Node dependencies
         script: npm ci
@@ -23,22 +26,11 @@ workflows:
       - name: Set up keychain
         script: keychain initialize
 
-      - name: Fetch or create distribution certificate
+      - name: Fetch signing files
         script: |
-          app-store-connect certificates list --type IOS_DISTRIBUTION --save || \
-          app-store-connect certificates create --type IOS_DISTRIBUTION --save
-
-      - name: Fetch or create provisioning profile
-        script: |
-          app-store-connect profiles list \
-            --bundle-identifier "$BUNDLE_ID" \
-            --profile-type IOS_APP_STORE \
-            --save || \
-          app-store-connect profiles create \
-            --name "Matzil SAR App Store" \
-            --bundle-identifier "$BUNDLE_ID" \
-            --profile-type IOS_APP_STORE \
-            --save
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
 
       - name: Apply signing to Xcode project
         script: xcode-project use-profiles
