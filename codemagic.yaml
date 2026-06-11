@@ -17,8 +17,8 @@ workflows:
       - name: Build Next.js for Capacitor
         script: CAPACITOR_BUILD=1 npm run build
 
-      - name: Capacitor sync
-        script: npx cap sync ios
+      - name: Capacitor copy
+        script: npx cap copy ios
 
       - name: Install CocoaPods dependencies
         script: cd ios/App && pod install
