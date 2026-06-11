@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
-import * as admin from "firebase-admin";
+import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
+import type { Message } from "firebase-admin/messaging";
 
 export const runtime = "nodejs";
 
 function getFirebaseApp() {
-  if (admin.apps.length > 0) return admin.apps[0]!;
+  if (getApps().length > 0) return getApp();
 
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-  return admin.initializeApp({
-    credential: admin.credential.cert({
+  return initializeApp({
+    credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey,
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
   if (fcmConfigured) {
     try {
       const firebaseApp = getFirebaseApp();
-      const messaging = admin.messaging(firebaseApp);
+      const messaging = getMessaging(firebaseApp);
 
       const { data: tokens } = await supabaseAdmin
         .from("fcm_tokens")
@@ -63,9 +65,9 @@ export async function POST(req: Request) {
       if (tokens && tokens.length > 0) {
         await Promise.all(
           tokens.map(async (row: { token: string; platform: string }) => {
-            const message: admin.messaging.Message = {
+            const message: Message = {
               token: row.token,
-              notification: { title: title, body: msgBody || "" },
+              notification: { title, body: msgBody || "" },
               data: { url: url || "/" },
               ...(row.platform === "ios"
                 ? {
