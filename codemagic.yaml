@@ -5,9 +5,6 @@ workflows:
     environment:
       groups:
         - app-store
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: org.matzil.sar
       vars:
         BUNDLE_ID: "org.matzil.sar"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
@@ -24,16 +21,30 @@ workflows:
         script: npx cap sync ios --no-open
 
       - name: Install CocoaPods dependencies
-        script: |
-          cd ios/App && pod install
+        script: cd ios/App && pod install
 
-      - name: Set entitlements path
+      - name: Set up keychain
+        script: keychain initialize
+
+      - name: Fetch or create distribution certificate
         script: |
-          cd ios/App
-          xcodebuild -project App.xcodeproj \
-            -target App \
-            CODE_SIGN_ENTITLEMENTS=App/App.entitlements \
-            -showBuildSettings > /dev/null || true
+          app-store-connect certificates list --type IOS_DISTRIBUTION --save || \
+          app-store-connect certificates create --type IOS_DISTRIBUTION --save
+
+      - name: Fetch or create provisioning profile
+        script: |
+          app-store-connect profiles list \
+            --bundle-identifier "$BUNDLE_ID" \
+            --profile-type IOS_APP_STORE \
+            --save || \
+          app-store-connect profiles create \
+            --name "Matzil SAR App Store" \
+            --bundle-identifier "$BUNDLE_ID" \
+            --profile-type IOS_APP_STORE \
+            --save
+
+      - name: Apply signing to Xcode project
+        script: xcode-project use-profiles
 
       - name: Build and archive for App Store
         script: |
@@ -45,7 +56,6 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
     publishing:
       app_store_connect:
