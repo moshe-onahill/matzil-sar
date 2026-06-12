@@ -32,6 +32,9 @@ workflows:
             --type IOS_APP_STORE \
             --create
 
+      - name: Add certificates to keychain
+        script: keychain add-certificates
+
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
 
