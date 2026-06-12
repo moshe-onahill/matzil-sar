@@ -49,6 +49,8 @@
 	<true/>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>Matzil SAR sends emergency alerts for active search and rescue operations. Critical alerts may sound even when your phone is silenced.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
