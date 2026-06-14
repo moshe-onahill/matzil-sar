@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 
 type Notification = {
   id: string;
@@ -12,6 +13,7 @@ type Notification = {
 };
 
 export default function NotificationListener() {
+  const toast = useToast();
   const [popup, setPopup] = useState<Notification | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -28,7 +30,7 @@ export default function NotificationListener() {
       window.AudioContext || (window as any).webkitAudioContext;
 
     if (!AudioContextClass) {
-      alert("Audio alerts are not supported on this device.");
+      toast("Audio alerts are not supported on this device.", "error");
       return;
     }
 

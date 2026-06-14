@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import { getStoredRole, UserRole } from "@/lib/dev-user";
+import { useToast } from "@/components/Toast";
 
 type NamedItem = { id: string; name: string };
 
@@ -29,6 +30,7 @@ type ActivityItem = {
 
 export default function RosterMemberClient() {
   const params = useParams<{ id: string }>();
+  const toast = useToast();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -86,7 +88,7 @@ export default function RosterMemberClient() {
       .eq("id", userId)
       .single();
 
-    if (error || !data) { console.log("User load failed", error); return; }
+    if (error || !data) { console.error("User load failed", error); return; }
 
     const u = data as UserProfile;
     setUser(u);
@@ -162,8 +164,8 @@ export default function RosterMemberClient() {
   async function saveUser() {
     if (!user) return;
 
-    if (!fullName.trim()) { alert("Full name is required."); return; }
-    if (!callSign.trim()) { alert("Call sign is required."); return; }
+    if (!fullName.trim()) { toast("Full name is required.", "error"); return; }
+    if (!callSign.trim()) { toast("Call sign is required.", "error"); return; }
 
     const duplicateCallSign = await supabase
       .from("users")
@@ -172,7 +174,7 @@ export default function RosterMemberClient() {
       .neq("id", user.id);
 
     if ((duplicateCallSign.data ?? []).length > 0) {
-      alert("Call sign must be unique.");
+      toast("Call sign must be unique.", "error");
       return;
     }
 
@@ -187,7 +189,7 @@ export default function RosterMemberClient() {
       })
       .eq("id", user.id);
 
-    if (error) { alert(error.message); return; }
+    if (error) { toast(error.message, "error"); return; }
 
     await supabase.from("user_roles").delete().eq("user_id", user.id);
     await supabase.from("user_units").delete().eq("user_id", user.id);
@@ -196,17 +198,17 @@ export default function RosterMemberClient() {
       const rolesInsert = await supabase.from("user_roles").insert(
         selectedRoles.map((r) => ({ user_id: user.id, role_id: r }))
       );
-      if (rolesInsert.error) { alert(rolesInsert.error.message); return; }
+      if (rolesInsert.error) { toast(rolesInsert.error.message, "error"); return; }
     }
 
     if (selectedUnits.length) {
       const unitsInsert = await supabase.from("user_units").insert(
         selectedUnits.map((u) => ({ user_id: user.id, unit_id: u }))
       );
-      if (unitsInsert.error) { alert(unitsInsert.error.message); return; }
+      if (unitsInsert.error) { toast(unitsInsert.error.message, "error"); return; }
     }
 
-    alert("Saved");
+    toast("Saved successfully.", "success");
     setEditMode(false);
     await loadUser();
   }
@@ -215,7 +217,7 @@ export default function RosterMemberClient() {
     if (!user) return;
     if (!window.confirm("Deactivate user?")) return;
     const { error } = await supabase.from("users").update({ is_active: false }).eq("id", user.id);
-    if (error) { alert(error.message); return; }
+    if (error) { toast(error.message, "error"); return; }
     await loadUser();
   }
 
@@ -223,7 +225,7 @@ export default function RosterMemberClient() {
     if (!user) return;
     if (!window.confirm("Reactivate user?")) return;
     const { error } = await supabase.from("users").update({ is_active: true }).eq("id", user.id);
-    if (error) { alert(error.message); return; }
+    if (error) { toast(error.message, "error"); return; }
     await loadUser();
   }
 
@@ -231,16 +233,37 @@ export default function RosterMemberClient() {
     if (!user) return;
     if (!window.confirm("DELETE USER permanently?")) return;
     const { error } = await supabase.from("users").delete().eq("id", user.id);
-    if (error) { alert(error.message); return; }
+    if (error) { toast(error.message, "error"); return; }
     window.location.href = "/roster";
   }
 
   async function resendInvite() {
-    alert("Invite resend triggered (hook later)");
+    if (!user) return;
+    const { error } = await supabase.auth.admin.inviteUserByEmail(user.email).catch(() => ({ error: { message: "Invite must be resent from server." } }));
+    if (error) {
+      toast("Contact an admin to resend the invite email.", "info");
+      return;
+    }
+    toast("Invite email resent.", "success");
   }
 
   if (!user) {
-    return <main className="min-h-screen bg-black p-6 text-white">Loading...</main>;
+    return (
+      <main className="min-h-screen bg-black p-6 text-white">
+        <div className="mx-auto max-w-3xl space-y-4">
+          <div className="flex justify-between">
+            <Link href="/roster" className="rounded bg-gray-900 px-4 py-2">Back</Link>
+            <RoleSwitcher />
+          </div>
+          <div className="rounded-xl bg-gray-900 p-5 space-y-4 animate-pulse">
+            <div className="h-7 w-1/2 rounded bg-gray-700" />
+            <div className="h-4 w-1/3 rounded bg-gray-700" />
+            <div className="h-4 w-1/4 rounded bg-gray-700" />
+            <div className="h-4 w-2/5 rounded bg-gray-700" />
+          </div>
+        </div>
+      </main>
+    );
   }
 
   const roles = extractNames(user.user_roles, "roles");
@@ -355,7 +378,9 @@ export default function RosterMemberClient() {
         <div className="rounded-xl bg-gray-900 p-5">
           <div className="mb-3 text-lg font-semibold">Activity</div>
 
-          {activity.length === 0 && <div className="text-gray-400">No activity</div>}
+          {activity.length === 0 && (
+            <div className="py-6 text-center text-gray-500">No activity recorded yet.</div>
+          )}
 
           <div className="space-y-2">
             {activity.map((a, i) => (
@@ -366,12 +391,13 @@ export default function RosterMemberClient() {
             ))}
           </div>
 
-          <button onClick={() => setLimit((l) => l + 10)} className="mt-3 rounded bg-gray-700 px-4 py-2">
-            Load More
-          </button>
+          {activity.length > 0 && (
+            <button onClick={() => setLimit((l) => l + 10)} className="mt-3 rounded bg-gray-700 px-4 py-2">
+              Load More
+            </button>
+          )}
         </div>
       </div>
     </main>
   );
 }
-

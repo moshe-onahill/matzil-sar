@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/Toast";
 
 export default function PushPermission() {
+  const toast = useToast();
   const [showButton, setShowButton] = useState(false);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -81,10 +83,10 @@ export default function PushPermission() {
       await saveSubscription(sub);
       setShowButton(false);
       setMessage("");
-      alert("Phone notifications enabled.");
+      toast("Phone notifications enabled.", "success");
     } catch (err: any) {
       setMessage(err?.message || "Push setup failed.");
-      alert(err?.message || "Push setup failed.");
+      toast(err?.message || "Push setup failed.", "error");
     } finally {
       setSaving(false);
     }

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
 import RoleSwitcher from "@/components/RoleSwitcher";
+import { useToast } from "@/components/Toast";
 
 type ResponseUser = {
   full_name: string;
@@ -49,6 +50,7 @@ type TabKey = "overview" | "updates" | "responders" | "attachments";
 
 export default function IncidentDetailClient() {
   const params = useParams<{ id: string }>();
+  const toast = useToast();
 
   const [incidentId, setIncidentId] = useState<string | null>(null);
   const [incident, setIncident] = useState<Incident | null>(null);
@@ -175,7 +177,7 @@ export default function IncidentDetailClient() {
       .update({ status: "Active", accepting_units: true })
       .eq("id", incidentId);
 
-    if (error) { alert(`Approval error: ${error.message}`); return; }
+    if (error) { toast(`Approval error: ${error.message}`, "error"); return; }
 
     setActionsOpen(false);
     await loadPageData();
@@ -189,7 +191,7 @@ export default function IncidentDetailClient() {
       .update({ status: "Closed", accepting_units: false })
       .eq("id", incidentId);
 
-    if (error) { alert(`Close error: ${error.message}`); return; }
+    if (error) { toast(`Close error: ${error.message}`, "error"); return; }
 
     setActionsOpen(false);
     await loadPageData();
@@ -203,7 +205,7 @@ export default function IncidentDetailClient() {
       .update({ accepting_units: false })
       .eq("id", incidentId);
 
-    if (error) { alert(`No More Units error: ${error.message}`); return; }
+    if (error) { toast(`No More Units error: ${error.message}`, "error"); return; }
 
     setActionsOpen(false);
     await loadPageData();
@@ -217,7 +219,7 @@ export default function IncidentDetailClient() {
 
     const { error } = await supabase.from("incidents").delete().eq("id", incidentId);
 
-    if (error) { alert(`Delete error: ${error.message}`); return; }
+    if (error) { toast(`Delete error: ${error.message}`, "error"); return; }
 
     window.location.href = "/incidents";
   }
@@ -253,7 +255,7 @@ export default function IncidentDetailClient() {
       { onConflict: "incident_id,user_id" }
     );
 
-    if (error) { alert(`Response error: ${error.message}`); return; }
+    if (error) { toast(`Response error: ${error.message}`, "error"); return; }
 
     await loadPageData();
   }
@@ -262,11 +264,11 @@ export default function IncidentDetailClient() {
     if (!incidentId || !currentUserId) return;
 
     if (currentUserRole !== "SAR Manager" && currentUserRole !== "Global Admin") {
-      alert("You do not have permission to post updates.");
+      toast("You do not have permission to post updates.", "error");
       return;
     }
 
-    if (!updateTitle.trim()) { alert("Update title is required."); return; }
+    if (!updateTitle.trim()) { toast("Update title is required.", "error"); return; }
 
     setPostingUpdate(true);
 
@@ -283,7 +285,7 @@ export default function IncidentDetailClient() {
 
     if (error) {
       setPostingUpdate(false);
-      alert(`Update error: ${error.message}`);
+      toast(`Update error: ${error.message}`, "error");
       return;
     }
 
@@ -359,7 +361,7 @@ export default function IncidentDetailClient() {
 
   function openNavigation() {
     if (!incident || incident.staging_lat === null || incident.staging_lng === null) {
-      alert("No staging coordinates available.");
+      toast("No staging coordinates available.", "error");
       return;
     }
     const url = `https://www.google.com/maps/dir/?api=1&destination=${incident.staging_lat},${incident.staging_lng}`;
@@ -383,7 +385,17 @@ export default function IncidentDetailClient() {
             <Link href="/incidents" className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 text-sm">← Active Calls</Link>
             <RoleSwitcher />
           </div>
-          <div className="rounded-xl bg-gray-900 p-5 text-gray-400">Loading incident...</div>
+          <div className="rounded-xl bg-gray-900 p-5 space-y-4 animate-pulse">
+            <div className="h-4 w-24 rounded bg-gray-700" />
+            <div className="h-7 w-3/4 rounded bg-gray-700" />
+            <div className="h-4 w-1/2 rounded bg-gray-700" />
+            <div className="h-4 w-2/3 rounded bg-gray-700" />
+            <div className="h-4 w-1/3 rounded bg-gray-700" />
+          </div>
+          <div className="rounded-xl bg-gray-900 p-5 space-y-3 animate-pulse">
+            <div className="h-10 w-full rounded bg-gray-700" />
+            <div className="h-10 w-full rounded bg-gray-700" />
+          </div>
         </div>
       </main>
     );
@@ -558,15 +570,6 @@ export default function IncidentDetailClient() {
                 <div className="mt-3 text-blue-300">Your status: {formatResponse(myResponse)}</div>
               )}
 
-              <div className="mt-4 border-t border-gray-800 pt-4">
-                <button
-                  disabled
-                  className="rounded bg-gray-800 px-4 py-2 text-sm text-gray-500 cursor-not-allowed"
-                  title="Coming soon"
-                >
-                  💬 Message Dispatcher
-                </button>
-              </div>
             </div>
           )}
 
@@ -640,8 +643,10 @@ export default function IncidentDetailClient() {
           )}
 
           {activeTab === "attachments" && (
-            <div className="rounded-xl bg-gray-900 p-5 text-gray-400">
-              Attachments coming next.
+            <div className="rounded-xl bg-gray-900 p-10 flex flex-col items-center justify-center gap-3 text-center">
+              <div className="text-4xl">📎</div>
+              <div className="font-semibold text-gray-300">No attachments</div>
+              <div className="text-sm text-gray-500">Photos and documents shared during this incident will appear here.</div>
             </div>
           )}
         </div>

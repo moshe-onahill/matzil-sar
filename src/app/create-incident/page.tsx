@@ -5,8 +5,10 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
 import RoleSwitcher from "@/components/RoleSwitcher";
+import { useToast } from "@/components/Toast";
 
 export default function CreateIncidentPage() {
+  const toast = useToast();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("Member");
 
@@ -58,7 +60,6 @@ export default function CreateIncidentPage() {
   function applyCoordinateValues(lat: number, lng: number) {
     setStagingLat(Math.abs(lat).toString());
     setStagingLatDir(lat < 0 ? "S" : "N");
-
     setStagingLng(Math.abs(lng).toString());
     setStagingLngDir(lng < 0 ? "W" : "E");
   }
@@ -74,7 +75,7 @@ export default function CreateIncidentPage() {
 
   async function geocodeAddress() {
     if (!stagingAddress.trim()) {
-      alert("Enter an address first.");
+      toast("Enter an address first.", "error");
       return;
     }
 
@@ -84,16 +85,11 @@ export default function CreateIncidentPage() {
       const encoded = encodeURIComponent(stagingAddress.trim());
       const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encoded}`;
 
-      const response = await fetch(url, {
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
+      const response = await fetch(url, { headers: { Accept: "application/json" } });
       const data = await response.json();
 
       if (!Array.isArray(data) || data.length === 0) {
-        alert("Address not found.");
+        toast("Address not found.", "error");
         setGeocoding(false);
         return;
       }
@@ -102,14 +98,15 @@ export default function CreateIncidentPage() {
       const lng = Number(data[0].lon);
 
       if (Number.isNaN(lat) || Number.isNaN(lng)) {
-        alert("Could not parse coordinates.");
+        toast("Could not parse coordinates.", "error");
         setGeocoding(false);
         return;
       }
 
       applyCoordinateValues(lat, lng);
+      toast("Coordinates updated.", "success");
     } catch {
-      alert("Geocoding failed.");
+      toast("Geocoding failed. Check your connection.", "error");
     }
 
     setGeocoding(false);
@@ -123,22 +120,14 @@ export default function CreateIncidentPage() {
       currentUserRole !== "Global Admin" &&
       currentUserRole !== "Dispatcher"
     ) {
-      alert("You do not have permission to create incidents.");
+      toast("You do not have permission to create incidents.", "error");
       return;
     }
 
-    if (!title.trim()) {
-      alert("Title is required");
-      return;
-    }
-
-    if (!stagingName.trim()) {
-      alert("Staging name is required");
-      return;
-    }
-
+    if (!title.trim()) { toast("Title is required", "error"); return; }
+    if (!stagingName.trim()) { toast("Staging name is required", "error"); return; }
     if (!stagingLat.trim() || !stagingLng.trim()) {
-      alert("Staging latitude and longitude are required");
+      toast("Staging latitude and longitude are required", "error");
       return;
     }
 
@@ -146,7 +135,7 @@ export default function CreateIncidentPage() {
     const lngNumber = Number(stagingLng);
 
     if (Number.isNaN(latNumber) || Number.isNaN(lngNumber)) {
-      alert("Latitude and longitude must be valid numbers");
+      toast("Latitude and longitude must be valid numbers", "error");
       return;
     }
 
@@ -187,7 +176,7 @@ export default function CreateIncidentPage() {
     setLoading(false);
 
     if (error) {
-      alert(`Error: ${error.message}`);
+      toast(`Error: ${error.message}`, "error");
       return;
     }
 
@@ -211,7 +200,6 @@ export default function CreateIncidentPage() {
             </Link>
             <RoleSwitcher />
           </div>
-
           <div className="rounded-xl bg-gray-900 p-6 text-red-300">
             You do not have permission to create incidents.
           </div>
@@ -277,7 +265,6 @@ export default function CreateIncidentPage() {
                 placeholder="Water"
                 className="w-full rounded bg-black px-4 py-3"
               />
-
               <input
                 value={wildernessNeeded}
                 onChange={(e) => setWildernessNeeded(e.target.value)}
@@ -286,7 +273,6 @@ export default function CreateIncidentPage() {
                 placeholder="Wilderness"
                 className="w-full rounded bg-black px-4 py-3"
               />
-
               <input
                 value={mruNeeded}
                 onChange={(e) => setMruNeeded(e.target.value)}
@@ -295,7 +281,6 @@ export default function CreateIncidentPage() {
                 placeholder="MRU"
                 className="w-full rounded bg-black px-4 py-3"
               />
-
               <input
                 value={supportNeeded}
                 onChange={(e) => setSupportNeeded(e.target.value)}
@@ -327,18 +312,14 @@ export default function CreateIncidentPage() {
             <button
               onClick={() => void geocodeAddress()}
               disabled={geocoding}
-              className="rounded bg-blue-600 px-4 py-2"
+              className="rounded bg-blue-600 px-4 py-2 disabled:opacity-60"
             >
               {geocoding ? "Getting Coordinates..." : "Get Coordinates"}
             </button>
-
-            <div className="text-sm text-gray-400">
-              Demo mode uses OpenStreetMap geocoding. Google API can be swapped in later.
-            </div>
           </div>
 
           <div className="space-y-2 rounded-lg bg-black/30 p-4">
-            <div className="font-medium">Manual Coordinates Override</div>
+            <div className="font-medium">Manual Coordinates</div>
 
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -373,16 +354,12 @@ export default function CreateIncidentPage() {
                 <option value="E">E</option>
               </select>
             </div>
-
-            <div className="text-sm text-gray-400">
-              Example for New Jersey: latitude 40.x with N, longitude 74.x with W
-            </div>
           </div>
 
           <button
             onClick={() => void createIncident()}
             disabled={loading}
-            className="w-full rounded bg-red-600 px-4 py-3 font-medium"
+            className="w-full rounded bg-red-600 px-4 py-3 font-medium disabled:opacity-60"
           >
             {loading ? "Sending..." : "Send Alert"}
           </button>
