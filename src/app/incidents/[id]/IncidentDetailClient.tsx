@@ -344,8 +344,8 @@ export default function IncidentDetailClient() {
     if (r.response_type === "Available At" && r.available_at) {
       return `Available at ${formatTime(r.available_at)}`;
     }
-    if (r.response_type === "Responding") return "Coming";
-    if (r.response_type === "Not Available") return "Can't make it";
+    if (r.response_type === "Responding") return "Responding";
+    if (r.response_type === "Not Available") return "Not Available";
     if (r.response_type === "Cancelled") return "Cancelled";
     return r.response_type;
   }
@@ -535,25 +535,25 @@ export default function IncidentDetailClient() {
                   <div className="w-full space-y-2">
                     {!hasNonCancelledResponse ? (
                       <button onClick={() => void respondToIncident("Responding")} className="w-full rounded-xl bg-red-600 py-3 font-semibold">
-                        I'm Coming
+                        Respond
                       </button>
                     ) : (
                       <button onClick={() => void respondToIncident("Cancelled")} className="w-full rounded-xl bg-gray-700 py-3 font-semibold">
-                        Cancel My Response
+                        Cancel Response
                       </button>
                     )}
                     <div className="grid grid-cols-2 gap-2">
                       <button onClick={() => void respondToIncident("Not Available")} className="rounded-xl bg-gray-800 py-2.5 text-sm">
-                        Can't Make It
+                        Not Available
                       </button>
                       <button onClick={() => setTimePickerOpen(true)} className="rounded-xl bg-gray-800 py-2.5 text-sm">
-                        Available Later
+                        Available At
                       </button>
                     </div>
                   </div>
                 ) : canCancel ? (
                   <button onClick={() => void respondToIncident("Cancelled")} className="w-full rounded-xl bg-gray-700 py-3 font-semibold">
-                    Cancel My Response
+                    Cancel Response
                   </button>
                 ) : (
                   <div className="text-sm text-gray-400">
