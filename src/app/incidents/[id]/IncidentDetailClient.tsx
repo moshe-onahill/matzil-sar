@@ -339,11 +339,14 @@ export default function IncidentDetailClient() {
     if (r.response_type === "Responding" && r.responded_at && r.eta_minutes) {
       const d = new Date(r.responded_at);
       d.setMinutes(d.getMinutes() + r.eta_minutes);
-      return `Responding • ETA ${formatTime(d.toISOString())}`;
+      return `Coming · ETA ${formatTime(d.toISOString())}`;
     }
     if (r.response_type === "Available At" && r.available_at) {
-      return `Available At • ${formatTime(r.available_at)}`;
+      return `Available at ${formatTime(r.available_at)}`;
     }
+    if (r.response_type === "Responding") return "Coming";
+    if (r.response_type === "Not Available") return "Can't make it";
+    if (r.response_type === "Cancelled") return "Cancelled";
     return r.response_type;
   }
 
@@ -502,10 +505,6 @@ export default function IncidentDetailClient() {
 
                 {incident.staging_lat !== null && incident.staging_lng !== null ? (
                   <>
-                    <div className="mt-2 break-words text-sm text-gray-400">
-                      {incident.staging_lat}, {incident.staging_lng}
-                    </div>
-
                     {snapshotUrl && (
                       <div className="mt-3 overflow-hidden rounded-lg border border-gray-800">
                         <iframe title="Staging location map" src={snapshotUrl} className="h-56 w-full sm:h-72" loading="lazy" />
@@ -521,11 +520,10 @@ export default function IncidentDetailClient() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              <div className="grid grid-cols-3 gap-2">
                 <button onClick={() => setActiveTab("overview")} className={tabButtonClass("overview")}>Overview</button>
                 <button onClick={() => setActiveTab("updates")} className={tabButtonClass("updates")}>Updates</button>
-                <button onClick={() => setActiveTab("responders")} className={tabButtonClass("responders")}>See Responders</button>
-                <button onClick={() => setActiveTab("attachments")} className={tabButtonClass("attachments")}>Attachments</button>
+                <button onClick={() => setActiveTab("responders")} className={tabButtonClass("responders")}>Responders</button>
               </div>
             </div>
           </div>
@@ -534,34 +532,36 @@ export default function IncidentDetailClient() {
             <div className="rounded-xl bg-gray-900 p-5">
               <div className="flex flex-wrap gap-2">
                 {canJoin ? (
-                  <>
+                  <div className="w-full space-y-2">
                     {!hasNonCancelledResponse ? (
-                      <button onClick={() => void respondToIncident("Responding")} className="rounded bg-red-600 px-3 py-2">
-                        Respond
+                      <button onClick={() => void respondToIncident("Responding")} className="w-full rounded-xl bg-red-600 py-3 font-semibold">
+                        I'm Coming
                       </button>
                     ) : (
-                      <button onClick={() => void respondToIncident("Cancelled")} className="rounded bg-yellow-600 px-3 py-2">
-                        Cancel Response
+                      <button onClick={() => void respondToIncident("Cancelled")} className="w-full rounded-xl bg-gray-700 py-3 font-semibold">
+                        Cancel My Response
                       </button>
                     )}
-                    <button onClick={() => void respondToIncident("Not Available")} className="rounded bg-gray-600 px-3 py-2">
-                      Not Available
-                    </button>
-                    <button onClick={() => setTimePickerOpen(true)} className="rounded bg-blue-600 px-3 py-2">
-                      Available At
-                    </button>
-                  </>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => void respondToIncident("Not Available")} className="rounded-xl bg-gray-800 py-2.5 text-sm">
+                        Can't Make It
+                      </button>
+                      <button onClick={() => setTimePickerOpen(true)} className="rounded-xl bg-gray-800 py-2.5 text-sm">
+                        Available Later
+                      </button>
+                    </div>
+                  </div>
                 ) : canCancel ? (
-                  <button onClick={() => void respondToIncident("Cancelled")} className="rounded bg-yellow-600 px-3 py-2">
-                    Cancel Response
+                  <button onClick={() => void respondToIncident("Cancelled")} className="w-full rounded-xl bg-gray-700 py-3 font-semibold">
+                    Cancel My Response
                   </button>
                 ) : (
-                  <div className="text-orange-400">
+                  <div className="text-sm text-gray-400">
                     {incident.status === "Pending"
                       ? "Waiting for manager approval"
                       : incident.status === "Closed"
-                      ? "Incident closed"
-                      : "No more units requested"}
+                      ? "This incident is closed"
+                      : "No more units needed"}
                   </div>
                 )}
               </div>

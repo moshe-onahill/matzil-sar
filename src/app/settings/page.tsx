@@ -49,13 +49,6 @@ const defaultNotifications: NotificationSettings = {
   critical_only: { push: true, sms: true, email: false },
 };
 
-const notificationLabels: Record<NotificationKey, string> = {
-  incident_alerts: "Incident alerts",
-  deployment_alerts: "Deployment alerts",
-  incident_updates: "Incident updates",
-  assignment_updates: "Assignment / response updates",
-  critical_only: "Critical alerts only",
-};
 
 const ROLES: UserRole[] = ["Member", "Dispatcher", "SAR Manager", "Global Admin"];
 
@@ -166,11 +159,44 @@ export default function SettingsPage() {
     });
   }
 
-  function toggleNotification(key: NotificationKey, channel: Channel) {
-    setNotifications((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], [channel]: !prev[key][channel] },
-    }));
+  function applyNotificationPreset(preset: "all" | "critical" | "none") {
+    if (preset === "all") {
+      setNotifications({
+        incident_alerts: { push: true, sms: false, email: false },
+        deployment_alerts: { push: true, sms: false, email: false },
+        incident_updates: { push: true, sms: false, email: false },
+        assignment_updates: { push: true, sms: false, email: false },
+        critical_only: { push: true, sms: true, email: false },
+      });
+    } else if (preset === "critical") {
+      setNotifications({
+        incident_alerts: { push: false, sms: false, email: false },
+        deployment_alerts: { push: false, sms: false, email: false },
+        incident_updates: { push: false, sms: false, email: false },
+        assignment_updates: { push: false, sms: false, email: false },
+        critical_only: { push: true, sms: true, email: false },
+      });
+    } else {
+      setNotifications({
+        incident_alerts: { push: false, sms: false, email: false },
+        deployment_alerts: { push: false, sms: false, email: false },
+        incident_updates: { push: false, sms: false, email: false },
+        assignment_updates: { push: false, sms: false, email: false },
+        critical_only: { push: false, sms: false, email: false },
+      });
+    }
+  }
+
+  function currentPreset(): "all" | "critical" | "none" | "custom" {
+    const allOn = Object.values(notifications).every((ch) => ch.push);
+    const allOff = Object.values(notifications).every((ch) => !ch.push && !ch.sms && !ch.email);
+    const critOnly = !notifications.incident_alerts.push && !notifications.deployment_alerts.push &&
+      !notifications.incident_updates.push && !notifications.assignment_updates.push &&
+      notifications.critical_only.push;
+    if (allOn) return "all";
+    if (allOff) return "none";
+    if (critOnly) return "critical";
+    return "custom";
   }
 
   async function saveSettings() {
@@ -314,37 +340,35 @@ export default function SettingsPage() {
           </button>
         </section>
 
-        <section className="rounded-xl bg-gray-900 p-5 space-y-4">
+        <section className="rounded-xl bg-gray-900 p-5 space-y-3">
           <div>
-            <div className="text-xl font-semibold">Notification Management</div>
-            <div className="text-sm text-gray-400">
-              Choose which channels you want for each alert type.
-            </div>
+            <div className="text-xl font-semibold">Notifications</div>
+            <div className="text-sm text-gray-400">Choose how much you want to hear from us.</div>
           </div>
 
-          {Object.entries(notificationLabels).map(([key, label]) => {
-            const notificationKey = key as NotificationKey;
+          {(() => {
+            const preset = currentPreset();
             return (
-              <div key={key} className="rounded-lg bg-black/30 p-4">
-                <div className="mb-3 font-medium">{label}</div>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  {(["push", "sms", "email"] as Channel[]).map((channel) => (
-                    <button
-                      key={channel}
-                      onClick={() => toggleNotification(notificationKey, channel)}
-                      className={`rounded px-3 py-2 capitalize ${
-                        notifications[notificationKey]?.[channel]
-                          ? "bg-red-600"
-                          : "bg-gray-700"
-                      }`}
-                    >
-                      {channel}
-                    </button>
-                  ))}
-                </div>
+              <div className="space-y-2">
+                {[
+                  { id: "all", label: "All Alerts", desc: "Get notified for every incident and update" },
+                  { id: "critical", label: "Critical Only", desc: "Only emergency callouts — no routine updates" },
+                  { id: "none", label: "None", desc: "No push notifications" },
+                ] .map(({ id, label, desc }) => (
+                  <button
+                    key={id}
+                    onClick={() => applyNotificationPreset(id as "all" | "critical" | "none")}
+                    className={`w-full rounded-xl p-4 text-left transition ${
+                      preset === id ? "bg-red-700 border border-red-500" : "bg-gray-800 border border-transparent hover:bg-gray-700"
+                    }`}
+                  >
+                    <div className="font-semibold">{label}</div>
+                    <div className="mt-0.5 text-sm text-gray-300">{desc}</div>
+                  </button>
+                ))}
               </div>
             );
-          })}
+          })()}
         </section>
 
         <section className="rounded-xl bg-gray-900 p-5 space-y-3">

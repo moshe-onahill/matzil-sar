@@ -197,25 +197,14 @@ export default function IncidentsPage() {
             </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <RoleSwitcher />
-
-            {canCreate && (
-              <Link
-                href="/create-incident"
-                className="rounded bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-700"
-              >
-                Send Alert
-              </Link>
-            )}
-
+          {canCreate && (
             <Link
-              href="/"
-              className="rounded border border-gray-800 bg-gray-900 px-4 py-2 text-sm hover:bg-gray-800"
+              href="/create-incident"
+              className="inline-block rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold hover:bg-red-700"
             >
-              Dashboard
+              Send Alert
             </Link>
-          </div>
+          )}
         </div>
 
         <section className="space-y-3">
