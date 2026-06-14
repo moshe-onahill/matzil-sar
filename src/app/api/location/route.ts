@@ -1,12 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getAdmin();
   try {
     const body = await req.json();
     const { user_id, lat, lng, is_moving, speed_mph, incident_id } = body;
@@ -37,6 +40,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const supabaseAdmin = getAdmin();
   try {
     const { user_id } = await req.json();
     if (!user_id) return NextResponse.json({ error: "Missing user_id" }, { status: 400 });
