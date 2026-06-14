@@ -276,19 +276,17 @@ export default function IncidentDetailClient() {
           { onConflict: "incident_id,user_id" }
         );
 
-        // Update live_locations
-        const { error: locErr } = await supabase.from("live_locations").upsert(
-          {
-            user_id: userId,
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            updated_at: new Date().toISOString(),
-            is_moving: isMoving,
-            speed_mph: speed,
-          },
-          { onConflict: "user_id" }
-        );
-        if (locErr) console.error("[tracking] live_locations upsert error:", locErr);
+        // Update live_locations — delete old row then insert fresh (no unique constraint needed)
+        await supabase.from("live_locations").delete().eq("user_id", userId);
+        const { error: locErr } = await supabase.from("live_locations").insert({
+          user_id: userId,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          updated_at: new Date().toISOString(),
+          is_moving: isMoving,
+          speed_mph: speed,
+        });
+        if (locErr) console.error("[tracking] live_locations insert error:", locErr);
       },
       (err) => { console.warn("Location watch error:", err.message); },
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
