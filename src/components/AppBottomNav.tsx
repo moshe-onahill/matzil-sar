@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getStoredRole } from "@/lib/dev-user";
 
 // SVG icon components
 function IconDashboard() {
@@ -95,6 +96,14 @@ function IconSettings() {
   );
 }
 
+function IconAdmin() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  );
+}
+
 const mainItems = [
   { href: "/", label: "Dashboard", Icon: IconDashboard },
   { href: "/incidents", label: "Active Calls", Icon: IconIncidents },
@@ -112,6 +121,12 @@ const moreItems = [
 export default function AppBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const role = getStoredRole();
+    setIsAdmin(role === "SAR Manager" || role === "Global Admin");
+  }, []);
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -132,6 +147,18 @@ export default function AppBottomNav() {
 
       {moreOpen && (
         <div className="fixed bottom-[76px] right-3 z-[110] w-52 rounded-2xl border border-gray-800 bg-gray-950 p-2 shadow-2xl">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => setMoreOpen(false)}
+              className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${
+                isActive("/admin") ? "bg-red-950 text-red-300" : "text-gray-300 hover:bg-gray-900"
+              }`}
+            >
+              <IconAdmin />
+              <span>Admin Console</span>
+            </Link>
+          )}
           {moreItems.map(({ href, label, Icon }) => (
             <Link
               key={href}

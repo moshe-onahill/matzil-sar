@@ -32,17 +32,35 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       setChecking(false);
       return;
     }
-    void checkAuth();
+
+    let settled = false;
+
+    // onAuthStateChange fires with the resolved session (including after OAuth redirects).
+    // We use it as the authoritative signal; getSession() is a fast pre-check only.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      settled = true;
+      void checkAuth(session?.user ?? null, true);
+    });
+
+    // Pre-check: if a session is already cached, proceed immediately.
+    // If not, wait for onAuthStateChange (which handles the OAuth token in the URL).
+    supabase.auth.getSession().then(({ data }) => {
+      if (!settled && data.session?.user) {
+        settled = true;
+        void checkAuth(data.session.user, true);
+      }
+      // If no cached session AND onAuthStateChange hasn't fired yet, keep spinner up.
+      // onAuthStateChange will fire shortly and settle it.
+    });
+
+    return () => subscription.unsubscribe();
   }, [pathname]);
 
-  async function checkAuth() {
+  async function checkAuth(authUser: { email?: string | null } | null, definitive: boolean) {
     setChecking(true);
 
-    const { data: authData } = await supabase.auth.getUser();
-    const authUser = authData.user;
-
     if (!authUser?.email) {
-      window.location.href = "/login";
+      if (definitive) window.location.href = "/login";
       return;
     }
 
