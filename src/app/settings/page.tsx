@@ -407,6 +407,19 @@ export default function SettingsPage() {
         >
           {saving ? "Saving..." : "Save Changes"}
         </button>
+
+        <button
+          onClick={async () => {
+            window.localStorage.removeItem("auth-email");
+            window.localStorage.removeItem("real-role");
+            window.localStorage.removeItem("dev-role");
+            await supabase.auth.signOut();
+            window.location.href = "/login";
+          }}
+          className="w-full rounded bg-gray-900 px-4 py-3 font-medium text-gray-400 hover:bg-gray-800"
+        >
+          Sign Out
+        </button>
       </div>
 
       {/* Hidden dev panel — tap "Matzil SAR" 5 times to open */}
