@@ -211,6 +211,20 @@ export default function IncidentDetailClient() {
     await loadPageData();
   }
 
+  async function reopenUnits() {
+    if (!incidentId || (currentUserRole !== "SAR Manager" && currentUserRole !== "Global Admin")) return;
+
+    const { error } = await supabase
+      .from("incidents")
+      .update({ accepting_units: true })
+      .eq("id", incidentId);
+
+    if (error) { toast(`Reopen error: ${error.message}`, "error"); return; }
+
+    setActionsOpen(false);
+    await loadPageData();
+  }
+
   async function deleteIncident() {
     if (!incidentId || currentUserRole !== "Global Admin") return;
 
@@ -475,6 +489,12 @@ export default function IncidentDetailClient() {
                         {incident.status === "Active" && incident.accepting_units && (currentUserRole === "SAR Manager" || currentUserRole === "Global Admin") && (
                           <button onClick={() => void stopUnits()} className="block w-full rounded px-3 py-2 text-left hover:bg-gray-900">
                             No More Units
+                          </button>
+                        )}
+
+                        {incident.status === "Active" && !incident.accepting_units && (currentUserRole === "SAR Manager" || currentUserRole === "Global Admin") && (
+                          <button onClick={() => void reopenUnits()} className="block w-full rounded px-3 py-2 text-left hover:bg-gray-900">
+                            Reopen to Units
                           </button>
                         )}
 
