@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import RoleSwitcher from "@/components/RoleSwitcher";
-import { getCurrentTestEmail } from "@/lib/dev-user";
+import { getCurrentTestEmail, getStoredRole, setStoredRole, UserRole } from "@/lib/dev-user";
+import { useToast } from "@/components/Toast";
 
 type NotificationKey =
   | "incident_alerts"
@@ -57,7 +57,10 @@ const notificationLabels: Record<NotificationKey, string> = {
   critical_only: "Critical alerts only",
 };
 
+const ROLES: UserRole[] = ["Member", "Dispatcher", "SAR Manager", "Global Admin"];
+
 export default function SettingsPage() {
+  const toast = useToast();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [certifications, setCertifications] = useState<Certification[]>([]);
 
@@ -67,14 +70,36 @@ export default function SettingsPage() {
   const [emergencyContactName, setEmergencyContactName] = useState("");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [isOnDuty, setIsOnDuty] = useState(true);
-  const [notifications, setNotifications] =
-    useState<NotificationSettings>(defaultNotifications);
-
+  const [notifications, setNotifications] = useState<NotificationSettings>(defaultNotifications);
   const [saving, setSaving] = useState(false);
+
+  // Hidden dev panel state
+  const [devOpen, setDevOpen] = useState(false);
+  const [devRole, setDevRole] = useState<UserRole>("Member");
+  const tapCount = useRef(0);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void loadSettings();
+    setDevRole(getStoredRole());
   }, []);
+
+  function handleTitleTap() {
+    tapCount.current += 1;
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 1500);
+    if (tapCount.current >= 5) {
+      tapCount.current = 0;
+      setDevOpen(true);
+    }
+  }
+
+  function applyDevRole(role: UserRole) {
+    setStoredRole(role);
+    setDevRole(role);
+    setDevOpen(false);
+    window.location.reload();
+  }
 
   async function loadSettings() {
     const { data, error } = await supabase
@@ -105,7 +130,7 @@ export default function SettingsPage() {
       .single();
 
     if (error || !data) {
-      alert(error?.message || "Could not load settings.");
+      toast(error?.message || "Could not load settings.", "error");
       return;
     }
 
@@ -144,20 +169,14 @@ export default function SettingsPage() {
   function toggleNotification(key: NotificationKey, channel: Channel) {
     setNotifications((prev) => ({
       ...prev,
-      [key]: {
-        ...prev[key],
-        [channel]: !prev[key][channel],
-      },
+      [key]: { ...prev[key], [channel]: !prev[key][channel] },
     }));
   }
 
   async function saveSettings() {
     if (!profile) return;
 
-    if (!email.trim()) {
-      alert("Email is required.");
-      return;
-    }
+    if (!email.trim()) { toast("Email is required.", "error"); return; }
 
     setSaving(true);
 
@@ -176,19 +195,24 @@ export default function SettingsPage() {
 
     setSaving(false);
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
+    if (error) { toast(error.message, "error"); return; }
 
-    alert("Settings saved");
+    toast("Settings saved.", "success");
     await loadSettings();
   }
 
   if (!profile) {
     return (
       <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:p-6 sm:pb-28">
-        Loading settings...
+        <div className="mx-auto max-w-3xl space-y-4 animate-pulse">
+          <div className="h-8 w-1/3 rounded bg-gray-800" />
+          <div className="rounded-xl bg-gray-900 p-5 space-y-3">
+            <div className="h-5 w-1/2 rounded bg-gray-700" />
+            <div className="h-4 w-1/3 rounded bg-gray-700" />
+            <div className="h-10 w-full rounded bg-gray-700" />
+            <div className="h-10 w-full rounded bg-gray-700" />
+          </div>
+        </div>
       </main>
     );
   }
@@ -206,12 +230,15 @@ export default function SettingsPage() {
           >
             Dashboard
           </Link>
-
-          <RoleSwitcher />
         </div>
 
         <div>
-          <p className="text-sm text-gray-500">Matzil SAR</p>
+          <p
+            className="text-sm text-gray-500 select-none cursor-default"
+            onClick={handleTitleTap}
+          >
+            Matzil SAR
+          </p>
           <h1 className="text-3xl font-bold">Settings</h1>
         </div>
 
@@ -242,14 +269,12 @@ export default function SettingsPage() {
             placeholder="Email"
             className="w-full rounded bg-black px-4 py-3"
           />
-
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Phone number"
             className="w-full rounded bg-black px-4 py-3"
           />
-
           <textarea
             value={address}
             onChange={(e) => setAddress(e.target.value)}
@@ -257,14 +282,12 @@ export default function SettingsPage() {
             rows={3}
             className="w-full rounded bg-black px-4 py-3"
           />
-
           <input
             value={emergencyContactName}
             onChange={(e) => setEmergencyContactName(e.target.value)}
             placeholder="Emergency contact name"
             className="w-full rounded bg-black px-4 py-3"
           />
-
           <input
             value={emergencyContactPhone}
             onChange={(e) => setEmergencyContactPhone(e.target.value)}
@@ -301,11 +324,9 @@ export default function SettingsPage() {
 
           {Object.entries(notificationLabels).map(([key, label]) => {
             const notificationKey = key as NotificationKey;
-
             return (
               <div key={key} className="rounded-lg bg-black/30 p-4">
                 <div className="mb-3 font-medium">{label}</div>
-
                 <div className="grid grid-cols-3 gap-2 text-sm">
                   {(["push", "sms", "email"] as Channel[]).map((channel) => (
                     <button
@@ -363,6 +384,35 @@ export default function SettingsPage() {
           {saving ? "Saving..." : "Save Changes"}
         </button>
       </div>
+
+      {/* Hidden dev panel — tap "Matzil SAR" 5 times to open */}
+      {devOpen && (
+        <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-gray-900 p-6 space-y-4">
+            <div className="text-lg font-bold">Dev: View As Role</div>
+            <div className="text-sm text-gray-400">Current: {devRole}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {ROLES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => applyDevRole(r)}
+                  className={`rounded px-4 py-3 text-sm font-medium ${
+                    devRole === r ? "bg-red-600" : "bg-gray-700"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setDevOpen(false)}
+              className="w-full rounded bg-gray-800 px-4 py-2 text-sm text-gray-400"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
