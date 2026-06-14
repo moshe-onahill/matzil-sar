@@ -276,17 +276,19 @@ export default function IncidentDetailClient() {
           { onConflict: "incident_id,user_id" }
         );
 
-        // Update live_locations — delete old row then insert fresh (no unique constraint needed)
-        await supabase.from("live_locations").delete().eq("user_id", userId);
-        const { error: locErr } = await supabase.from("live_locations").insert({
-          user_id: userId,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          updated_at: new Date().toISOString(),
-          is_moving: isMoving,
-          speed_mph: speed,
+        // Update live_locations via server route (bypasses RLS)
+        await fetch("/api/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            is_moving: isMoving,
+            speed_mph: speed,
+            incident_id: incId,
+          }),
         });
-        if (locErr) console.error("[tracking] live_locations insert error:", locErr);
       },
       (err) => { console.warn("Location watch error:", err.message); },
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
@@ -296,7 +298,11 @@ export default function IncidentDetailClient() {
   async function markOnLocation() {
     if (!incidentId || !currentUserId) return;
     stopTracking();
-    await supabase.from("live_locations").delete().eq("user_id", currentUserId);
+    await fetch("/api/location", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: currentUserId }),
+    });
     await supabase.from("incident_responses").upsert(
       { incident_id: incidentId, user_id: currentUserId, response_type: "On Location", responded_at: new Date().toISOString(), eta_minutes: 0 },
       { onConflict: "incident_id,user_id" }

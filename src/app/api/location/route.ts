@@ -1,0 +1,48 @@
+import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { user_id, lat, lng, is_moving, speed_mph, incident_id } = body;
+
+    if (!user_id || lat == null || lng == null) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // Delete old row then insert fresh
+    await supabaseAdmin.from("live_locations").delete().eq("user_id", user_id);
+
+    const { error } = await supabaseAdmin.from("live_locations").insert({
+      user_id,
+      lat,
+      lng,
+      is_moving: is_moving ?? null,
+      speed_mph: speed_mph ?? null,
+      incident_id: incident_id ?? null,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { user_id } = await req.json();
+    if (!user_id) return NextResponse.json({ error: "Missing user_id" }, { status: 400 });
+    await supabaseAdmin.from("live_locations").delete().eq("user_id", user_id);
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}

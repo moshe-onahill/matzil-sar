@@ -61,6 +61,18 @@ type CustomPin = {
   created_by: string | null;
 };
 
+type CalendarEvent = {
+  id: string;
+  title: string;
+  event_date: string;
+  start_time: string | null;
+  location_name: string | null;
+  address: string | null;
+  event_type: string | null;
+  lat?: number;
+  lng?: number;
+};
+
 type FocusItem =
   | {
       kind: "incident";
@@ -70,6 +82,7 @@ type FocusItem =
       lat: number;
       lng: number;
       color: "red";
+      navigable: true;
     }
   | {
       kind: "responder";
@@ -79,6 +92,7 @@ type FocusItem =
       lat: number;
       lng: number;
       color: "blue";
+      navigable: false;
     }
   | {
       kind: "vehicle";
@@ -88,6 +102,7 @@ type FocusItem =
       lat: number;
       lng: number;
       color: "yellow";
+      navigable: true;
     }
   | {
       kind: "pin";
@@ -97,6 +112,17 @@ type FocusItem =
       lat: number;
       lng: number;
       color: "black";
+      navigable: true;
+    }
+  | {
+      kind: "event";
+      id: string;
+      title: string;
+      subtitle: string;
+      lat: number;
+      lng: number;
+      color: "green";
+      navigable: true;
     };
 
 type LayerToggles = {
@@ -104,6 +130,7 @@ type LayerToggles = {
   responders: boolean;
   vehicles: boolean;
   pins: boolean;
+  events: boolean;
 };
 
 declare global {
@@ -121,6 +148,7 @@ export default function MapPage() {
   const [responders, setResponders] = useState<LiveLocation[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [pins, setPins] = useState<CustomPin[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
 
   const [focus, setFocus] = useState<FocusItem | null>(null);
 
@@ -130,6 +158,7 @@ export default function MapPage() {
     responders: true,
     vehicles: true,
     pins: true,
+    events: true,
   });
 
   const [pinTitle, setPinTitle] = useState("");
@@ -179,6 +208,11 @@ export default function MapPage() {
         { event: "*", schema: "public", table: "custom_pins" },
         () => void loadAll()
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "events" },
+        () => void loadAll()
+      )
       .subscribe();
 
     return () => {
@@ -200,7 +234,7 @@ export default function MapPage() {
   useEffect(() => {
     if (!leafletReadyRef.current || !window.L || !mapRef.current) return;
     renderMarkers();
-  }, [incidents, responders, vehicles, pins, layers]);
+  }, [incidents, responders, vehicles, pins, events, layers]);
 
   useEffect(() => {
     if (!focus || !mapRef.current) return;
@@ -278,7 +312,11 @@ export default function MapPage() {
       setCurrentUserId(me.id);
     }
 
-    const [incidentRes, responderRes, vehicleRes, pinRes] = await Promise.all([
+    const now = new Date();
+    const minus24 = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const plus24 = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const [incidentRes, responderRes, vehicleRes, pinRes, eventRes] = await Promise.all([
       supabase
         .from("incidents")
         .select(
@@ -318,20 +356,44 @@ export default function MapPage() {
         .from("custom_pins")
         .select("id, title, notes, address, lat, lng, created_at, created_by")
         .order("created_at", { ascending: false }),
+
+      supabase
+        .from("events")
+        .select("id, title, event_date, start_time, location_name, address, event_type")
+        .gte("event_date", minus24)
+        .lte("event_date", plus24)
+        .order("event_date", { ascending: true }),
     ]);
 
     const incidentData = (incidentRes.data as ActiveIncident[]) ?? [];
     const responderData = (responderRes.data as LiveLocation[]) ?? [];
     const vehicleData = (vehicleRes.data as Vehicle[]) ?? [];
     const pinData = (pinRes.data as CustomPin[]) ?? [];
+    const rawEvents = (eventRes.data as CalendarEvent[]) ?? [];
 
-    if (responderRes.error) console.error("[map] live_locations error:", responderRes.error);
-    console.log("[map] live_locations rows:", responderData.length, responderData);
+    // Geocode events that have an address but no lat/lng
+    const geocodedEvents: CalendarEvent[] = await Promise.all(
+      rawEvents.map(async (ev) => {
+        if (!ev.address) return ev;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(ev.address)}`,
+            { headers: { Accept: "application/json" } }
+          );
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            return { ...ev, lat: Number(data[0].lat), lng: Number(data[0].lon) };
+          }
+        } catch {}
+        return ev;
+      })
+    );
 
     setIncidents(incidentData);
     setResponders(responderData);
     setVehicles(vehicleData);
     setPins(pinData);
+    setEvents(geocodedEvents.filter((e) => e.lat != null && e.lng != null));
 
     if (!focus) {
       const firstIncident = incidentData.find(
@@ -354,6 +416,7 @@ export default function MapPage() {
           lat: firstIncident.staging_lat,
           lng: firstIncident.staging_lng,
           color: "red",
+          navigable: true,
         });
       }
     }
@@ -387,7 +450,7 @@ export default function MapPage() {
       : u?.full_name || "Unknown responder";
   }
 
-  function markerHtml(color: "red" | "blue" | "yellow" | "black", label: string) {
+  function markerHtml(color: "red" | "blue" | "yellow" | "black" | "green", label: string) {
     const bg =
       color === "red"
         ? "#dc2626"
@@ -395,6 +458,8 @@ export default function MapPage() {
         ? "#2563eb"
         : color === "yellow"
         ? "#ca8a04"
+        : color === "green"
+        ? "#16a34a"
         : "#111111";
 
     return `
@@ -434,27 +499,17 @@ export default function MapPage() {
     if (layers.incidents) {
       incidents.forEach((incident) => {
         if (incident.staging_lat === null || incident.staging_lng === null) return;
-
         const item: FocusItem = {
           kind: "incident",
           id: incident.id,
           title: incident.title,
-          subtitle:
-            incident.staging_name ||
-            incident.staging_address ||
-            incident.incident_number,
+          subtitle: incident.staging_name || incident.staging_address || incident.incident_number,
           lat: incident.staging_lat,
           lng: incident.staging_lng,
           color: "red",
+          navigable: true,
         };
-
-        const icon = L.divIcon({
-          className: "",
-          html: markerHtml("red", incident.incident_number),
-          iconSize: [120, 36],
-          iconAnchor: [60, 18],
-        });
-
+        const icon = L.divIcon({ className: "", html: markerHtml("red", incident.incident_number), iconSize: [120, 36], iconAnchor: [60, 18] });
         const marker = L.marker([item.lat, item.lng], { icon });
         marker.on("click", () => setFocus(item));
         marker.addTo(markersLayerRef.current);
@@ -469,21 +524,13 @@ export default function MapPage() {
           kind: "responder",
           id: responder.id,
           title: responderName(responder),
-          subtitle: responder.is_moving
-            ? `Moving • ${responder.speed_mph ?? 0} mph`
-            : "Stationary / unknown",
+          subtitle: responder.is_moving ? `Moving • ${responder.speed_mph ?? 0} mph` : "Stationary",
           lat: responder.lat,
           lng: responder.lng,
           color: "blue",
+          navigable: false,
         };
-
-        const icon = L.divIcon({
-          className: "",
-          html: markerHtml("blue", responderName(responder)),
-          iconSize: [140, 36],
-          iconAnchor: [70, 18],
-        });
-
+        const icon = L.divIcon({ className: "", html: markerHtml("blue", responderName(responder)), iconSize: [140, 36], iconAnchor: [70, 18] });
         const marker = L.marker([item.lat, item.lng], { icon });
         marker.on("click", () => setFocus(item));
         marker.addTo(markersLayerRef.current);
@@ -494,7 +541,6 @@ export default function MapPage() {
     if (layers.vehicles) {
       vehicles.forEach((vehicle) => {
         if (vehicle.lat === null || vehicle.lng === null) return;
-
         const item: FocusItem = {
           kind: "vehicle",
           id: vehicle.id,
@@ -503,15 +549,9 @@ export default function MapPage() {
           lat: vehicle.lat,
           lng: vehicle.lng,
           color: "yellow",
+          navigable: true,
         };
-
-        const icon = L.divIcon({
-          className: "",
-          html: markerHtml("yellow", vehicle.name),
-          iconSize: [120, 36],
-          iconAnchor: [60, 18],
-        });
-
+        const icon = L.divIcon({ className: "", html: markerHtml("yellow", vehicle.name), iconSize: [120, 36], iconAnchor: [60, 18] });
         const marker = L.marker([item.lat, item.lng], { icon });
         marker.on("click", () => setFocus(item));
         marker.addTo(markersLayerRef.current);
@@ -529,15 +569,30 @@ export default function MapPage() {
           lat: pin.lat,
           lng: pin.lng,
           color: "black",
+          navigable: true,
         };
+        const icon = L.divIcon({ className: "", html: markerHtml("black", pin.title), iconSize: [120, 36], iconAnchor: [60, 18] });
+        const marker = L.marker([item.lat, item.lng], { icon });
+        marker.on("click", () => setFocus(item));
+        marker.addTo(markersLayerRef.current);
+        bounds.push([item.lat, item.lng]);
+      });
+    }
 
-        const icon = L.divIcon({
-          className: "",
-          html: markerHtml("black", pin.title),
-          iconSize: [120, 36],
-          iconAnchor: [60, 18],
-        });
-
+    if (layers.events) {
+      events.forEach((ev) => {
+        if (ev.lat == null || ev.lng == null) return;
+        const item: FocusItem = {
+          kind: "event",
+          id: ev.id,
+          title: ev.title,
+          subtitle: `${ev.event_type || "Event"} • ${ev.event_date}${ev.start_time ? " " + ev.start_time.slice(0, 5) : ""}`,
+          lat: ev.lat!,
+          lng: ev.lng!,
+          color: "green",
+          navigable: true,
+        };
+        const icon = L.divIcon({ className: "", html: markerHtml("green", ev.title), iconSize: [120, 36], iconAnchor: [60, 18] });
         const marker = L.marker([item.lat, item.lng], { icon });
         marker.on("click", () => setFocus(item));
         marker.addTo(markersLayerRef.current);
@@ -805,6 +860,17 @@ export default function MapPage() {
               >
                 Custom Pins
               </button>
+
+              <button
+                onClick={() => toggleLayer("events")}
+                className={`rounded px-3 py-2 text-sm ${
+                  layers.events
+                    ? "bg-green-700 text-white"
+                    : "bg-gray-800 text-gray-400"
+                }`}
+              >
+                Events (±24h)
+              </button>
             </div>
           )}
         </div>
@@ -900,20 +966,21 @@ export default function MapPage() {
                 <div className="space-y-3">
                   <div className="text-xl font-semibold">{focus.title}</div>
                   <div className="text-sm text-gray-400">{focus.subtitle}</div>
-                  <div className="text-sm text-gray-500">
-                    {focus.lat}, {focus.lng}
-                  </div>
 
-                  <button
-                    onClick={() => openInGoogleMaps(focus.lat, focus.lng)}
-                    className="rounded bg-blue-600 px-4 py-2"
-                  >
-                    Navigate
-                  </button>
+                  {focus.navigable ? (
+                    <button
+                      onClick={() => openInGoogleMaps(focus.lat, focus.lng)}
+                      className="rounded bg-blue-600 px-4 py-2"
+                    >
+                      Navigate
+                    </button>
+                  ) : (
+                    <div className="text-sm text-gray-500">Live tracking — navigation not available</div>
+                  )}
                 </div>
               ) : (
                 <div className="text-gray-400">
-                  Click any marker to inspect it.
+                  Tap any marker to select it.
                 </div>
               )}
             </div>
@@ -1012,6 +1079,7 @@ export default function MapPage() {
                               lat: pin.lat,
                               lng: pin.lng,
                               color: "black",
+                              navigable: true,
                             })
                           }
                           className="block w-full text-left"
@@ -1052,6 +1120,7 @@ export default function MapPage() {
                 <div>Responders: {responders.length}</div>
                 <div>Vehicles: {vehicles.length}</div>
                 <div>Custom pins: {pins.length}</div>
+                <div>Events (±24h): {events.length}</div>
               </div>
             </div>
           </div>
