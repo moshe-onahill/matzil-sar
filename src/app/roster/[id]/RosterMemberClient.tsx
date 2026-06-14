@@ -239,12 +239,18 @@ export default function RosterMemberClient() {
 
   async function resendInvite() {
     if (!user) return;
-    const { error } = await supabase.auth.admin.inviteUserByEmail(user.email).catch(() => ({ error: { message: "Invite must be resent from server." } }));
-    if (error) {
-      toast("Contact an admin to resend the invite email.", "info");
-      return;
+    try {
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email, full_name: user.full_name }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || "Failed to send invite.", "error"); return; }
+      toast(`Invite sent to ${user.email}.`, "success");
+    } catch {
+      toast("Failed to send invite.", "error");
     }
-    toast("Invite email resent.", "success");
   }
 
   if (!user) {

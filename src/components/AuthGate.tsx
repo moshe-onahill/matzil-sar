@@ -3,10 +3,22 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { setRealRole, UserRole } from "@/lib/dev-user";
+
+const ROLE_PRIORITY: UserRole[] = ["Member", "Dispatcher", "SAR Manager", "Global Admin"];
+
+function highestRole(names: string[]): UserRole {
+  let best: UserRole = "Member";
+  for (const name of names) {
+    if (ROLE_PRIORITY.indexOf(name as UserRole) > ROLE_PRIORITY.indexOf(best)) {
+      best = name as UserRole;
+    }
+  }
+  return best;
+}
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-
   const [checking, setChecking] = useState(true);
   const [allowed, setAllowed] = useState(false);
   const [authEmail, setAuthEmail] = useState<string | null>(null);
@@ -20,7 +32,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       setChecking(false);
       return;
     }
-
     void checkAuth();
   }, [pathname]);
 
@@ -41,7 +52,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
     const { data: rosterUser, error: rosterError } = await supabase
       .from("users")
-      .select("id, email, is_active")
+      .select(`
+        id,
+        email,
+        is_active,
+        user_roles (
+          roles ( name )
+        )
+      `)
       .ilike("email", email)
       .maybeSingle();
 
@@ -53,18 +71,27 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     }
 
     if (!rosterUser) {
-      setReason("No matching roster user found.");
+      setReason("Your email is not on the approved roster. Contact an admin.");
       setAllowed(false);
       setChecking(false);
       return;
     }
 
     if (rosterUser.is_active === false) {
-      setReason("Roster user exists but is inactive.");
+      setReason("Your account has been deactivated. Contact an admin.");
       setAllowed(false);
       setChecking(false);
       return;
     }
+
+    // Resolve the user's highest role from DB and persist it
+    const roleNames = (rosterUser.user_roles ?? []).flatMap((ur: any) => {
+      const r = ur.roles;
+      if (Array.isArray(r)) return r.map((x: any) => x.name);
+      if (r?.name) return [r.name];
+      return [];
+    });
+    setRealRole(highestRole(roleNames));
 
     setAllowed(true);
     setChecking(false);
@@ -72,47 +99,39 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   async function logout() {
     window.localStorage.removeItem("auth-email");
+    window.localStorage.removeItem("real-role");
+    window.localStorage.removeItem("dev-role");
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
 
   if (checking) {
     return (
-      <main className="min-h-screen bg-black p-6 text-white">
-        Checking access...
+      <main className="flex min-h-screen items-center justify-center bg-black text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-red-500" />
+          <div className="text-sm text-gray-500">Verifying access…</div>
+        </div>
       </main>
     );
   }
 
   if (!allowed) {
     return (
-      <main className="min-h-screen bg-black p-6 text-white">
-        <div className="mx-auto max-w-xl rounded-xl bg-gray-900 p-6">
-          <div className="text-xl font-semibold text-red-300">
-            Account Not Approved
-          </div>
-
-          <div className="mt-2 text-gray-300">
-            Your account is not approved or is inactive. Contact an admin.
-          </div>
-
+      <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
+        <div className="w-full max-w-sm rounded-2xl bg-gray-900 p-6 space-y-4">
+          <div className="text-xl font-bold text-red-400">Access Denied</div>
+          <div className="text-sm text-gray-300">{reason}</div>
           {authEmail && (
-            <div className="mt-4 rounded bg-black/40 p-3 text-sm text-gray-300">
-              Logged in as: <span className="text-white">{authEmail}</span>
+            <div className="rounded-lg bg-black/40 px-3 py-2 text-sm text-gray-400">
+              Signed in as <span className="text-white">{authEmail}</span>
             </div>
           )}
-
-          {reason && (
-            <div className="mt-3 rounded bg-black/40 p-3 text-sm text-yellow-300">
-              Reason: {reason}
-            </div>
-          )}
-
           <button
             onClick={() => void logout()}
-            className="mt-5 w-full rounded bg-red-600 px-4 py-3 font-medium"
+            className="w-full rounded-xl bg-red-600 px-4 py-3 font-medium"
           >
-            Log Out
+            Sign Out
           </button>
         </div>
       </main>

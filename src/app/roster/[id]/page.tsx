@@ -243,7 +243,19 @@ export default function UserProfilePage({
   }
 
   async function resendInvite() {
-    alert("Invite resend triggered (hook later)");
+    if (!user) return;
+    try {
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email, full_name: user.full_name }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || "Failed to send invite."); return; }
+      alert(`Invite sent to ${user.email}.`);
+    } catch {
+      alert("Failed to send invite.");
+    }
   }
 
   if (!user) {
