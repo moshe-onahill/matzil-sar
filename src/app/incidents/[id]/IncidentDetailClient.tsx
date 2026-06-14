@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import { useToast } from "@/components/Toast";
+import { getCurrentPosition, haversineKm, etaMinutesFromKm, speedMph } from "@/lib/location-tracking";
 
 type ResponseUser = {
   full_name: string;
@@ -70,6 +71,11 @@ export default function IncidentDetailClient() {
 
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
+
+  // Location tracking while responding
+  const watchIdRef = useRef<number | null>(null);
+  const lastPositionRef = useRef<GeolocationPosition | null>(null);
+  const [liveEta, setLiveEta] = useState<number | null>(null);
 
   const hours = useMemo(
     () => Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0")),
@@ -238,6 +244,57 @@ export default function IncidentDetailClient() {
     window.location.href = "/incidents";
   }
 
+  function stopTracking() {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    lastPositionRef.current = null;
+    setLiveEta(null);
+  }
+
+  function startTracking(stagingLat: number, stagingLng: number, userId: string, incId: string) {
+    stopTracking();
+
+    if (!("geolocation" in navigator)) return;
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const prev = lastPositionRef.current;
+        lastPositionRef.current = pos;
+
+        const km = haversineKm(pos.coords.latitude, pos.coords.longitude, stagingLat, stagingLng);
+        const eta = etaMinutesFromKm(km);
+        setLiveEta(eta);
+
+        const speed = prev ? speedMph(prev, pos) : (pos.coords.speed != null ? Math.round(pos.coords.speed * 2.237) : null);
+        const isMoving = speed !== null ? speed > 2 : null;
+
+        // Update eta_minutes in DB every position update
+        await supabase.from("incident_responses").upsert(
+          { incident_id: incId, user_id: userId, eta_minutes: eta },
+          { onConflict: "incident_id,user_id" }
+        );
+
+        // Update live_locations
+        await supabase.from("live_locations").upsert(
+          {
+            user_id: userId,
+            updated_at: new Date().toISOString(),
+            is_moving: isMoving,
+            speed_mph: speed,
+          },
+          { onConflict: "user_id" }
+        );
+      },
+      (err) => { console.warn("Location watch error:", err.message); },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+    );
+  }
+
+  // Stop tracking when user leaves the page
+  useEffect(() => () => stopTracking(), []);
+
   async function respondToIncident(
     type: "Responding" | "Not Available" | "Available At" | "Cancelled",
     availableTime?: string
@@ -255,7 +312,25 @@ export default function IncidentDetailClient() {
       availableAt = d.toISOString();
     }
 
-    if (type === "Responding") etaMinutes = 20;
+    if (type === "Responding") {
+      // Try to get real GPS-based ETA
+      try {
+        const pos = await getCurrentPosition();
+        if (incident?.staging_lat != null && incident?.staging_lng != null) {
+          const km = haversineKm(pos.coords.latitude, pos.coords.longitude, incident.staging_lat, incident.staging_lng);
+          etaMinutes = etaMinutesFromKm(km);
+          setLiveEta(etaMinutes);
+          startTracking(incident.staging_lat, incident.staging_lng, currentUserId, incidentId);
+        } else {
+          etaMinutes = 20; // fallback if no staging coords
+        }
+      } catch {
+        toast("Could not get your location — using default ETA.", "info");
+        etaMinutes = 20;
+      }
+    } else {
+      stopTracking();
+    }
 
     const { error } = await supabase.from("incident_responses").upsert(
       {
@@ -588,6 +663,13 @@ export default function IncidentDetailClient() {
 
               {myResponse && (
                 <div className="mt-3 text-blue-300">Your status: {formatResponse(myResponse)}</div>
+              )}
+
+              {liveEta !== null && myResponse?.response_type === "Responding" && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg bg-green-900/40 px-3 py-2 text-sm text-green-300">
+                  <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+                  Live ETA: {liveEta} min
+                </div>
               )}
 
             </div>
