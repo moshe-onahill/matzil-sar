@@ -316,7 +316,7 @@ export default function MapPage() {
     const minus24 = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const plus24 = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const [incidentRes, responderRes, vehicleRes, pinRes, eventRes] = await Promise.all([
+    const [incidentRes, liveLocData, vehicleRes, pinRes, eventRes] = await Promise.all([
       supabase
         .from("incidents")
         .select(
@@ -327,24 +327,7 @@ export default function MapPage() {
         .not("staging_lng", "is", null)
         .order("incident_number", { ascending: false }),
 
-      supabase
-        .from("live_locations")
-        .select(`
-          id,
-          incident_id,
-          lat,
-          lng,
-          speed_mph,
-          heading_degrees,
-          is_moving,
-          updated_at,
-          user_id,
-          users (
-            full_name,
-            call_sign
-          )
-        `)
-        .order("updated_at", { ascending: false }),
+      fetch("/api/location").then((r) => r.json()),
 
       supabase
         .from("agency_vehicles")
@@ -366,7 +349,7 @@ export default function MapPage() {
     ]);
 
     const incidentData = (incidentRes.data as ActiveIncident[]) ?? [];
-    const responderData = (responderRes.data as LiveLocation[]) ?? [];
+    const responderData = (Array.isArray(liveLocData) ? liveLocData : []) as LiveLocation[];
     const vehicleData = (vehicleRes.data as Vehicle[]) ?? [];
     const pinData = (pinRes.data as CustomPin[]) ?? [];
     const rawEvents = (eventRes.data as CalendarEvent[]) ?? [];

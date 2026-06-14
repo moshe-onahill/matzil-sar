@@ -8,6 +8,20 @@ function getAdmin() {
   );
 }
 
+export async function GET() {
+  const supabaseAdmin = getAdmin();
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("live_locations")
+      .select(`id, user_id, incident_id, lat, lng, speed_mph, is_moving, updated_at, users(full_name, call_sign)`)
+      .order("updated_at", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data ?? []);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const supabaseAdmin = getAdmin();
   try {
