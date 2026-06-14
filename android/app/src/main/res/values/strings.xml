@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Matzil SAR</string>
+    <string name="title_activity_main">Matzil SAR</string>
+    <string name="package_name">org.matzil.sar</string>
+    <string name="custom_url_scheme">org.matzil.sar</string>
+</resources>

@@ -277,19 +277,33 @@ export default function IncidentDetailClient() {
         );
 
         // Update live_locations
-        await supabase.from("live_locations").upsert(
+        const { error: locErr } = await supabase.from("live_locations").upsert(
           {
             user_id: userId,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
             updated_at: new Date().toISOString(),
             is_moving: isMoving,
             speed_mph: speed,
           },
           { onConflict: "user_id" }
         );
+        if (locErr) console.error("[tracking] live_locations upsert error:", locErr);
       },
       (err) => { console.warn("Location watch error:", err.message); },
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
     );
+  }
+
+  async function markOnLocation() {
+    if (!incidentId || !currentUserId) return;
+    stopTracking();
+    await supabase.from("live_locations").delete().eq("user_id", currentUserId);
+    await supabase.from("incident_responses").upsert(
+      { incident_id: incidentId, user_id: currentUserId, response_type: "On Location", responded_at: new Date().toISOString(), eta_minutes: 0 },
+      { onConflict: "incident_id,user_id" }
+    );
+    await loadPageData();
   }
 
   // Stop tracking when user leaves the page
@@ -434,6 +448,7 @@ export default function IncidentDetailClient() {
       return `Available at ${formatTime(r.available_at)}`;
     }
     if (r.response_type === "Responding") return "Responding";
+    if (r.response_type === "On Location") return "On Location";
     if (r.response_type === "Not Available") return "Not Available";
     if (r.response_type === "Cancelled") return "Cancelled";
     return r.response_type;
@@ -670,6 +685,15 @@ export default function IncidentDetailClient() {
                   <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse" />
                   Live ETA: {liveEta} min
                 </div>
+              )}
+
+              {myResponse?.response_type === "Responding" && incident.status === "Active" && (
+                <button
+                  onClick={() => void markOnLocation()}
+                  className="mt-2 w-full rounded-xl bg-green-700 py-3 font-semibold hover:bg-green-600"
+                >
+                  On Location
+                </button>
               )}
 
             </div>

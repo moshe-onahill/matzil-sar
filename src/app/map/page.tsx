@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
+import { useToast } from "@/components/Toast";
 
 type ActiveIncident = {
   id: string;
@@ -112,6 +113,7 @@ declare global {
 }
 
 export default function MapPage() {
+  const toast = useToast();
   const [currentRole, setCurrentRole] = useState<UserRole>("Member");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -323,6 +325,9 @@ export default function MapPage() {
     const vehicleData = (vehicleRes.data as Vehicle[]) ?? [];
     const pinData = (pinRes.data as CustomPin[]) ?? [];
 
+    if (responderRes.error) console.error("[map] live_locations error:", responderRes.error);
+    console.log("[map] live_locations rows:", responderData.length, responderData);
+
     setIncidents(incidentData);
     setResponders(responderData);
     setVehicles(vehicleData);
@@ -459,6 +464,7 @@ export default function MapPage() {
 
     if (layers.responders) {
       responders.forEach((responder) => {
+        if (responder.lat == null || responder.lng == null) return;
         const item: FocusItem = {
           kind: "responder",
           id: responder.id,
@@ -552,7 +558,7 @@ export default function MapPage() {
     setBusy: (v: boolean) => void
   ) {
     if (!address.trim()) {
-      alert("Enter an address first.");
+      toast("Enter an address first.", "error");
       return;
     }
 
@@ -571,7 +577,7 @@ export default function MapPage() {
       const data = await response.json();
 
       if (!Array.isArray(data) || data.length === 0) {
-        alert("Address not found.");
+        toast("Address not found.", "error");
         setBusy(false);
         return;
       }
@@ -580,7 +586,7 @@ export default function MapPage() {
       const lng = Number(data[0].lon);
 
       if (Number.isNaN(lat) || Number.isNaN(lng)) {
-        alert("Could not parse coordinates.");
+        toast("Could not parse coordinates.", "error");
         setBusy(false);
         return;
       }
@@ -588,7 +594,7 @@ export default function MapPage() {
       setLat(String(lat));
       setLng(String(lng));
     } catch {
-      alert("Geocoding failed.");
+      toast("Geocoding failed.", "error");
     }
 
     setBusy(false);
@@ -596,12 +602,12 @@ export default function MapPage() {
 
   async function createPin() {
     if (!canManagePins()) {
-      alert("You do not have permission to create custom pins.");
+      toast("You do not have permission to create custom pins.", "error");
       return;
     }
 
     if (!pinTitle.trim() || !pinLat.trim() || !pinLng.trim()) {
-      alert("Title, latitude, and longitude are required.");
+      toast("Title, latitude, and longitude are required.", "error");
       return;
     }
 
@@ -609,7 +615,7 @@ export default function MapPage() {
     const lng = Number(pinLng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      alert("Latitude and longitude must be valid numbers.");
+      toast("Latitude and longitude must be valid numbers.", "error");
       return;
     }
 
@@ -627,7 +633,7 @@ export default function MapPage() {
     setCreatingPin(false);
 
     if (error) {
-      alert(error.message);
+      toast(error.message, "error");
       return;
     }
 
@@ -661,7 +667,7 @@ export default function MapPage() {
     if (!editingPinId) return;
 
     if (!editPinTitle.trim() || !editPinLat.trim() || !editPinLng.trim()) {
-      alert("Title, latitude, and longitude are required.");
+      toast("Title, latitude, and longitude are required.", "error");
       return;
     }
 
@@ -669,7 +675,7 @@ export default function MapPage() {
     const lng = Number(editPinLng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      alert("Latitude and longitude must be valid numbers.");
+      toast("Latitude and longitude must be valid numbers.", "error");
       return;
     }
 
@@ -689,7 +695,7 @@ export default function MapPage() {
     setSavingEditPin(false);
 
     if (error) {
-      alert(error.message);
+      toast(error.message, "error");
       return;
     }
 
@@ -706,7 +712,7 @@ export default function MapPage() {
     const { error } = await supabase.from("custom_pins").delete().eq("id", id);
 
     if (error) {
-      alert(error.message);
+      toast(error.message, "error");
       return;
     }
 
