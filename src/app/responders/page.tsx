@@ -99,7 +99,7 @@ export default function RespondersPage() {
   }, []);
 
   async function loadPage() {
-    const [usersRes, responsesRes, locationsRes] = await Promise.all([
+    const [usersRes, responsesRes, liveLocData] = await Promise.all([
       supabase
         .from("users")
         .select(`
@@ -135,20 +135,12 @@ export default function RespondersPage() {
         .eq("response_type", "Responding")
         .order("responded_at", { ascending: false }),
 
-      supabase
-        .from("live_locations")
-        .select(`
-          user_id,
-          updated_at,
-          is_moving,
-          speed_mph
-        `)
-        .order("updated_at", { ascending: false }),
+      fetch("/api/location").then((r) => r.json()),
     ]);
 
     const users = (usersRes.data as ResponderRow[]) ?? [];
     const responses = (responsesRes.data as ResponseRow[]) ?? [];
-    const locations = (locationsRes.data as LiveLocationRow[]) ?? [];
+    const locations = (Array.isArray(liveLocData) ? liveLocData : []) as LiveLocationRow[];
 
     const latestResponseByUser = new Map<string, ResponseRow>();
     for (const response of responses) {
