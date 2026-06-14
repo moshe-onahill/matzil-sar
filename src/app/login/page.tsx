@@ -23,7 +23,7 @@ export default function LoginPage() {
   async function loginWithGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/` },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
   }
 
@@ -31,7 +31,7 @@ export default function LoginPage() {
     if (!email) { toast("Enter your email first.", "error"); return; }
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/auth/callback`,
     });
     setLoading(false);
     if (error) { toast(error.message, "error"); return; }

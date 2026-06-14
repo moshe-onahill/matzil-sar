@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
       data: { full_name: full_name ?? "" },
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://matzil-sar.vercel.app"}/login`,
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://matzil-sar.vercel.app"}/auth/callback`,
     });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

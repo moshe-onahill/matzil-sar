@@ -20,89 +20,63 @@ function highestRole(names: string[]): UserRole {
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [checking, setChecking] = useState(true);
-  const [allowed, setAllowed] = useState(false);
+  const [denied, setDenied] = useState(false);
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [reason, setReason] = useState("");
 
-  const publicRoutes = ["/login"];
-
   useEffect(() => {
-    if (publicRoutes.includes(pathname)) {
-      setAllowed(true);
+    // Login page needs no check
+    if (pathname === "/login") {
+      setChecking(false);
+      return;
+    }
+    void checkRoster();
+  }, [pathname]);
+
+  async function checkRoster() {
+    setChecking(true);
+    setDenied(false);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Middleware already handles the redirect; if we reach here without a user
+    // just wait (edge case during session hydration).
+    if (!user?.email) {
       setChecking(false);
       return;
     }
 
-    let settled = false;
-
-    // onAuthStateChange fires with the resolved session (including after OAuth redirects).
-    // We use it as the authoritative signal; getSession() is a fast pre-check only.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      settled = true;
-      void checkAuth(session?.user ?? null, true);
-    });
-
-    // Pre-check: if a session is already cached, proceed immediately.
-    // If not, wait for onAuthStateChange (which handles the OAuth token in the URL).
-    supabase.auth.getSession().then(({ data }) => {
-      if (!settled && data.session?.user) {
-        settled = true;
-        void checkAuth(data.session.user, true);
-      }
-      // If no cached session AND onAuthStateChange hasn't fired yet, keep spinner up.
-      // onAuthStateChange will fire shortly and settle it.
-    });
-
-    return () => subscription.unsubscribe();
-  }, [pathname]);
-
-  async function checkAuth(authUser: { email?: string | null } | null, definitive: boolean) {
-    setChecking(true);
-
-    if (!authUser?.email) {
-      if (definitive) window.location.href = "/login";
-      return;
-    }
-
-    const email = authUser.email.toLowerCase().trim();
+    const email = user.email.toLowerCase().trim();
     setAuthEmail(email);
     window.localStorage.setItem("auth-email", email);
 
-    const { data: rosterUser, error: rosterError } = await supabase
+    const { data: rosterUser, error } = await supabase
       .from("users")
-      .select(`
-        id,
-        email,
-        is_active,
-        user_roles (
-          roles ( name )
-        )
-      `)
+      .select("id, is_active, user_roles ( roles ( name ) )")
       .ilike("email", email)
       .maybeSingle();
 
-    if (rosterError) {
-      setReason(`Roster lookup error: ${rosterError.message}`);
-      setAllowed(false);
+    if (error) {
+      setReason(`Roster lookup error: ${error.message}`);
+      setDenied(true);
       setChecking(false);
       return;
     }
 
     if (!rosterUser) {
       setReason("Your email is not on the approved roster. Contact an admin.");
-      setAllowed(false);
+      setDenied(true);
       setChecking(false);
       return;
     }
 
     if (rosterUser.is_active === false) {
       setReason("Your account has been deactivated. Contact an admin.");
-      setAllowed(false);
+      setDenied(true);
       setChecking(false);
       return;
     }
 
-    // Resolve the user's highest role from DB and persist it
     const roleNames = (rosterUser.user_roles ?? []).flatMap((ur: any) => {
       const r = ur.roles;
       if (Array.isArray(r)) return r.map((x: any) => x.name);
@@ -111,7 +85,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     });
     setRealRole(highestRole(roleNames));
 
-    setAllowed(true);
     setChecking(false);
   }
 
@@ -134,7 +107,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!allowed) {
+  if (denied) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
         <div className="w-full max-w-sm rounded-2xl bg-gray-900 p-6 space-y-4">
