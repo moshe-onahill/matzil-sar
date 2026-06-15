@@ -259,13 +259,14 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <p
-            className="text-sm text-gray-500 select-none cursor-default"
-            onClick={handleTitleTap}
-          >
-            Matzil SAR
-          </p>
           <h1 className="text-3xl font-bold">Settings</h1>
+          <p
+            className="mt-1 select-none text-sm text-zinc-600"
+            onClick={handleTitleTap}
+            style={{ WebkitTapHighlightColor: "transparent", cursor: "default", padding: "10px 0", display: "inline-block" }}
+          >
+            Matzil SAR · v1.0
+          </p>
         </div>
 
         <section className="rounded-xl bg-gray-900 p-5 space-y-3">

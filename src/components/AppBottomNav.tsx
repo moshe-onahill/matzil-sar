@@ -124,8 +124,13 @@ export default function AppBottomNav() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const role = getStoredRole();
-    setIsAdmin(role === "SAR Manager" || role === "Global Admin");
+    function checkRole() {
+      const role = getStoredRole();
+      setIsAdmin(role === "SAR Manager" || role === "Global Admin");
+    }
+    checkRole();
+    window.addEventListener("storage", checkRole);
+    return () => window.removeEventListener("storage", checkRole);
   }, []);
 
   if (pathname === "/login") return null;
