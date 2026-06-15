@@ -5,6 +5,7 @@ import AuthGate from "@/components/AuthGate";
 import PushPermission from "@/components/PushPermission";
 import NotificationListener from "@/components/NotificationListener";
 import { ToastProvider } from "@/components/Toast";
+import SwipeNav from "@/components/SwipeNav";
 
 export const metadata: Metadata = {
   title: "Matzil SAR",
@@ -23,9 +24,11 @@ export default function RootLayout({
           <ToastProvider>
             <PushPermission />
             <NotificationListener />
-            <div className="min-h-screen w-full overflow-x-hidden pb-20">
-              {children}
-            </div>
+            <SwipeNav>
+              <div className="min-h-screen w-full overflow-x-hidden pb-20">
+                {children}
+              </div>
+            </SwipeNav>
             <AppBottomNav />
           </ToastProvider>
         </AuthGate>
