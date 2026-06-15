@@ -18,7 +18,7 @@ export default function AdminConsolePage() {
   const tiles = [
     { href: "/admin/roster", label: "Roster", desc: "All members — edit, invite, deactivate", icon: "👥" },
     { href: "/admin/units", label: "Responding Units", desc: "Live view of all responding units", icon: "🚨" },
-    { href: "/incidents", label: "Incidents", desc: "Manage active and past incidents", icon: "📋" },
+    { href: "/admin/incidents", label: "Incident Coordination", desc: "Assign tasks and leads for active incidents", icon: "📋" },
     { href: "/admin/events", label: "Events", desc: "Manage training and events", icon: "📅" },
   ];
 
