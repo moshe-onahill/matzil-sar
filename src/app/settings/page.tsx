@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, setStoredRole, UserRole } from "@/lib/dev-user";
 import { useToast } from "@/components/Toast";
@@ -423,19 +424,19 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* Hidden dev panel — tap "Matzil SAR" 5 times to open */}
-      {devOpen && (
-        <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-gray-900 p-6 space-y-4">
-            <div className="text-lg font-bold">Dev: View As Role</div>
-            <div className="text-sm text-gray-400">Current: {devRole}</div>
+      {/* Hidden dev panel — rendered via portal so fixed positioning is never trapped */}
+      {devOpen && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4" onClick={() => setDevOpen(false)}>
+          <div className="w-full max-w-xs rounded-2xl bg-zinc-900 border border-zinc-700 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-lg font-bold text-zinc-50">Dev: View As Role</div>
+            <div className="text-sm text-zinc-500">Current: <span className="text-zinc-300">{devRole}</span></div>
             <div className="grid grid-cols-2 gap-2">
               {ROLES.map((r) => (
                 <button
                   key={r}
                   onClick={() => applyDevRole(r)}
-                  className={`rounded px-4 py-3 text-sm font-medium ${
-                    devRole === r ? "bg-red-600" : "bg-gray-700"
+                  className={`rounded-xl px-4 py-3 text-sm font-medium transition ${
+                    devRole === r ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                   }`}
                 >
                   {r}
@@ -444,12 +445,13 @@ export default function SettingsPage() {
             </div>
             <button
               onClick={() => setDevOpen(false)}
-              className="w-full rounded bg-gray-800 px-4 py-2 text-sm text-gray-400"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-700"
             >
               Close
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </main>
   );
