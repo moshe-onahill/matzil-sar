@@ -99,15 +99,13 @@ export default function SwipeNav({ children }: { children: React.ReactNode }) {
     };
   }, [idx, router]);
 
+  // Never apply transform when idle — translateX(0) with a transition still
+  // creates a stacking context, which breaks position:fixed modals inside it.
   const style: React.CSSProperties = slideIn
     ? { transform: `translateX(${slideDir * 40}px)`, transition: "none", opacity: 0.7 }
     : dx !== 0
     ? { transform: `translateX(${dx}px)`, transition: "none" }
-    : {
-        transform: "translateX(0)",
-        transition: "transform 280ms cubic-bezier(0.25, 1, 0.5, 1)",
-        opacity: 1,
-      };
+    : {};
 
   return (
     <div ref={containerRef} className="min-h-full">
