@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { getCurrentTestEmail } from "@/lib/dev-user";
 
 type EventRow = {
   id: string;
@@ -43,21 +42,11 @@ type CalendarItem = {
 export default function EventsPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
-  const [showCreate, setShowCreate] = useState(false);
   const [upcomingOpen, setUpcomingOpen] = useState(false);
 
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
 
-  const [title, setTitle] = useState("");
-  const [eventDate, setEventDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [locationName, setLocationName] = useState("");
-  const [address, setAddress] = useState("");
-  const [eventType, setEventType] = useState("Non-Emergency Event");
-  const [notes, setNotes] = useState("");
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     void loadData();
@@ -117,61 +106,6 @@ export default function EventsPage() {
 
     setEvents((eventRes.data as EventRow[]) ?? []);
     setIncidents((incidentRes.data as IncidentRow[]) ?? []);
-  }
-
-  async function createEvent() {
-    if (!title.trim()) {
-      alert("Event title is required.");
-      return;
-    }
-
-    if (!eventDate) {
-      alert("Event date is required.");
-      return;
-    }
-
-    setCreating(true);
-
-    const { data: authData } = await supabase.auth.getUser();
-    const email = authData.user?.email || getCurrentTestEmail();
-
-    const { data: user } = await supabase
-      .from("users")
-      .select("id")
-      .ilike("email", email)
-      .maybeSingle();
-
-    const { error } = await supabase.from("events").insert({
-      title: title.trim(),
-      event_date: eventDate,
-      start_time: startTime || null,
-      end_time: endTime || null,
-      location_name: locationName.trim() || null,
-      address: address.trim() || null,
-      event_type: eventType,
-      notes: notes.trim() || null,
-      status: "Scheduled",
-      created_by: user?.id ?? null,
-    });
-
-    setCreating(false);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setTitle("");
-    setEventDate("");
-    setStartTime("");
-    setEndTime("");
-    setLocationName("");
-    setAddress("");
-    setEventType("Non-Emergency Event");
-    setNotes("");
-    setShowCreate(false);
-    setSelectedDate(eventDate);
-    await loadData();
   }
 
   function toDateKey(date: Date) {
@@ -301,91 +235,6 @@ export default function EventsPage() {
             Dashboard
           </Link>
         </div>
-
-        <button
-          onClick={() => setShowCreate((v) => !v)}
-          className="w-full rounded-xl bg-red-600 px-4 py-3 font-medium sm:w-auto"
-        >
-          {showCreate ? "Close Event Form" : "Create Event"}
-        </button>
-
-        {showCreate && (
-          <section className="space-y-3 rounded-xl bg-gray-900 p-5">
-            <div className="text-xl font-semibold">Create Non-Emergency Event</div>
-
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Event title"
-              className="w-full rounded bg-black px-4 py-3"
-            />
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <input
-                type="date"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-                className="w-full rounded bg-black px-4 py-3"
-              />
-
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-full rounded bg-black px-4 py-3"
-              />
-
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-full rounded bg-black px-4 py-3"
-              />
-            </div>
-
-            <select
-              value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
-              className="w-full rounded bg-black px-4 py-3"
-            >
-              <option>Non-Emergency Event</option>
-              <option>Training</option>
-              <option>Standby Coverage</option>
-              <option>Community Event</option>
-              <option>Meeting</option>
-            </select>
-
-            <input
-              value={locationName}
-              onChange={(e) => setLocationName(e.target.value)}
-              placeholder="Location name"
-              className="w-full rounded bg-black px-4 py-3"
-            />
-
-            <input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Address"
-              className="w-full rounded bg-black px-4 py-3"
-            />
-
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notes"
-              rows={4}
-              className="w-full rounded bg-black px-4 py-3"
-            />
-
-            <button
-              onClick={() => void createEvent()}
-              disabled={creating}
-              className="w-full rounded bg-red-600 px-4 py-3 font-medium disabled:opacity-60"
-            >
-              {creating ? "Creating..." : "Create Event"}
-            </button>
-          </section>
-        )}
 
         <section className="rounded-xl bg-gray-900 p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
