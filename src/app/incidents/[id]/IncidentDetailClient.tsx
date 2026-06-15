@@ -68,6 +68,9 @@ export default function IncidentDetailClient() {
   const [updateTitle, setUpdateTitle] = useState("");
   const [updateBody, setUpdateBody] = useState("");
   const [postingUpdate, setPostingUpdate] = useState(false);
+  const [updateAudience, setUpdateAudience] = useState<"all" | "on_scene" | "tasks">("all");
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [incidentTasks, setIncidentTasks] = useState<{ id: string; task_number: string; description: string | null }[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -90,6 +93,17 @@ export default function IncidentDetailClient() {
   useEffect(() => {
     if (params?.id) setIncidentId(params.id);
   }, [params]);
+
+  useEffect(() => {
+    if (!incidentId) return;
+    supabase
+      .from("incident_tasks")
+      .select("id, task_number, description")
+      .eq("incident_id", incidentId)
+      .eq("status", "Active")
+      .order("task_number")
+      .then(({ data }) => setIncidentTasks((data as any[]) ?? []));
+  }, [incidentId]);
 
   useEffect(() => {
     if (!incidentId) return;
@@ -396,30 +410,51 @@ export default function IncidentDetailClient() {
       return;
     }
 
-    const { data: responders, error: respondersError } = await supabase
-      .from("incident_responses")
-      .select("user_id")
-      .eq("incident_id", incidentId)
-      .eq("response_type", "Responding");
+    // Determine recipient user IDs based on selected audience
+    let recipientIds: string[] = [];
 
-    if (!respondersError && responders && responders.length > 0) {
-      const logs = responders.map((responder) => ({
-        user_id: responder.user_id,
-        channel: "app",
-        notification_type: "incident_update",
-        title: `Update: ${cleanedTitle}`,
-        body: cleanedBody || "New incident update",
-        related_incident_id: incidentId,
-        status: "pending",
-      }));
+    if (updateAudience === "all") {
+      const { data } = await supabase
+        .from("incident_responses")
+        .select("user_id")
+        .eq("incident_id", incidentId)
+        .in("response_type", ["Responding", "On Location"]);
+      recipientIds = (data ?? []).map((r: any) => r.user_id);
+    } else if (updateAudience === "on_scene") {
+      const { data } = await supabase
+        .from("incident_responses")
+        .select("user_id")
+        .eq("incident_id", incidentId)
+        .eq("response_type", "On Location");
+      recipientIds = (data ?? []).map((r: any) => r.user_id);
+    } else if (updateAudience === "tasks" && selectedTaskIds.length > 0) {
+      const { data } = await supabase
+        .from("task_assignments")
+        .select("user_id")
+        .in("task_id", selectedTaskIds);
+      recipientIds = [...new Set((data ?? []).map((r: any) => r.user_id))];
+    }
 
-      await supabase.from("notification_logs").insert(logs);
+    if (recipientIds.length > 0) {
+      await supabase.from("notification_logs").insert(
+        recipientIds.map((uid) => ({
+          user_id: uid,
+          channel: "app",
+          notification_type: "incident_update",
+          title: `Update: ${cleanedTitle}`,
+          body: cleanedBody || "New incident update",
+          related_incident_id: incidentId,
+          status: "pending",
+        }))
+      );
     }
 
     setPostingUpdate(false);
     setUpdateType("General Update");
     setUpdateTitle("");
     setUpdateBody("");
+    setUpdateAudience("all");
+    setSelectedTaskIds([]);
     await loadPageData();
   }
 
@@ -720,9 +755,42 @@ export default function IncidentDetailClient() {
                   </select>
 
                   <input value={updateTitle} onChange={(e) => setUpdateTitle(e.target.value)} placeholder="Update title" className="w-full rounded bg-black px-3 py-2" />
-                  <textarea value={updateBody} onChange={(e) => setUpdateBody(e.target.value)} placeholder="Update details" className="w-full rounded bg-black px-3 py-2" rows={4} />
+                  <textarea value={updateBody} onChange={(e) => setUpdateBody(e.target.value)} placeholder="Update details" className="w-full rounded bg-black px-3 py-2" rows={3} />
 
-                  <button onClick={() => void postUpdate()} disabled={postingUpdate} className="rounded bg-red-600 px-4 py-2">
+                  {/* Audience selector */}
+                  <div className="space-y-2">
+                    <div className="text-xs text-gray-500 uppercase tracking-wide">Send to</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(["all", "on_scene", "tasks"] as const).map((a) => (
+                        <button key={a} type="button" onClick={() => setUpdateAudience(a)}
+                          className={`rounded-lg px-3 py-1.5 text-sm ${updateAudience === a ? "bg-red-600 text-white" : "bg-gray-800 text-gray-400"}`}>
+                          {a === "all" ? "All Units" : a === "on_scene" ? "On Scene" : "Specific Tasks"}
+                        </button>
+                      ))}
+                    </div>
+                    {updateAudience === "tasks" && (
+                      <div className="space-y-1">
+                        {incidentTasks.length === 0 ? (
+                          <div className="text-xs text-gray-600">No active tasks for this incident.</div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {incidentTasks.map((t) => {
+                              const sel = selectedTaskIds.includes(t.id);
+                              return (
+                                <button key={t.id} type="button"
+                                  onClick={() => setSelectedTaskIds(sel ? selectedTaskIds.filter((x) => x !== t.id) : [...selectedTaskIds, t.id])}
+                                  className={`rounded-lg px-3 py-1.5 text-sm font-mono ${sel ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`}>
+                                  {t.task_number}{t.description ? ` — ${t.description}` : ""}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <button onClick={() => void postUpdate()} disabled={postingUpdate || (updateAudience === "tasks" && selectedTaskIds.length === 0)} className="rounded bg-red-600 px-4 py-2 disabled:opacity-50">
                     {postingUpdate ? "Posting..." : "Post Update"}
                   </button>
                 </div>
