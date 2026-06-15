@@ -128,6 +128,8 @@ export default function AppBottomNav() {
     setIsAdmin(role === "SAR Manager" || role === "Global Admin");
   }, []);
 
+  if (pathname === "/login") return null;
+
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
     if (href === "/incidents") return pathname === "/incidents" || pathname.startsWith("/incidents/");
@@ -146,13 +148,13 @@ export default function AppBottomNav() {
       )}
 
       {moreOpen && (
-        <div className="fixed bottom-[76px] right-3 z-[110] w-52 rounded-2xl border border-gray-800 bg-gray-950 p-2 shadow-2xl">
+        <div className="fixed bottom-[72px] right-3 z-[110] w-52 rounded-2xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-2xl shadow-black/60">
           {isAdmin && (
             <Link
               href="/admin"
               onClick={() => setMoreOpen(false)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${
-                isActive("/admin") ? "bg-red-950 text-red-300" : "text-gray-300 hover:bg-gray-900"
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                isActive("/admin") ? "bg-red-600/15 text-red-400" : "text-zinc-300 hover:bg-zinc-800"
               }`}
             >
               <IconAdmin />
@@ -164,10 +166,10 @@ export default function AppBottomNav() {
               key={href}
               href={href}
               onClick={() => setMoreOpen(false)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
                 isActive(href)
-                  ? "bg-red-950 text-red-300"
-                  : "text-gray-300 hover:bg-gray-900"
+                  ? "bg-red-600/15 text-red-400"
+                  : "text-zinc-300 hover:bg-zinc-800"
               }`}
             >
               <Icon />
@@ -177,7 +179,7 @@ export default function AppBottomNav() {
         </div>
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 z-[100] border-t border-gray-800 bg-black/95 backdrop-blur supports-[padding:max(0px)]:pb-[max(env(safe-area-inset-bottom),0px)]">
+      <nav className="fixed inset-x-0 bottom-0 z-[100] border-t border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl supports-[padding:max(0px)]:pb-[max(env(safe-area-inset-bottom),0px)]">
         <div className="mx-auto w-full max-w-5xl">
           <div className="grid grid-cols-5">
             {mainItems.map(({ href, label, Icon }) => {
@@ -186,26 +188,28 @@ export default function AppBottomNav() {
                 <Link
                   key={href}
                   href={href}
-                  className={`flex min-h-[68px] flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] transition-colors ${
-                    active ? "text-red-400" : "text-gray-500 hover:text-white"
-                  }`}
+                  className="flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors"
                 >
-                  <Icon />
-                  <span className="truncate">{label}</span>
+                  <div className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${active ? "bg-red-600/15" : ""}`}>
+                    <span className={`transition-colors ${active ? "text-red-400" : "text-zinc-500"}`}>
+                      <Icon />
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-medium transition-colors ${active ? "text-red-400" : "text-zinc-500"}`}>{label}</span>
                 </Link>
               );
             })}
 
             <button
               onClick={() => setMoreOpen((v) => !v)}
-              className={`flex min-h-[68px] flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] transition-colors ${
-                moreActive || moreOpen
-                  ? "text-red-400"
-                  : "text-gray-500 hover:text-white"
-              }`}
+              className="flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors"
             >
-              <IconMore />
-              <span>More</span>
+              <div className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${moreActive || moreOpen ? "bg-red-600/15" : ""}`}>
+                <span className={`transition-colors ${moreActive || moreOpen ? "text-red-400" : "text-zinc-500"}`}>
+                  <IconMore />
+                </span>
+              </div>
+              <span className={`text-[10px] font-medium transition-colors ${moreActive || moreOpen ? "text-red-400" : "text-zinc-500"}`}>More</span>
             </button>
           </div>
         </div>
