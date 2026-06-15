@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "438066123395",
+    "project_id": "matzil-sar",
+    "storage_bucket": "matzil-sar.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:438066123395:android:3b78feab6805628fbc41b6",
+        "android_client_info": {
+          "package_name": "org.matzil.sar"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDWYbrtzkKLGHMCOfmVdyLw-dW2c81xW8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
