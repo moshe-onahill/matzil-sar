@@ -204,31 +204,28 @@ export default function AdminRosterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:px-6">
-      <div className="mx-auto max-w-[1400px] space-y-4">
+    <main className="p-6 lg:p-8">
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-300">← Admin Console</Link>
-            <h1 className="mt-1 text-2xl font-bold">Roster</h1>
-          </div>
+          <h1 className="text-2xl font-bold text-zinc-50">Roster</h1>
           <div className="flex flex-wrap gap-2">
-            <button onClick={exportCsv} className="rounded-lg bg-gray-800 px-4 py-2 text-sm hover:bg-gray-700">
+            <button onClick={exportCsv} className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition">
               Export CSV
             </button>
-            <Link href="/roster/new" className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-500">
+            <Link href="/roster/new" className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 transition">
               + Add Member
             </Link>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(["active", "inactive", "all"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilterActive(f)}
-              className={`rounded-lg px-3 py-1.5 text-sm capitalize ${filterActive === f ? "bg-red-600 text-white" : "bg-gray-800 text-gray-400"}`}
+              className={`rounded-lg px-3 py-1.5 text-sm capitalize transition ${filterActive === f ? "bg-red-600 text-white" : "border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}
             >
               {f}
             </button>
@@ -237,23 +234,21 @@ export default function AdminRosterPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, call sign, email…"
-            className="ml-auto rounded-lg bg-gray-900 px-3 py-1.5 text-sm w-56 outline-none focus:ring-1 focus:ring-red-600"
+            className="ml-auto rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none w-64 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500"
           />
+          <span className="text-sm text-zinc-500">{filtered.length} member{filtered.length !== 1 ? "s" : ""}</span>
         </div>
-
-        {/* Count */}
-        <div className="text-sm text-gray-500">{filtered.length} member{filtered.length !== 1 ? "s" : ""}</div>
 
         {/* Table */}
         {loading ? (
           <div className="animate-pulse space-y-2">
-            {[...Array(6)].map((_, i) => <div key={i} className="h-12 rounded bg-gray-900" />)}
+            {[...Array(6)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-zinc-800" />)}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-gray-800">
+          <div className="overflow-x-auto rounded-xl border border-zinc-800">
             <table className="w-full min-w-[900px] text-sm">
               <thead>
-                <tr className="border-b border-gray-800 bg-gray-900 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr className="border-b border-zinc-800 bg-zinc-900 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Call Sign</th>
                   <th className="px-4 py-3">Email</th>
@@ -264,28 +259,28 @@ export default function AdminRosterPage() {
                   <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/60">
+              <tbody className="divide-y divide-zinc-800/60">
                 {filtered.map((m) =>
                   editingId === m.id && editState ? (
-                    <tr key={m.id} className="bg-gray-800/60">
+                    <tr key={m.id} className="bg-zinc-800/60">
                       <td className="px-3 py-2">
                         <input value={editState.full_name} onChange={(e) => setEditState({ ...editState, full_name: e.target.value })}
-                          className="w-full rounded bg-black px-2 py-1.5 text-sm outline-none" />
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none" />
                       </td>
                       <td className="px-3 py-2">
                         <input value={editState.call_sign} onChange={(e) => setEditState({ ...editState, call_sign: e.target.value })}
-                          className="w-28 rounded bg-black px-2 py-1.5 text-sm outline-none" />
+                          className="w-28 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none" />
                       </td>
-                      <td className="px-3 py-2 text-gray-400">{m.email}</td>
+                      <td className="px-3 py-2 text-zinc-400">{m.email}</td>
                       <td className="px-3 py-2">
                         <input value={editState.phone} onChange={(e) => setEditState({ ...editState, phone: e.target.value })}
-                          className="w-32 rounded bg-black px-2 py-1.5 text-sm outline-none" />
+                          className="w-32 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none" />
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
                           {allRoles.map((r) => (
                             <button key={r.id} onClick={() => toggleRole(r.name)}
-                              className={`rounded px-2 py-0.5 text-xs ${editState.roles.includes(r.name) ? "bg-red-600 text-white" : "bg-gray-700 text-gray-400"}`}>
+                              className={`rounded-md px-2 py-0.5 text-xs transition ${editState.roles.includes(r.name) ? "bg-red-600 text-white" : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"}`}>
                               {r.name}
                             </button>
                           ))}
@@ -295,7 +290,7 @@ export default function AdminRosterPage() {
                         <div className="flex flex-wrap gap-1">
                           {allUnits.map((u) => (
                             <button key={u.id} onClick={() => toggleUnit(u.name)}
-                              className={`rounded px-2 py-0.5 text-xs ${editState.units.includes(u.name) ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-400"}`}>
+                              className={`rounded-md px-2 py-0.5 text-xs transition ${editState.units.includes(u.name) ? "bg-blue-600 text-white" : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"}`}>
                               {u.name}
                             </button>
                           ))}
@@ -304,11 +299,11 @@ export default function AdminRosterPage() {
                       <td className="px-3 py-2">
                         <div className="flex flex-col gap-1">
                           <button onClick={() => setEditState({ ...editState, is_active: !editState.is_active })}
-                            className={`rounded px-2 py-0.5 text-xs ${editState.is_active ? "bg-green-700" : "bg-gray-700"}`}>
+                            className={`rounded-md px-2 py-0.5 text-xs transition ${editState.is_active ? "bg-green-700 text-green-100" : "bg-zinc-700 text-zinc-400"}`}>
                             {editState.is_active ? "Active" : "Inactive"}
                           </button>
                           <button onClick={() => setEditState({ ...editState, is_on_duty: !editState.is_on_duty })}
-                            className={`rounded px-2 py-0.5 text-xs ${editState.is_on_duty ? "bg-blue-700" : "bg-gray-700"}`}>
+                            className={`rounded-md px-2 py-0.5 text-xs transition ${editState.is_on_duty ? "bg-blue-700 text-blue-100" : "bg-zinc-700 text-zinc-400"}`}>
                             {editState.is_on_duty ? "On Duty" : "Off Duty"}
                           </button>
                         </div>
@@ -316,52 +311,52 @@ export default function AdminRosterPage() {
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
                           <button onClick={() => void saveEdit(m)} disabled={saving}
-                            className="rounded bg-green-600 px-3 py-1 text-xs font-medium disabled:opacity-60">
+                            className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 hover:bg-green-500">
                             {saving ? "…" : "Save"}
                           </button>
-                          <button onClick={cancelEdit} className="rounded bg-gray-700 px-3 py-1 text-xs">Cancel</button>
+                          <button onClick={cancelEdit} className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700">Cancel</button>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    <tr key={m.id} className="hover:bg-gray-900/60 transition">
-                      <td className="px-4 py-3 font-medium">{m.full_name ?? <span className="text-gray-600">—</span>}</td>
-                      <td className="px-4 py-3 font-mono text-gray-300">{m.call_sign ?? <span className="text-gray-600">—</span>}</td>
-                      <td className="px-4 py-3 text-gray-400">{m.email}</td>
-                      <td className="px-4 py-3 text-gray-400">{m.phone ?? <span className="text-gray-600">—</span>}</td>
+                    <tr key={m.id} className="hover:bg-zinc-800/40 transition">
+                      <td className="px-4 py-3 font-medium text-zinc-100">{m.full_name ?? <span className="text-zinc-600">—</span>}</td>
+                      <td className="px-4 py-3 font-mono text-zinc-300">{m.call_sign ?? <span className="text-zinc-600">—</span>}</td>
+                      <td className="px-4 py-3 text-zinc-400">{m.email}</td>
+                      <td className="px-4 py-3 text-zinc-400">{m.phone ?? <span className="text-zinc-600">—</span>}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {m.roles.length ? m.roles.map((r) => (
-                            <span key={r} className="rounded bg-red-950/60 px-2 py-0.5 text-xs text-red-300">{r}</span>
-                          )) : <span className="text-gray-600">—</span>}
+                            <span key={r} className="rounded-md bg-red-950/60 px-2 py-0.5 text-xs text-red-300">{r}</span>
+                          )) : <span className="text-zinc-600">—</span>}
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {m.units.length ? m.units.map((u) => (
-                            <span key={u} className="rounded bg-blue-950/60 px-2 py-0.5 text-xs text-blue-300">{u}</span>
-                          )) : <span className="text-gray-600">—</span>}
+                            <span key={u} className="rounded-md bg-blue-950/60 px-2 py-0.5 text-xs text-blue-300">{u}</span>
+                          )) : <span className="text-zinc-600">—</span>}
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
-                          <span className={`text-xs ${m.is_active !== false ? "text-green-400" : "text-gray-600"}`}>
+                          <span className={`text-xs font-medium ${m.is_active !== false ? "text-green-400" : "text-zinc-600"}`}>
                             {m.is_active !== false ? "Active" : "Inactive"}
                           </span>
-                          <span className={`text-xs ${m.is_on_duty !== false ? "text-blue-400" : "text-gray-600"}`}>
+                          <span className={`text-xs ${m.is_on_duty !== false ? "text-blue-400" : "text-zinc-600"}`}>
                             {m.is_on_duty !== false ? "On Duty" : "Off Duty"}
                           </span>
-                          {m.is_invited && <span className="text-xs text-yellow-600">Invited</span>}
+                          {m.is_invited && <span className="text-xs text-yellow-500">Invited</span>}
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
                           <button onClick={() => startEdit(m)}
-                            className="rounded bg-gray-700 px-3 py-1 text-xs hover:bg-gray-600">
+                            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
                             Edit
                           </button>
                           <button onClick={() => void sendInvite(m)}
-                            className="rounded bg-blue-900/60 px-3 py-1 text-xs text-blue-300 hover:bg-blue-900">
+                            className="rounded-lg border border-blue-800 bg-blue-950/40 px-3 py-1.5 text-xs text-blue-300 hover:bg-blue-950 transition">
                             Invite
                           </button>
                         </div>
@@ -371,7 +366,7 @@ export default function AdminRosterPage() {
                 )}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-600">No members found.</td>
+                    <td colSpan={8} className="px-4 py-12 text-center text-zinc-600">No members found.</td>
                   </tr>
                 )}
               </tbody>

@@ -200,13 +200,13 @@ export default function AdminUnitsPage() {
   }, [rows, search, filterStatus]);
 
   return (
-    <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:px-6">
-      <div className="mx-auto max-w-[1400px] space-y-4">
+    <main className="p-6 lg:p-8">
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-300">← Admin Console</Link>
-            <h1 className="mt-1 text-2xl font-bold">Responding Units</h1>
+            
+            <h1 className="text-2xl font-bold text-zinc-50">Responding Units</h1>
             <p className="text-sm text-gray-500">Live — refreshes every 15s</p>
           </div>
           <div className="flex gap-2">

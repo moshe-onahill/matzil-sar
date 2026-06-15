@@ -171,7 +171,7 @@ export default function IncidentCoordinationPage() {
   }
 
   if (!incident) {
-    return <main className="min-h-screen bg-black p-6 text-white">Incident not found.</main>;
+    return <main className="p-6"><p className="text-zinc-500">Incident not found.</p></main>;
   }
 
   // Units not yet assigned to this specific task
@@ -181,7 +181,7 @@ export default function IncidentCoordinationPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:px-6">
+    <main className="p-6 lg:p-8">
       <div className="mx-auto max-w-4xl space-y-5">
 
         {/* Header */}
@@ -195,7 +195,7 @@ export default function IncidentCoordinationPage() {
                   {incident.status}
                 </span>
               </div>
-              <h1 className="text-2xl font-bold">{incident.title}</h1>
+              <h1 className="text-2xl font-bold text-zinc-50">{incident.title}</h1>
               <p className="text-sm text-gray-500">{incident.type}</p>
             </div>
             <Link href={`/incidents/${incident.id}`}

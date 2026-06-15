@@ -33,12 +33,12 @@ export default function AdminIncidentsPage() {
   useEffect(() => { void load(); }, [filter]);
 
   return (
-    <main className="min-h-screen bg-black px-4 py-5 pb-28 text-white sm:px-6">
+    <main className="p-6 lg:p-8">
       <div className="mx-auto max-w-3xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Link href="/admin" className="text-sm text-gray-500 hover:text-gray-300">← Admin Console</Link>
-            <h1 className="mt-1 text-2xl font-bold">Incident Coordination</h1>
+            
+            <h1 className="text-2xl font-bold text-zinc-50">Incident Coordination</h1>
           </div>
           <div className="flex gap-2">
             {(["Active", "All"] as const).map((f) => (
