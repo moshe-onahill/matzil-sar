@@ -17,7 +17,8 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
     if (error) { toast(error.message, "error"); return; }
-    window.location.href = "/";
+    // Session is now in cookies — middleware will redirect /login → / on next navigation
+    window.location.replace("/");
   }
 
   async function loginWithGoogle() {
