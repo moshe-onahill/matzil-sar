@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const LAST_INCIDENT_KEY = "admin-last-incident";
@@ -18,10 +17,10 @@ type Incident = {
 };
 
 export default function AdminIncidentsPage() {
-  const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"Active" | "All">("Active");
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => { void load(); }, [filter]);
 
@@ -31,22 +30,34 @@ export default function AdminIncidentsPage() {
     if (filter === "Active") q = q.eq("status", "Active");
     const { data } = await q;
     const rows = (data as Incident[]) ?? [];
-    setIncidents(rows);
-    setLoading(false);
 
     const active = rows.filter((i) => i.status === "Active");
 
     // Auto-nav: only one active → go straight to it
-    if (active.length === 1) {
-      router.replace(`/admin/incidents/${active[0].id}`);
+    if (filter === "Active" && active.length === 1) {
+      setRedirecting(true);
+      window.location.replace(`/admin/incidents/${active[0].id}`);
       return;
     }
 
     // Resume last visited incident if it's still in the list
     const lastId = sessionStorage.getItem(LAST_INCIDENT_KEY);
-    if (lastId && rows.some((i) => i.id === lastId)) {
-      router.replace(`/admin/incidents/${lastId}`);
+    if (filter === "Active" && lastId && rows.some((i) => i.id === lastId)) {
+      setRedirecting(true);
+      window.location.replace(`/admin/incidents/${lastId}`);
+      return;
     }
+
+    setIncidents(rows);
+    setLoading(false);
+  }
+
+  if (redirecting || loading) {
+    return (
+      <main className="p-6 lg:p-8 flex items-center justify-center min-h-64">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-red-500" />
+      </main>
+    );
   }
 
   return (
@@ -64,11 +75,7 @@ export default function AdminIncidentsPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="animate-pulse space-y-2">
-            {[...Array(3)].map((_, i) => <div key={i} className="h-20 rounded-xl bg-zinc-800" />)}
-          </div>
-        ) : incidents.length === 0 ? (
+        {incidents.length === 0 ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center text-zinc-500">
             No {filter === "Active" ? "active " : ""}incidents.
           </div>
