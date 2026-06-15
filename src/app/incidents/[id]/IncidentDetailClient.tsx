@@ -258,13 +258,20 @@ export default function IncidentDetailClient() {
     window.location.href = "/incidents";
   }
 
-  function stopTracking() {
+  function stopTracking(deleteLocation = false) {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
     lastPositionRef.current = null;
     setLiveEta(null);
+    if (deleteLocation && currentUserId) {
+      void fetch("/api/location", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: currentUserId }),
+      });
+    }
   }
 
   function startTracking(stagingLat: number, stagingLng: number, userId: string, incId: string) {
@@ -325,7 +332,7 @@ export default function IncidentDetailClient() {
   }
 
   // Stop tracking when user leaves the page
-  useEffect(() => () => stopTracking(), []);
+  useEffect(() => () => stopTracking(watchIdRef.current !== null), []);
 
   async function respondToIncident(
     type: "Responding" | "Not Available" | "Available At" | "Cancelled",
@@ -361,7 +368,7 @@ export default function IncidentDetailClient() {
         etaMinutes = 20;
       }
     } else {
-      stopTracking();
+      stopTracking(true);
     }
 
     const { error } = await supabase.from("incident_responses").upsert(
