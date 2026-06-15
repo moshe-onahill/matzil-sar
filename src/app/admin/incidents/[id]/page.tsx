@@ -14,6 +14,8 @@ type Task = {
   id: string;
   task_number: string;
   description: string | null;
+  job_type: string | null;
+  color: string | null;
   status: string;
   task_lead_id: string | null;
   task_lead?: User | null;
@@ -33,6 +35,25 @@ type Incident = {
   staging_lng: number | null;
 };
 
+const JOB_TYPES = [
+  "Search Grid", "Rescue", "Evacuation", "Medical", "Cameras",
+  "Drone", "Logistics", "Command", "Support", "Perimeter",
+];
+
+const COLOR_DOT: Record<string, string> = {
+  red: "bg-red-500", orange: "bg-orange-500", yellow: "bg-yellow-400",
+  green: "bg-green-500", blue: "bg-blue-500", purple: "bg-purple-500",
+  teal: "bg-teal-500", gray: "bg-zinc-500",
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  Pending:   "bg-zinc-700/60 text-zinc-400",
+  Active:    "bg-green-800/60 text-green-300",
+  Staging:   "bg-blue-800/60 text-blue-300",
+  Cancelled: "bg-red-900/60 text-red-400",
+  Completed: "bg-zinc-800/60 text-zinc-500",
+};
+
 const INCIDENT_TYPES = [
   "Search and Rescue", "Medical", "Evacuation", "Technical Rescue",
   "Water Rescue", "Swift Water Rescue", "Lost Person", "Training Exercise", "Other",
@@ -50,11 +71,6 @@ async function taskApi(body: object) {
   return data;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  Active: "bg-green-900/60 text-green-300 border-green-800",
-  Completed: "bg-gray-800 text-gray-400 border-gray-700",
-  Suspended: "bg-yellow-900/60 text-yellow-300 border-yellow-800",
-};
 
 type ActiveTab = "coordination" | "edit" | "updates";
 
@@ -73,10 +89,8 @@ export default function IncidentCoordinationPage() {
 
   // New task form
   const [newDesc, setNewDesc] = useState("");
+  const [newJobType, setNewJobType] = useState("");
   const [creating, setCreating] = useState(false);
-
-  // Unit assignment panel
-  const [assigningTask, setAssigningTask] = useState<string | null>(null);
 
   // Edit form state
   const [editTitle, setEditTitle] = useState("");
@@ -122,7 +136,7 @@ export default function IncidentCoordinationPage() {
         "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng"
       ).eq("id", id).single(),
       supabase.from("incident_tasks").select(`
-        id, task_number, description, status, task_lead_id,
+        id, task_number, description, job_type, color, status, task_lead_id,
         task_lead:users!incident_tasks_task_lead_id_fkey ( id, full_name, call_sign ),
         assignments:task_assignments ( user_id, user:users ( id, full_name, call_sign ) )
       `).eq("incident_id", id).order("task_number"),
@@ -253,38 +267,18 @@ export default function IncidentCoordinationPage() {
     if (!id) return;
     setCreating(true);
     try {
-      await taskApi({ action: "create_task", incident_id: id, task_number: nextTaskNumber(), description: newDesc.trim() || null });
+      await taskApi({
+        action: "create_task", incident_id: id,
+        task_number: nextTaskNumber(),
+        description: newDesc.trim() || null,
+        job_type: newJobType || null,
+      });
       setNewDesc("");
+      setNewJobType("");
       toast("Task created.", "success");
       await loadAll();
     } catch (e: any) { toast(e.message, "error"); }
     setCreating(false);
-  }
-
-  async function assignUnit(taskId: string, userId: string) {
-    try { await taskApi({ action: "assign_unit", task_id: taskId, user_id: userId }); await loadAll(); }
-    catch (e: any) { toast(e.message, "error"); }
-  }
-
-  async function removeUnit(taskId: string, userId: string) {
-    try { await taskApi({ action: "remove_unit", task_id: taskId, user_id: userId }); await loadAll(); }
-    catch (e: any) { toast(e.message, "error"); }
-  }
-
-  async function setLead(taskId: string, userId: string | null) {
-    try { await taskApi({ action: "set_lead", task_id: taskId, user_id: userId }); toast("Lead updated.", "success"); await loadAll(); }
-    catch (e: any) { toast(e.message, "error"); }
-  }
-
-  async function setStatus(taskId: string, status: string) {
-    try { await taskApi({ action: "set_status", task_id: taskId, status }); await loadAll(); }
-    catch (e: any) { toast(e.message, "error"); }
-  }
-
-  async function deleteTask(taskId: string, label: string) {
-    if (!window.confirm(`Delete ${label}?`)) return;
-    try { await taskApi({ action: "delete_task", task_id: taskId }); toast("Task deleted.", "success"); await loadAll(); }
-    catch (e: any) { toast(e.message, "error"); }
   }
 
   if (loading) {
@@ -297,11 +291,6 @@ export default function IncidentCoordinationPage() {
 
   if (!incident) {
     return <main className="p-6"><p className="text-zinc-500">Incident not found.</p></main>;
-  }
-
-  function unassigned(task: Task) {
-    const assigned = new Set(task.assignments.map((a) => a.user_id));
-    return onScene.filter((u) => !assigned.has(u.id));
   }
 
   const TABS: { id: ActiveTab; label: string }[] = [
@@ -381,109 +370,57 @@ export default function IncidentCoordinationPage() {
             {/* Create task */}
             <section className="rounded-xl bg-gray-900 p-4 space-y-3">
               <div className="font-semibold">Create Task</div>
+              <div className="flex flex-wrap gap-1.5">
+                {JOB_TYPES.map((j) => (
+                  <button key={j} onClick={() => setNewJobType(newJobType === j ? "" : j)}
+                    className={`rounded-lg px-3 py-1 text-sm transition ${newJobType === j ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+                    {j}
+                  </button>
+                ))}
+              </div>
               <div className="flex gap-2">
                 <div className="flex items-center rounded-lg bg-black px-3 py-2 text-sm font-mono text-gray-400 shrink-0">
                   {nextTaskNumber()}
                 </div>
                 <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void createTask()}
-                  placeholder="Task description (optional)"
+                  placeholder={newJobType ? `${newJobType} — additional details` : "Task description (optional)"}
                   className="flex-1 rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                 <button onClick={() => void createTask()} disabled={creating}
                   className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-60 hover:bg-red-500 shrink-0">
-                  {creating ? "…" : "Add Task"}
+                  {creating ? "…" : "Add"}
                 </button>
               </div>
             </section>
 
-            {/* Task board */}
+            {/* Task board — compact cards */}
             {tasks.length === 0 ? (
-              <div className="rounded-xl bg-gray-900 p-8 text-center text-gray-600">No tasks yet. Create the first one above.</div>
+              <div className="rounded-xl bg-gray-900 p-8 text-center text-gray-600">No tasks yet.</div>
             ) : (
-              <div className="space-y-3">
-                {tasks.map((task) => (
-                  <div key={task.id} className={`rounded-xl border p-4 space-y-3 ${STATUS_COLORS[task.status] ?? "border-gray-800 bg-gray-900"}`}>
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg font-bold font-mono">{task.task_number}</span>
-                        {task.description && <span className="text-sm text-gray-300">{task.description}</span>}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 items-center">
-                        {(["Active", "Suspended", "Completed"] as const).map((s) => (
-                          <button key={s} onClick={() => void setStatus(task.id, s)}
-                            className={`rounded px-2.5 py-1 text-xs font-medium transition ${task.status === s ? "bg-white/20 text-white" : "bg-black/20 text-gray-400 hover:bg-white/10"}`}>
-                            {s}
-                          </button>
-                        ))}
-                        <button onClick={() => void deleteTask(task.id, task.task_number)}
-                          className="rounded px-2.5 py-1 text-xs text-red-400 hover:bg-red-950/60">
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Task Lead</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {task.assignments.length === 0 ? (
-                          <span className="text-sm text-gray-600">Assign units first</span>
-                        ) : (
-                          task.assignments.map((a) => (
-                            <button key={a.user_id} onClick={() => void setLead(task.id, task.task_lead_id === a.user_id ? null : a.user_id)}
-                              className={`rounded-lg px-3 py-1 text-sm transition ${task.task_lead_id === a.user_id ? "bg-yellow-600 text-white font-semibold" : "bg-black/30 text-gray-300 hover:bg-yellow-900/40"}`}>
-                              {task.task_lead_id === a.user_id ? "★ " : ""}{a.user?.call_sign ?? a.user?.full_name ?? "?"}
-                            </button>
-                          ))
+              <div className="space-y-2">
+                {tasks.map((task) => {
+                  const dot = task.color ? COLOR_DOT[task.color] : null;
+                  const lead = task.task_lead;
+                  const label = task.job_type ?? task.description ?? "";
+                  return (
+                    <Link key={task.id} href={`/admin/incidents/${id}/tasks/${task.id}`}
+                      className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 hover:bg-zinc-800 transition">
+                      {dot && <div className={`h-3 w-3 rounded-full shrink-0 ${dot}`} />}
+                      <span className="font-mono font-bold text-zinc-200 shrink-0">{task.task_number}</span>
+                      {label && <span className="text-sm text-zinc-400 truncate">{label}</span>}
+                      <div className="ml-auto flex items-center gap-2 shrink-0">
+                        {lead && (
+                          <span className="text-xs text-yellow-500 font-mono">★ {lead.call_sign ?? lead.full_name}</span>
                         )}
+                        <span className="text-xs text-zinc-500">{task.assignments.length} unit{task.assignments.length !== 1 ? "s" : ""}</span>
+                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[task.status] ?? "bg-zinc-800 text-zinc-500"}`}>
+                          {task.status}
+                        </span>
+                        <span className="text-zinc-600 text-sm">→</span>
                       </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        Assigned Units ({task.assignments.length})
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {task.assignments.map((a) => (
-                          <div key={a.user_id} className="flex items-center gap-1 rounded-lg bg-black/30 pl-3 pr-1 py-1 text-sm">
-                            <span className="font-mono">{a.user?.call_sign ?? a.user?.full_name ?? "?"}</span>
-                            {task.task_lead_id === a.user_id && <span className="text-yellow-400 text-xs ml-1">Lead</span>}
-                            <button onClick={() => void removeUnit(task.id, a.user_id)}
-                              className="ml-1 rounded px-1.5 text-gray-500 hover:text-red-400">×</button>
-                          </div>
-                        ))}
-                        {task.assignments.length === 0 && (
-                          <span className="text-sm text-gray-600">No units assigned</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      {assigningTask === task.id ? (
-                        <div className="space-y-2">
-                          <div className="text-xs text-gray-500">Tap a unit to assign:</div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {unassigned(task).map((u) => (
-                              <button key={u.id} onClick={async () => { await assignUnit(task.id, u.id); }}
-                                className={`rounded-lg border px-3 py-1.5 text-sm transition hover:bg-green-900/40 ${u.response_type === "On Location" ? "border-green-800 text-green-300" : "border-gray-700 text-gray-300"}`}>
-                                {u.call_sign ?? u.full_name ?? "?"}{" "}
-                                <span className="text-xs opacity-60">{u.response_type === "On Location" ? "On Scene" : "En Route"}</span>
-                              </button>
-                            ))}
-                            {unassigned(task).length === 0 && (
-                              <span className="text-sm text-gray-600">All available units are assigned.</span>
-                            )}
-                          </div>
-                          <button onClick={() => setAssigningTask(null)} className="text-xs text-gray-500 hover:text-gray-300">Done</button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setAssigningTask(task.id)}
-                          className="rounded-lg bg-black/30 px-3 py-1.5 text-sm text-gray-400 hover:bg-black/60 hover:text-white">
-                          + Assign Unit
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>
