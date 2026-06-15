@@ -99,11 +99,11 @@ export default function AdminUnitsPage() {
   }
 
   function exportCsv() {
-    const cols = ["Name", "Call Sign", "Phone", "Incident #", "Incident", "Status", "ETA (min)", "Has GPS", "Lat", "Lng", "GPS Age (min)", "Responded At"];
+    const cols = ["Name", "Call Sign", "Phone", "Incident #", "Incident", "Status", "ETA", "Has GPS", "Lat", "Lng", "GPS Age (min)", "Responded At"];
     const data = filtered.map((r) => [
       r.full_name, r.call_sign, r.phone,
       r.incident_number, r.incident_title, r.response_type,
-      r.eta_minutes ?? "",
+      r.eta_minutes != null ? new Date(new Date(r.responded_at).getTime() + r.eta_minutes * 60_000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
       r.has_location ? "Yes" : "No",
       r.lat ?? "", r.lng ?? "",
       r.location_age_min ?? "",
@@ -211,7 +211,10 @@ export default function AdminUnitsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-300">
-                      {r.eta_minutes != null ? `${r.eta_minutes} min` : <span className="text-gray-600">—</span>}
+                      {r.eta_minutes != null ? (() => {
+                        const arrival = new Date(new Date(r.responded_at).getTime() + r.eta_minutes * 60_000);
+                        return arrival.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                      })() : <span className="text-gray-600">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       {r.has_location ? (
