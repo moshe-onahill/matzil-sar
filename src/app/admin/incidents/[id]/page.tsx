@@ -57,6 +57,7 @@ export default function IncidentCoordinationPage() {
 
   useEffect(() => {
     if (!id) return;
+    sessionStorage.setItem("admin-last-incident", id);
     void loadAll();
     pollRef.current = setInterval(() => void loadAll(), 20_000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
