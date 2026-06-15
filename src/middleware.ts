@@ -5,17 +5,17 @@ import type { NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public assets and Next internals
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
+    pathname.startsWith("/auth") ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/favicon.ico"
   ) {
     return NextResponse.next();
   }
 
-  const response = NextResponse.next({
+  let response = NextResponse.next({
     request: { headers: request.headers },
   });
 
@@ -29,6 +29,8 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+            response = NextResponse.next({ request: { headers: request.headers } });
             response.cookies.set(name, value, options);
           });
         },
@@ -36,15 +38,15 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
 
-  // Not logged in → send to /login
-  if (!user && pathname !== "/login") {
+  const isLoginPage = pathname === "/login";
+
+  if (!session && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Already logged in → don't show login page
-  if (user && pathname === "/login") {
+  if (session && isLoginPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
