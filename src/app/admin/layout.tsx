@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   {
-    href: "/admin",
+    href: "/admin/dashboard",
     label: "Dashboard",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
@@ -59,7 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   function isActive(href: string) {
-    if (href === "/admin") return pathname === "/admin";
+    if (href === "/admin/dashboard") return pathname === "/admin/dashboard" || pathname.endsWith("/dashboard");
     return pathname === href || pathname.startsWith(href + "/");
   }
 
