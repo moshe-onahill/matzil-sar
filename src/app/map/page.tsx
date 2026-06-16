@@ -242,6 +242,15 @@ export default function MapPage() {
     mapRef.current.setView([focus.lat, focus.lng], 14);
   }, [focus]);
 
+  useEffect(() => {
+    if (!mapRef.current) return;
+    // Wait for the browser to paint the new layout before telling Leaflet about the resize
+    const raf = requestAnimationFrame(() => {
+      setTimeout(() => mapRef.current?.invalidateSize(), 50);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [fullscreen]);
+
   async function ensureLeafletAndInit() {
     if (typeof window === "undefined") return;
 
@@ -864,7 +873,7 @@ export default function MapPage() {
             <div className={fullscreen ? "fixed inset-0 z-50 flex flex-col bg-black" : "overflow-hidden rounded-xl bg-gray-900"}>
               <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
                 <span className="text-lg font-semibold">Operations Map</span>
-                <button onClick={() => { setFullscreen((v) => !v); setTimeout(() => mapRef.current?.invalidateSize(), 100); }}
+                <button onClick={() => setFullscreen((v) => !v)}
                   className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
                   {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
                 </button>
