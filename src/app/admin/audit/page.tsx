@@ -29,6 +29,9 @@ const ACTION_LABELS: Record<string, string> = {
   edit_task: "Edited task",
   add_cert: "Added certification",
   remove_cert: "Removed certification",
+  send_alert: "Sent alert",
+  create_task: "Created task",
+  post_event_update: "Posted event update",
 };
 
 const ACTION_COLORS: Record<string, string> = {

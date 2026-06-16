@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import { logAudit } from "@/lib/audit";
 
 type EventRow = {
   id: string;
@@ -32,6 +33,27 @@ type AttendanceRow = {
 };
 
 type AllUser = { id: string; full_name: string | null; call_sign: string | null };
+
+type EventTask = {
+  id: string;
+  task_number: string;
+  description: string | null;
+  status: string;
+  assignee_id: string | null;
+  assignee?: { full_name: string | null; call_sign: string | null } | null;
+  created_at: string;
+};
+
+type EventUpdate = {
+  id: string;
+  update_type: string;
+  title: string;
+  body: string | null;
+  created_at: string;
+};
+
+const TASK_STATUSES = ["Pending", "Active", "Completed", "Cancelled"];
+const UPDATE_TYPES = ["General Update", "Operational Update", "Safety Alert", "Resource Request", "Situation Report"];
 
 function fmtDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString([], {
@@ -64,25 +86,43 @@ export default function AdminEventDetailPage() {
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [allUsers, setAllUsers] = useState<AllUser[]>([]);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+  const [tasks, setTasks] = useState<EventTask[]>([]);
+  const [updates, setUpdates] = useState<EventUpdate[]>([]);
+  const [tab, setTab] = useState<"attendance" | "tasks" | "updates" | "invites">("attendance");
   const [userSearch, setUserSearch] = useState("");
   const [searchResults, setSearchResults] = useState<AllUser[]>([]);
   const [loading, setLoading] = useState(true);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Task form
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [savingTask, setSavingTask] = useState(false);
+
+  // Update form
+  const [newUpdateType, setNewUpdateType] = useState("General Update");
+  const [newUpdateTitle, setNewUpdateTitle] = useState("");
+  const [newUpdateBody, setNewUpdateBody] = useState("");
+  const [savingUpdate, setSavingUpdate] = useState(false);
+
   useEffect(() => {
     void loadAll();
     const channel = supabase
-      .channel(`event-attendance-${id}`)
+      .channel(`event-detail-${id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "event_attendance" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_tasks" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_updates" }, () => void loadAll())
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [id]);
 
   async function loadAll() {
-    const [eventRes, attRes, invRes] = await Promise.all([
+    const [eventRes, attRes, invRes, usersRes, tasksRes, updatesRes] = await Promise.all([
       supabase.from("events").select("id,title,event_date,start_time,end_time,location_name,address,event_type,notes,status").eq("id", id).single(),
       supabase.from("event_attendance").select("id,user_id,signed_in_at,signed_out_at,sign_in_lat,sign_in_lng,sign_out_lat,sign_out_lng,user:users(full_name,call_sign)").eq("event_id", id).order("signed_in_at"),
       supabase.from("event_invites").select("user_id").eq("event_id", id),
+      supabase.from("users").select("id,full_name,call_sign").order("call_sign"),
+      supabase.from("event_tasks").select("id,task_number,description,status,assignee_id,created_at,assignee:users(full_name,call_sign)").eq("event_id", id).order("task_number"),
+      supabase.from("event_updates").select("id,update_type,title,body,created_at").eq("event_id", id).order("created_at", { ascending: false }),
     ]);
 
     setEvent(eventRes.data as EventRow);
@@ -91,6 +131,12 @@ export default function AdminEventDetailPage() {
       user: Array.isArray(r.user) ? r.user[0] ?? null : r.user,
     })));
     setInvitedIds(new Set((invRes.data ?? []).map((r: any) => r.user_id)));
+    setAllUsers((usersRes.data ?? []) as AllUser[]);
+    setTasks(((tasksRes.data ?? []) as any[]).map((r) => ({
+      ...r,
+      assignee: Array.isArray(r.assignee) ? r.assignee[0] ?? null : r.assignee,
+    })));
+    setUpdates((updatesRes.data ?? []) as EventUpdate[]);
     setLoading(false);
   }
 
@@ -123,6 +169,55 @@ export default function AdminEventDetailPage() {
     });
     if (!res.ok) toast("Failed to update invites.", "error");
     else toast(next.has(userId) ? "Invited." : "Removed.", "success");
+  }
+
+  async function addTask() {
+    if (!newTaskDesc.trim()) return;
+    setSavingTask(true);
+    const taskNumber = `T${String(tasks.length + 1).padStart(3, "0")}`;
+    const { error } = await supabase.from("event_tasks").insert({
+      event_id: id,
+      task_number: taskNumber,
+      description: newTaskDesc.trim(),
+      status: "Pending",
+    });
+    if (error) toast(error.message, "error");
+    else {
+      setNewTaskDesc("");
+      void logAudit({ action: "create_task", entity_type: "event", entity_id: id, entity_label: event?.title, details: { task_number: taskNumber } });
+    }
+    setSavingTask(false);
+  }
+
+  async function setTaskStatus(taskId: string, status: string) {
+    await supabase.from("event_tasks").update({ status }).eq("id", taskId);
+  }
+
+  async function deleteTask(taskId: string) {
+    const { error } = await supabase.from("event_tasks").delete().eq("id", taskId);
+    if (error) toast(error.message, "error");
+  }
+
+  async function addUpdate() {
+    if (!newUpdateTitle.trim()) return;
+    setSavingUpdate(true);
+    const { error } = await supabase.from("event_updates").insert({
+      event_id: id,
+      update_type: newUpdateType,
+      title: newUpdateTitle.trim(),
+      body: newUpdateBody.trim() || null,
+    });
+    if (error) toast(error.message, "error");
+    else {
+      setNewUpdateTitle("");
+      setNewUpdateBody("");
+      void logAudit({ action: "post_event_update", entity_type: "event", entity_id: id, entity_label: event?.title });
+    }
+    setSavingUpdate(false);
+  }
+
+  async function deleteUpdate(updateId: string) {
+    await supabase.from("event_updates").delete().eq("id", updateId);
   }
 
   function exportICS() {
@@ -166,6 +261,13 @@ export default function AdminEventDetailPage() {
   const presentCount = attendance.filter((a) => a.signed_in_at && !a.signed_out_at).length;
   const totalCount = attendance.length;
 
+  const TABS = [
+    { key: "attendance", label: `Attendance (${totalCount})` },
+    { key: "tasks", label: `Tasks (${tasks.length})` },
+    { key: "updates", label: `Updates (${updates.length})` },
+    { key: "invites", label: `Invites (${invitedIds.size})` },
+  ] as const;
+
   return (
     <main className="p-6 lg:p-8">
       <div className="mx-auto max-w-3xl space-y-5">
@@ -177,15 +279,10 @@ export default function AdminEventDetailPage() {
               <h1 className="text-2xl font-bold text-zinc-50">{event.title}</h1>
               <p className="text-sm text-zinc-400 mt-0.5">{event.event_type} · {event.status ?? "Scheduled"}</p>
             </div>
-            <div className="flex gap-2">
-              <button onClick={exportICS}
-                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700">
-                Export ICS
-              </button>
-              <Link href={`/admin/events`} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700">
-                Edit ↗
-              </Link>
-            </div>
+            <button onClick={exportICS}
+              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700">
+              Export ICS
+            </button>
           </div>
         </div>
 
@@ -220,85 +317,239 @@ export default function AdminEventDetailPage() {
           )}
         </section>
 
-        {/* Attendance log */}
-        <section className="rounded-xl bg-zinc-900 p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold text-zinc-100">Attendance Log</div>
-            <div className="text-sm text-zinc-500">{presentCount} present · {totalCount} total</div>
-          </div>
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-zinc-800">
+          {TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
+                tab === key
+                  ? "border-red-500 text-zinc-100"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-          {attendance.length === 0 ? (
-            <p className="text-sm text-zinc-600">No sign-ins yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-zinc-600 border-b border-zinc-800">
-                    <th className="pb-2 pr-4 font-medium">Member</th>
-                    <th className="pb-2 pr-4 font-medium">Sign In</th>
-                    <th className="pb-2 pr-4 font-medium">Sign Out</th>
-                    <th className="pb-2 pr-4 font-medium">Location</th>
-                    <th className="pb-2 font-medium"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800">
-                  {attendance.map((a) => (
-                    <tr key={a.id}>
-                      <td className="py-2.5 pr-4 font-mono text-zinc-200">
-                        {a.user?.call_sign ?? a.user?.full_name ?? "—"}
-                      </td>
-                      <td className="py-2.5 pr-4 text-green-400">{fmtTs(a.signed_in_at)}</td>
-                      <td className="py-2.5 pr-4 text-zinc-400">{fmtTs(a.signed_out_at)}</td>
-                      <td className="py-2.5 pr-4">
-                        {coordLink(a.sign_in_lat, a.sign_in_lng) ? (
-                          <a href={coordLink(a.sign_in_lat, a.sign_in_lng)!} target="_blank" rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:underline">Map ↗</a>
-                        ) : <span className="text-zinc-700">—</span>}
-                      </td>
-                      <td className="py-2.5">
-                        <button
-                          onClick={() => void deleteAttendance(a.id)}
-                          className="text-xs text-zinc-600 hover:text-red-400 transition"
-                          title="Delete log — lets member sign in/out again">
-                          Delete
-                        </button>
-                      </td>
+        {/* Attendance tab */}
+        {tab === "attendance" && (
+          <section className="rounded-xl bg-zinc-900 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold text-zinc-100">Attendance Log</div>
+              <div className="text-sm text-zinc-500">{presentCount} present · {totalCount} total</div>
+            </div>
+            {attendance.length === 0 ? (
+              <p className="text-sm text-zinc-600">No sign-ins yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-zinc-600 border-b border-zinc-800">
+                      <th className="pb-2 pr-4 font-medium">Member</th>
+                      <th className="pb-2 pr-4 font-medium">Sign In</th>
+                      <th className="pb-2 pr-4 font-medium">Sign Out</th>
+                      <th className="pb-2 pr-4 font-medium">Location</th>
+                      <th className="pb-2 font-medium"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800">
+                    {attendance.map((a) => (
+                      <tr key={a.id}>
+                        <td className="py-2.5 pr-4 font-mono text-zinc-200">
+                          {a.user?.call_sign ?? a.user?.full_name ?? "—"}
+                        </td>
+                        <td className="py-2.5 pr-4 text-green-400">{fmtTs(a.signed_in_at)}</td>
+                        <td className="py-2.5 pr-4 text-zinc-400">{fmtTs(a.signed_out_at)}</td>
+                        <td className="py-2.5 pr-4">
+                          {coordLink(a.sign_in_lat, a.sign_in_lng) ? (
+                            <a href={coordLink(a.sign_in_lat, a.sign_in_lng)!} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-blue-400 hover:underline">Map ↗</a>
+                          ) : <span className="text-zinc-700">—</span>}
+                        </td>
+                        <td className="py-2.5">
+                          <button
+                            onClick={() => void deleteAttendance(a.id)}
+                            className="text-xs text-zinc-600 hover:text-red-400 transition"
+                            title="Delete log — lets member sign in/out again">
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
 
-        {/* Invites / unit management */}
-        <section className="rounded-xl bg-zinc-900 p-5 space-y-3">
-          <div className="font-semibold text-zinc-100">Invited Units</div>
-          <p className="text-xs text-zinc-500">Members you invite will see this event highlighted. Search to add.</p>
-
-          <div className="relative">
-            <input value={userSearch} onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search by name or call sign…"
-              className="w-full rounded-lg bg-black px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-red-600" />
-          </div>
-
-          {searchResults.length > 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800 divide-y divide-zinc-700 overflow-hidden">
-              {searchResults.map((u) => (
-                <button key={u.id} onClick={() => void toggleInvite(u.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-700 transition">
-                  <span className={`h-4 w-4 rounded border-2 shrink-0 ${invitedIds.has(u.id) ? "bg-red-600 border-red-600" : "border-zinc-600"}`} />
-                  <span className="font-mono text-sm text-zinc-100">{u.call_sign ?? "—"}</span>
-                  <span className="text-sm text-zinc-400">{u.full_name}</span>
+        {/* Tasks tab */}
+        {tab === "tasks" && (
+          <section className="space-y-4">
+            <div className="rounded-xl bg-zinc-900 p-5 space-y-3">
+              <div className="font-semibold text-zinc-100">Add Task</div>
+              <div className="flex gap-2">
+                <input
+                  value={newTaskDesc}
+                  onChange={(e) => setNewTaskDesc(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void addTask()}
+                  placeholder="Task description…"
+                  className="flex-1 rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-red-600 placeholder-zinc-600"
+                />
+                <button
+                  onClick={() => void addTask()}
+                  disabled={savingTask || !newTaskDesc.trim()}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition"
+                >
+                  Add
                 </button>
-              ))}
+              </div>
             </div>
-          )}
 
-          {invitedIds.size > 0 && (
-            <div className="text-xs text-zinc-500">{invitedIds.size} unit{invitedIds.size !== 1 ? "s" : ""} invited</div>
-          )}
-        </section>
+            {tasks.length === 0 ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-10 text-center text-zinc-600 text-sm">
+                No tasks yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {tasks.map((task) => (
+                  <div key={task.id} className="rounded-xl bg-zinc-900 p-4 flex items-start gap-3">
+                    <span className="font-mono text-xs text-zinc-500 mt-0.5 shrink-0">{task.task_number}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-zinc-100">{task.description}</div>
+                      {task.assignee && (
+                        <div className="text-xs text-zinc-500 mt-0.5">
+                          Assigned: {task.assignee.call_sign ?? task.assignee.full_name}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <select
+                        value={task.status}
+                        onChange={(e) => void setTaskStatus(task.id, e.target.value)}
+                        className={`rounded-md px-2 py-1 text-xs font-medium outline-none border-0 ${
+                          task.status === "Active" ? "bg-green-800/60 text-green-300" :
+                          task.status === "Completed" ? "bg-zinc-800/60 text-zinc-400" :
+                          task.status === "Cancelled" ? "bg-red-900/60 text-red-400" :
+                          "bg-zinc-700/60 text-zinc-400"
+                        }`}
+                      >
+                        {TASK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <button
+                        onClick={() => void deleteTask(task.id)}
+                        className="text-xs text-zinc-600 hover:text-red-400 transition"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Updates tab */}
+        {tab === "updates" && (
+          <section className="space-y-4">
+            <div className="rounded-xl bg-zinc-900 p-5 space-y-3">
+              <div className="font-semibold text-zinc-100">Post Update</div>
+              <select
+                value={newUpdateType}
+                onChange={(e) => setNewUpdateType(e.target.value)}
+                className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-red-600"
+              >
+                {UPDATE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input
+                value={newUpdateTitle}
+                onChange={(e) => setNewUpdateTitle(e.target.value)}
+                placeholder="Title…"
+                className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-red-600 placeholder-zinc-600"
+              />
+              <textarea
+                value={newUpdateBody}
+                onChange={(e) => setNewUpdateBody(e.target.value)}
+                placeholder="Details (optional)…"
+                rows={3}
+                className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-red-600 placeholder-zinc-600 resize-none"
+              />
+              <button
+                onClick={() => void addUpdate()}
+                disabled={savingUpdate || !newUpdateTitle.trim()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition"
+              >
+                {savingUpdate ? "Posting…" : "Post Update"}
+              </button>
+            </div>
+
+            {updates.length === 0 ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-10 text-center text-zinc-600 text-sm">
+                No updates yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {updates.map((u) => (
+                  <div key={u.id} className="rounded-xl bg-zinc-900 p-4 space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-xs font-medium text-zinc-500 mr-2">{u.update_type}</span>
+                        <span className="text-sm font-semibold text-zinc-100">{u.title}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-xs text-zinc-600 font-mono">
+                          {new Date(u.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        <button
+                          onClick={() => void deleteUpdate(u.id)}
+                          className="text-xs text-zinc-600 hover:text-red-400 transition"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                    {u.body && <p className="text-sm text-zinc-400 whitespace-pre-wrap">{u.body}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Invites tab */}
+        {tab === "invites" && (
+          <section className="rounded-xl bg-zinc-900 p-5 space-y-3">
+            <div className="font-semibold text-zinc-100">Invited Members</div>
+            <p className="text-xs text-zinc-500">Members you invite will see this event highlighted. Search to add.</p>
+
+            <div className="relative">
+              <input value={userSearch} onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search by name or call sign…"
+                className="w-full rounded-lg bg-black px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+            </div>
+
+            {searchResults.length > 0 && (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800 divide-y divide-zinc-700 overflow-hidden">
+                {searchResults.map((u) => (
+                  <button key={u.id} onClick={() => void toggleInvite(u.id)}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-700 transition">
+                    <span className={`h-4 w-4 rounded border-2 shrink-0 ${invitedIds.has(u.id) ? "bg-red-600 border-red-600" : "border-zinc-600"}`} />
+                    <span className="font-mono text-sm text-zinc-100">{u.call_sign ?? "—"}</span>
+                    <span className="text-sm text-zinc-400">{u.full_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {invitedIds.size > 0 && (
+              <div className="text-xs text-zinc-500">{invitedIds.size} member{invitedIds.size !== 1 ? "s" : ""} invited</div>
+            )}
+          </section>
+        )}
 
       </div>
     </main>

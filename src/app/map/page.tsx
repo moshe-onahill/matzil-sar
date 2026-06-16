@@ -1002,16 +1002,28 @@ export default function MapPage() {
                   <div className="text-xl font-semibold">{focus.title}</div>
                   <div className="text-sm text-gray-400">{focus.subtitle}</div>
 
-                  {focus.navigable ? (
+                  <div className="flex flex-wrap gap-2">
+                    {focus.navigable ? (
+                      <button
+                        onClick={() => openInGoogleMaps(focus.lat, focus.lng)}
+                        className="rounded bg-blue-600 px-4 py-2 text-sm"
+                      >
+                        Navigate
+                      </button>
+                    ) : (
+                      <div className="text-sm text-gray-500">Live tracking — navigation not available</div>
+                    )}
                     <button
-                      onClick={() => openInGoogleMaps(focus.lat, focus.lng)}
-                      className="rounded bg-blue-600 px-4 py-2"
+                      onClick={() => {
+                        const coords = `${focus.lat.toFixed(6)}, ${focus.lng.toFixed(6)}`;
+                        void navigator.clipboard.writeText(coords).then(() => toast("Coordinates copied", "success"));
+                      }}
+                      className="rounded bg-gray-700 px-3 py-2 text-sm hover:bg-gray-600 transition"
+                      title="Copy coordinates"
                     >
-                      Navigate
+                      Copy Coords
                     </button>
-                  ) : (
-                    <div className="text-sm text-gray-500">Live tracking — navigation not available</div>
-                  )}
+                  </div>
                 </div>
               ) : (
                 <div className="text-gray-400">

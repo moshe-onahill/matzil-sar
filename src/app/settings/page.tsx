@@ -421,7 +421,7 @@ export default function SettingsPage() {
             window.localStorage.removeItem("real-role");
             window.localStorage.removeItem("dev-role");
             window.localStorage.removeItem("session-temporary");
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: "global" });
             window.location.href = "/login";
           }}
           className="w-full rounded-xl bg-gray-900 px-4 py-3 font-medium text-gray-400 hover:bg-gray-800 transition"
