@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import { logAudit } from "@/lib/audit";
 
 type Role = { id: string; name: string };
 type Unit = { id: string; name: string };
@@ -109,6 +110,7 @@ export default function AdminRosterPage() {
     if (error) { toast(error.message, "error"); setActionLoading(null); return; }
     await supabase.from("profile_change_requests").update({ status: "approved", reviewed_at: new Date().toISOString() }).eq("id", req.id);
     toast("Approved and applied.", "success");
+    void logAudit({ action: "approve_change_request", entity_type: "user", entity_id: req.user_id, details: { field: req.field_name, old: req.old_value, new: req.new_value } });
     setActionLoading(null);
     void loadAll();
   }
@@ -117,6 +119,7 @@ export default function AdminRosterPage() {
     setActionLoading(req.id);
     await supabase.from("profile_change_requests").update({ status: "rejected", admin_note: rejectNote.trim() || null, reviewed_at: new Date().toISOString() }).eq("id", req.id);
     toast("Request rejected.", "success");
+    void logAudit({ action: "reject_change_request", entity_type: "user", entity_id: req.user_id, details: { field: req.field_name, requested: req.new_value, note: rejectNote.trim() || null } });
     setRejectingId(null);
     setRejectNote("");
     setActionLoading(null);
@@ -187,6 +190,13 @@ export default function AdminRosterPage() {
     setEditingId(null);
     setEditState(null);
     toast("Saved.", "success");
+    void logAudit({
+      action: "edit_member",
+      entity_type: "user",
+      entity_id: m.id,
+      entity_label: editState.full_name || m.email,
+      details: { roles: editState.roles, units: editState.units, is_active: editState.is_active },
+    });
     await loadAll();
   }
 

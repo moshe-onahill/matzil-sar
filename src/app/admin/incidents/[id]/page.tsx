@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import { getCurrentTestEmail } from "@/lib/dev-user";
+import { logAudit } from "@/lib/audit";
 
 type User = { id: string; full_name: string | null; call_sign: string | null };
 type OnSceneUnit = User & { response_type: string; eta_minutes: number | null; responded_at: string };
@@ -245,6 +246,7 @@ export default function IncidentCoordinationPage() {
     setSaving(false);
     if (error) { toast(error.message, "error"); return; }
     toast("Incident updated.", "success");
+    void logAudit({ action: "edit_incident", entity_type: "incident", entity_id: id as string, entity_label: editTitle.trim(), details: { status: editStatus } });
     await loadAll();
   }
 
