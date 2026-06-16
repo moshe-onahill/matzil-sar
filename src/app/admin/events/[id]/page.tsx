@@ -107,6 +107,11 @@ export default function AdminEventDetailPage() {
     }, 300);
   }
 
+  async function deleteAttendance(attendanceId: string) {
+    const { error } = await supabase.from("event_attendance").delete().eq("id", attendanceId);
+    if (error) toast(error.message, "error");
+  }
+
   async function toggleInvite(userId: string) {
     const next = new Set(invitedIds);
     if (next.has(userId)) next.delete(userId); else next.add(userId);
@@ -232,7 +237,8 @@ export default function AdminEventDetailPage() {
                     <th className="pb-2 pr-4 font-medium">Member</th>
                     <th className="pb-2 pr-4 font-medium">Sign In</th>
                     <th className="pb-2 pr-4 font-medium">Sign Out</th>
-                    <th className="pb-2 font-medium">Location</th>
+                    <th className="pb-2 pr-4 font-medium">Location</th>
+                    <th className="pb-2 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
@@ -243,11 +249,19 @@ export default function AdminEventDetailPage() {
                       </td>
                       <td className="py-2.5 pr-4 text-green-400">{fmtTs(a.signed_in_at)}</td>
                       <td className="py-2.5 pr-4 text-zinc-400">{fmtTs(a.signed_out_at)}</td>
-                      <td className="py-2.5">
+                      <td className="py-2.5 pr-4">
                         {coordLink(a.sign_in_lat, a.sign_in_lng) ? (
                           <a href={coordLink(a.sign_in_lat, a.sign_in_lng)!} target="_blank" rel="noopener noreferrer"
                             className="text-xs text-blue-400 hover:underline">Map ↗</a>
                         ) : <span className="text-zinc-700">—</span>}
+                      </td>
+                      <td className="py-2.5">
+                        <button
+                          onClick={() => void deleteAttendance(a.id)}
+                          className="text-xs text-zinc-600 hover:text-red-400 transition"
+                          title="Delete log — lets member sign in/out again">
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))}
