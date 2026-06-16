@@ -73,7 +73,7 @@ export default function AdminEventDetailPage() {
     void loadAll();
     const channel = supabase
       .channel(`event-attendance-${id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "event_attendance", filter: `event_id=eq.${id}` }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_attendance" }, () => void loadAll())
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [id]);
