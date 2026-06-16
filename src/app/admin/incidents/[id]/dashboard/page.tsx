@@ -164,7 +164,7 @@ export default function CommandDashboardPage() {
 
   return (
     <div className="fixed inset-0 z-50 bg-zinc-950 text-white flex flex-col overflow-hidden" style={{ fontFamily: "system-ui, sans-serif" }}>
-      {selectedTask && <TaskModal task={selectedTask} onClose={() => setSelectedTask(null)} />}
+      {selectedTask && <TaskModal task={selectedTask} incidentId={id} onClose={() => { setSelectedTask(null); void loadAll(); }} />}
 
       {/* Top bar */}
       <header className="flex items-center justify-between border-b border-zinc-800 px-8 py-4">
@@ -328,77 +328,20 @@ export default function CommandDashboardPage() {
   );
 }
 
-function TaskModal({ task, onClose }: { task: Task; onClose: () => void }) {
-  const colorDot = task.color
-    ? { red: "bg-red-500", orange: "bg-orange-500", yellow: "bg-yellow-400", green: "bg-green-500", blue: "bg-blue-500", purple: "bg-purple-500", teal: "bg-teal-500", gray: "bg-zinc-500" }[task.color]
-    : null;
-
+function TaskModal({ task, incidentId, onClose }: { task: Task; incidentId: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-5 shadow-2xl"
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="relative flex h-full max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950 shadow-2xl"
         onClick={(e) => e.stopPropagation()}>
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {colorDot && <div className={`h-4 w-4 rounded-full shrink-0 ${colorDot}`} />}
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-3xl font-bold font-mono text-zinc-50">{task.task_number}</span>
-                <span className={`rounded px-2.5 py-1 text-sm font-medium ${TASK_STATUS_BADGE[task.status] ?? "bg-zinc-700 text-zinc-400"}`}>
-                  {task.status}
-                </span>
-              </div>
-              {(task.job_type || task.description) && (
-                <p className="mt-1 text-zinc-300">
-                  {task.job_type}{task.description ? (task.job_type ? ` — ${task.description}` : task.description) : ""}
-                </p>
-              )}
-            </div>
-          </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-2xl leading-none">×</button>
+        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
+          <span className="font-mono font-bold text-zinc-200">{task.task_number}</span>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-2xl leading-none px-2">×</button>
         </div>
-
-        {/* Lead */}
-        {task.task_lead && (
-          <div className="rounded-xl bg-yellow-950/40 border border-yellow-800/60 px-4 py-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-yellow-600 mb-1">Task Lead</div>
-            <div className="font-mono text-lg font-semibold text-yellow-300">
-              ★ {task.task_lead.call_sign ?? task.task_lead.full_name ?? "?"}
-            </div>
-            {task.task_lead.call_sign && task.task_lead.full_name && (
-              <div className="text-sm text-yellow-600">{task.task_lead.full_name}</div>
-            )}
-          </div>
-        )}
-
-        {/* Units */}
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-2">
-            Assigned Units ({task.assignments.length})
-          </div>
-          {task.assignments.length === 0 ? (
-            <p className="text-sm text-zinc-600 italic">No units assigned</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {task.assignments.map((a) => (
-                <div key={a.user_id}
-                  className={`rounded-lg border px-3 py-2 text-sm ${task.task_lead_id === a.user_id ? "border-yellow-700 bg-yellow-950/40 text-yellow-200" : "border-zinc-700 bg-zinc-800 text-zinc-200"}`}>
-                  <span className="font-mono font-medium">{a.user?.call_sign ?? "—"}</span>
-                  {a.user?.full_name && a.user?.call_sign && (
-                    <span className="ml-1.5 text-xs opacity-60">{a.user.full_name}</span>
-                  )}
-                  {task.task_lead_id === a.user_id && <span className="ml-1 text-yellow-500"> ★</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <button onClick={onClose}
-          className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-sm text-zinc-400 hover:bg-zinc-700 transition">
-          Close
-        </button>
+        <iframe
+          src={`/admin/incidents/${incidentId}/tasks/${task.id}`}
+          className="flex-1 w-full border-0 bg-zinc-950"
+          title={`Task ${task.task_number}`}
+        />
       </div>
     </div>
   );
