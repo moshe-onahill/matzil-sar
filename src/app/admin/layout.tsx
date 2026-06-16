@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import MatzilLogo from "@/components/MatzilLogo";
 
 const NAV = [
   {
@@ -69,12 +70,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="hidden md:flex md:w-56 lg:w-64 flex-col border-r border-zinc-800 bg-zinc-900">
         {/* Brand */}
         <div className="flex items-center gap-2.5 border-b border-zinc-800 px-5 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-600">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5">
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-          </div>
+          <MatzilLogo size={32} />
           <div>
             <div className="text-sm font-semibold text-zinc-50">Matzil SAR</div>
             <div className="text-[11px] text-zinc-500">Admin Console</div>

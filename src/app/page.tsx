@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { getStoredRole, UserRole } from "@/lib/dev-user";
+import MatzilLogo from "@/components/MatzilLogo";
 
 type IncidentResponse = { user_id: string; response_type: string };
 type IncidentUpdate = { created_at: string };
@@ -123,9 +124,8 @@ export default function Dashboard() {
     <main className="min-h-screen bg-black px-4 py-5 pb-32 text-white sm:p-6 sm:pb-32">
       <div className="mx-auto max-w-5xl space-y-4">
 
-        <div>
-          <p className="text-sm text-gray-500">Matzil SAR</p>
-          <h1 className="text-3xl font-bold">Home</h1>
+        <div className="flex items-center justify-between">
+          <MatzilLogo size={36} withText />
         </div>
 
         {/* Active Call hero */}

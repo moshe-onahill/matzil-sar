@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import MatzilLogo from "@/components/MatzilLogo";
 
 export default function LoginPage() {
   const toast = useToast();
@@ -53,18 +54,14 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-sm">
         {/* Logo */}
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-600 shadow-lg shadow-red-600/25">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-9 w-9">
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <MatzilLogo size={64} />
+          <div className="text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-50">Matzil SAR</h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              {mode === "login" ? "Sign in to your account" : "Reset your password"}
+            </p>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-50">Matzil SAR</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {mode === "login" ? "Sign in to your account" : "Reset your password"}
-          </p>
         </div>
 
         {/* Card */}

@@ -8,8 +8,10 @@ import { ToastProvider } from "@/components/Toast";
 import SwipeNav from "@/components/SwipeNav";
 
 export const metadata: Metadata = {
-  title: "Matzil SAR",
-  description: "Matzil SAR Operations Platform",
+  title: { default: "Matzil SAR", template: "%s · Matzil SAR" },
+  description: "Matzil Search & Rescue Operations Platform",
+  applicationName: "Matzil SAR",
+  themeColor: "#dc2626",
 };
 
 export default function RootLayout({
