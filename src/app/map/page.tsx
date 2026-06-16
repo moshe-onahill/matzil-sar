@@ -181,6 +181,7 @@ export default function MapPage() {
   const mapRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const leafletReadyRef = useRef(false);
 
   useEffect(() => {
@@ -860,12 +861,15 @@ export default function MapPage() {
 
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
-            <div className="overflow-hidden rounded-xl bg-gray-900">
-              <div className="border-b border-gray-800 px-4 py-3 text-lg font-semibold">
-                Operations Map
+            <div className={fullscreen ? "fixed inset-0 z-50 flex flex-col bg-black" : "overflow-hidden rounded-xl bg-gray-900"}>
+              <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+                <span className="text-lg font-semibold">Operations Map</span>
+                <button onClick={() => { setFullscreen((v) => !v); setTimeout(() => mapRef.current?.invalidateSize(), 100); }}
+                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+                  {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                </button>
               </div>
-
-              <div ref={mapContainerRef} className="h-[520px] w-full" />
+              <div ref={mapContainerRef} className={fullscreen ? "flex-1" : "h-[520px] w-full"} />
             </div>
 
             {canManagePins() && (

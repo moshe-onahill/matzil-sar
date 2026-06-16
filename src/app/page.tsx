@@ -160,7 +160,7 @@ export default function Dashboard() {
         {canCreate && (
           <div className="flex gap-2">
             <Link href="/create-incident" className="flex-1 rounded-xl bg-red-700 py-3 text-center font-semibold hover:bg-red-600">
-              Send Alert
+              Create Incident
             </Link>
             {(role === "SAR Manager" || role === "Global Admin") && (
               <Link href="/create-deployment" className="flex-1 rounded-xl bg-gray-800 py-3 text-center font-semibold hover:bg-gray-700">

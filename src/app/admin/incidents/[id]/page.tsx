@@ -21,6 +21,14 @@ type Task = {
   task_lead?: User | null;
   assignments: Assignment[];
 };
+type IncidentUpdate = {
+  id: string;
+  update_type: string;
+  title: string;
+  body: string | null;
+  created_at: string;
+};
+
 type Incident = {
   id: string;
   title: string;
@@ -81,6 +89,7 @@ export default function IncidentCoordinationPage() {
   const [incident, setIncident] = useState<Incident | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [onScene, setOnScene] = useState<OnSceneUnit[]>([]);
+  const [updates, setUpdates] = useState<IncidentUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>("coordination");
 
@@ -131,7 +140,7 @@ export default function IncidentCoordinationPage() {
   }
 
   async function loadAll() {
-    const [incRes, tasksRes, responsesRes] = await Promise.all([
+    const [incRes, tasksRes, responsesRes, updatesRes] = await Promise.all([
       supabase.from("incidents").select(
         "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng"
       ).eq("id", id).single(),
@@ -144,6 +153,10 @@ export default function IncidentCoordinationPage() {
         .select("user_id, response_type, eta_minutes, responded_at, users ( id, full_name, call_sign )")
         .eq("incident_id", id)
         .in("response_type", ["On Location", "Responding"]),
+      supabase.from("incident_updates")
+        .select("id,update_type,title,body,created_at")
+        .eq("incident_id", id)
+        .order("created_at", { ascending: false }),
     ]);
 
     const inc = incRes.data as Incident;
@@ -179,7 +192,15 @@ export default function IncidentCoordinationPage() {
       responded_at: r.responded_at,
     }));
     setOnScene(units);
+    setUpdates((updatesRes.data ?? []) as IncidentUpdate[]);
     setLoading(false);
+  }
+
+  async function deleteUpdate(updateId: string) {
+    const { error } = await supabase.from("incident_updates").delete().eq("id", updateId);
+    if (error) { toast(error.message, "error"); return; }
+    toast("Update deleted.", "success");
+    await loadAll();
   }
 
   async function saveIncident() {
@@ -582,6 +603,35 @@ export default function IncidentCoordinationPage() {
                 {postingUpdate ? "Posting…" : "Post Update"}
               </button>
             </section>
+
+            {/* Existing updates */}
+            {updates.length > 0 && (
+              <section className="rounded-xl bg-zinc-900 p-5 space-y-3">
+                <div className="font-semibold text-zinc-100">Posted Updates</div>
+                <div className="space-y-2">
+                  {updates.map((u) => (
+                    <div key={u.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-medium text-red-400">{u.update_type}</span>
+                            <span className="text-xs text-zinc-600">
+                              {new Date(u.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 text-sm font-medium text-zinc-200">{u.title}</div>
+                          {u.body && <div className="mt-1 text-xs text-zinc-500">{u.body}</div>}
+                        </div>
+                        <button onClick={() => void deleteUpdate(u.id)}
+                          className="shrink-0 text-xs text-zinc-700 hover:text-red-400 transition px-2 py-1">
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
 
