@@ -181,6 +181,7 @@ export default function MapPage() {
   const mapRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapWrapperRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const leafletReadyRef = useRef(false);
 
@@ -251,6 +252,23 @@ export default function MapPage() {
     ro.observe(mapContainerRef.current);
     return () => ro.disconnect();
   }, []);
+
+  // Sync React fullscreen state with the native browser fullscreen API
+  useEffect(() => {
+    function onFsChange() {
+      setFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  async function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      await mapWrapperRef.current?.requestFullscreen?.();
+    } else {
+      await document.exitFullscreen?.();
+    }
+  }
 
   async function ensureLeafletAndInit() {
     if (typeof window === "undefined") return;
@@ -871,22 +889,17 @@ export default function MapPage() {
 
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-4">
-            {/* Header — floats above map in fullscreen, sits above it normally */}
-            <div className={fullscreen
-              ? "fixed top-0 left-0 right-0 z-[51] flex items-center justify-between bg-zinc-950/95 border-b border-gray-800 px-4 py-3"
-              : "flex items-center justify-between rounded-t-xl bg-gray-900 border-b border-gray-800 px-4 py-3"
-            }>
-              <span className="text-lg font-semibold">Operations Map</span>
-              <button onClick={() => setFullscreen((v) => !v)}
-                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
-                {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
-              </button>
+            {/* Wrapper — native requestFullscreen() on this element bypasses CSS stacking contexts */}
+            <div ref={mapWrapperRef} className="flex flex-col overflow-hidden rounded-xl bg-gray-900 [&:fullscreen]:rounded-none [&:fullscreen]:bg-black">
+              <div className="shrink-0 flex items-center justify-between border-b border-gray-800 px-4 py-3">
+                <span className="text-lg font-semibold">Operations Map</span>
+                <button onClick={() => void toggleFullscreen()}
+                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+                  {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                </button>
+              </div>
+              <div ref={mapContainerRef} className={fullscreen ? "flex-1" : "h-[520px] w-full"} />
             </div>
-            {/* Map container — Leaflet owns this div; only its own CSS changes, parent never moves */}
-            <div ref={mapContainerRef} className={fullscreen
-              ? "fixed inset-0 z-50"
-              : "h-[520px] w-full rounded-b-xl overflow-hidden"
-            } />
 
             {canManagePins() && (
               <div className="rounded-xl bg-gray-900 p-4">
