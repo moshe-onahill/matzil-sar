@@ -69,7 +69,14 @@ export default function AdminEventDetailPage() {
   const [loading, setLoading] = useState(true);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { void loadAll(); }, [id]);
+  useEffect(() => {
+    void loadAll();
+    const channel = supabase
+      .channel(`event-attendance-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_attendance", filter: `event_id=eq.${id}` }, () => void loadAll())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [id]);
 
   async function loadAll() {
     const [eventRes, attRes, invRes] = await Promise.all([
