@@ -30,7 +30,6 @@ const ACTION_LABELS: Record<string, string> = {
   add_cert: "Added certification",
   remove_cert: "Removed certification",
   send_alert: "Sent alert",
-  create_task: "Created task",
   post_event_update: "Posted event update",
 };
 
