@@ -15,19 +15,15 @@ export async function POST(req: NextRequest) {
 
   if (body.action === "sign_in") {
     const { event_id, user_id, lat, lng } = body;
-    const { error } = await admin.from("event_attendance").upsert(
-      {
-        event_id,
-        user_id,
-        signed_in_at: new Date().toISOString(),
-        sign_in_lat: lat ?? null,
-        sign_in_lng: lng ?? null,
-        signed_out_at: null,
-        sign_out_lat: null,
-        sign_out_lng: null,
-      },
-      { onConflict: "event_id,user_id" }
-    );
+    // Delete any existing row then insert fresh
+    await admin.from("event_attendance").delete().eq("event_id", event_id).eq("user_id", user_id);
+    const { error } = await admin.from("event_attendance").insert({
+      event_id,
+      user_id,
+      signed_in_at: new Date().toISOString(),
+      sign_in_lat: lat ?? null,
+      sign_in_lng: lng ?? null,
+    });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
