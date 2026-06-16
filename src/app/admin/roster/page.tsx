@@ -22,6 +22,12 @@ type Member = {
   units: string[];
 };
 
+type Certification = {
+  id: string;
+  name: string;
+  expires_at: string | null;
+};
+
 type EditState = {
   full_name: string;
   call_sign: string;
@@ -43,6 +49,7 @@ export default function AdminRosterPage() {
   const [editState, setEditState] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("active");
+  const [certsForMember, setCertsForMember] = useState<Member | null>(null);
 
   useEffect(() => { void loadAll(); }, []);
 
@@ -381,6 +388,10 @@ export default function AdminRosterPage() {
                             className="rounded-lg border border-blue-800 bg-blue-950/40 px-3 py-1.5 text-xs text-blue-300 hover:bg-blue-950 transition">
                             Invite
                           </button>
+                          <button onClick={() => setCertsForMember(m)}
+                            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+                            Certs
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -396,6 +407,99 @@ export default function AdminRosterPage() {
           </div>
         )}
       </div>
+      {certsForMember && (
+        <CertsModal member={certsForMember} onClose={() => setCertsForMember(null)} toast={toast} />
+      )}
     </main>
+  );
+}
+
+function CertsModal({ member, onClose, toast }: { member: { id: string; full_name: string | null; call_sign: string | null }; onClose: () => void; toast: (msg: string, type: "success" | "error") => void }) {
+  const [certs, setCerts] = useState<Certification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [newExpiry, setNewExpiry] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => { void load(); }, []);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase.from("certifications").select("id,name,expires_at").eq("user_id", member.id).order("expires_at", { ascending: true });
+    setCerts((data as Certification[]) ?? []);
+    setLoading(false);
+  }
+
+  async function addCert() {
+    if (!newName.trim()) { toast("Enter a certification name.", "error"); return; }
+    setAdding(true);
+    const { error } = await supabase.from("certifications").insert({ user_id: member.id, name: newName.trim(), expires_at: newExpiry || null });
+    setAdding(false);
+    if (error) { toast(error.message, "error"); return; }
+    setNewName("");
+    setNewExpiry("");
+    toast("Certification added.", "success");
+    await load();
+  }
+
+  async function deleteCert(id: string) {
+    const { error } = await supabase.from("certifications").delete().eq("id", id);
+    if (error) { toast(error.message, "error"); return; }
+    toast("Removed.", "success");
+    await load();
+  }
+
+  const label = member.call_sign ?? member.full_name ?? "Member";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-lg font-bold text-zinc-50">{label}</div>
+            <div className="text-xs text-zinc-500">Certifications</div>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-2xl leading-none px-1">×</button>
+        </div>
+
+        {loading ? (
+          <div className="py-8 flex justify-center"><div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-red-500" /></div>
+        ) : certs.length === 0 ? (
+          <p className="text-sm text-zinc-600 italic">No certifications on file.</p>
+        ) : (
+          <div className="space-y-2">
+            {certs.map((c) => {
+              const expired = c.expires_at && new Date(c.expires_at) < new Date();
+              const expiringSoon = c.expires_at && !expired && (new Date(c.expires_at).getTime() - Date.now()) < 30 * 24 * 60 * 60 * 1000;
+              return (
+                <div key={c.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3">
+                  <div>
+                    <div className="font-medium text-zinc-100">{c.name}</div>
+                    <div className={`text-xs mt-0.5 ${expired ? "text-red-400" : expiringSoon ? "text-yellow-400" : "text-zinc-500"}`}>
+                      {c.expires_at ? `Expires ${new Date(c.expires_at).toLocaleDateString()}${expired ? " — EXPIRED" : expiringSoon ? " — Expiring soon" : ""}` : "No expiration"}
+                    </div>
+                  </div>
+                  <button onClick={() => void deleteCert(c.id)} className="shrink-0 rounded-lg border border-red-900 bg-red-950/40 px-2.5 py-1 text-xs text-red-400 hover:bg-red-950 transition">
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Add Certification</div>
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Certification name"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-zinc-500" />
+          <input type="date" value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-zinc-500" />
+          <button onClick={() => void addCert()} disabled={adding}
+            className="w-full rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60 transition">
+            {adding ? "Adding…" : "Add Certification"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
