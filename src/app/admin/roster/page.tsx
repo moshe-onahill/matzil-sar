@@ -28,6 +28,18 @@ type Certification = {
   expires_at: string | null;
 };
 
+type ChangeRequest = {
+  id: string;
+  user_id: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string;
+  status: "pending" | "approved" | "rejected";
+  admin_note: string | null;
+  created_at: string;
+  users: { full_name: string | null; call_sign: string | null; email: string };
+};
+
 type EditState = {
   full_name: string;
   call_sign: string;
@@ -50,6 +62,11 @@ export default function AdminRosterPage() {
   const [saving, setSaving] = useState(false);
   const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("active");
   const [certsForMember, setCertsForMember] = useState<Member | null>(null);
+  const [tab, setTab] = useState<"roster" | "requests">("roster");
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => { void loadAll(); }, []);
 
@@ -74,7 +91,36 @@ export default function AdminRosterPage() {
       units: extractNames(u.user_units ?? [], "units"),
     })) as Member[];
     setMembers(rows);
+
+    const { data: reqData } = await supabase
+      .from("profile_change_requests")
+      .select("id, user_id, field_name, old_value, new_value, status, admin_note, created_at, users(full_name, call_sign, email)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    setChangeRequests((reqData as unknown as ChangeRequest[]) ?? []);
+
     setLoading(false);
+  }
+
+  async function approveRequest(req: ChangeRequest) {
+    setActionLoading(req.id);
+    const updateField: Record<string, string> = { [req.field_name]: req.new_value };
+    const { error } = await supabase.from("users").update(updateField).eq("id", req.user_id);
+    if (error) { toast(error.message, "error"); setActionLoading(null); return; }
+    await supabase.from("profile_change_requests").update({ status: "approved", reviewed_at: new Date().toISOString() }).eq("id", req.id);
+    toast("Approved and applied.", "success");
+    setActionLoading(null);
+    void loadAll();
+  }
+
+  async function rejectRequest(req: ChangeRequest) {
+    setActionLoading(req.id);
+    await supabase.from("profile_change_requests").update({ status: "rejected", admin_note: rejectNote.trim() || null, reviewed_at: new Date().toISOString() }).eq("id", req.id);
+    toast("Request rejected.", "success");
+    setRejectingId(null);
+    setRejectNote("");
+    setActionLoading(null);
+    void loadAll();
   }
 
   function extractNames(items: any[], key: string): string[] {
@@ -225,6 +271,87 @@ export default function AdminRosterPage() {
             </Link>
           </div>
         </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-zinc-800 pb-0">
+          {(["roster", "requests"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`relative px-4 py-2 text-sm font-medium capitalize transition ${tab === t ? "text-zinc-50 border-b-2 border-red-500 -mb-px" : "text-zinc-500 hover:text-zinc-300"}`}>
+              {t === "requests" ? "Change Requests" : "Members"}
+              {t === "requests" && changeRequests.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{changeRequests.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Change Requests panel */}
+        {tab === "requests" && (
+          <div className="space-y-3">
+            {changeRequests.length === 0 ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-12 text-center text-zinc-600">
+                No pending change requests.
+              </div>
+            ) : changeRequests.map((req) => {
+              const user = req.users;
+              const memberLabel = user?.call_sign ?? user?.full_name ?? user?.email ?? "Unknown";
+              const fieldLabel = req.field_name === "full_name" ? "Full Name" : req.field_name === "call_sign" ? "Call Sign" : req.field_name;
+              return (
+                <div key={req.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-zinc-100">{memberLabel}</div>
+                      <div className="text-xs text-zinc-500 mt-0.5">{user?.email} · {new Date(req.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <span className="shrink-0 rounded-md bg-yellow-900/40 px-2 py-0.5 text-xs text-yellow-400">pending</span>
+                  </div>
+                  <div className="rounded-lg bg-zinc-950 px-4 py-3 text-sm space-y-1">
+                    <div className="text-xs text-zinc-500 uppercase tracking-wide">{fieldLabel}</div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-zinc-500 line-through">{req.old_value || "—"}</span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 text-zinc-600 shrink-0"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                      <span className="text-zinc-100 font-medium">{req.new_value}</span>
+                    </div>
+                  </div>
+                  {rejectingId === req.id ? (
+                    <div className="space-y-2">
+                      <input
+                        autoFocus
+                        value={rejectNote}
+                        onChange={(e) => setRejectNote(e.target.value)}
+                        placeholder="Reason for rejection (optional)"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-zinc-500"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={() => void rejectRequest(req)} disabled={actionLoading === req.id}
+                          className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60 transition">
+                          {actionLoading === req.id ? "…" : "Confirm Reject"}
+                        </button>
+                        <button onClick={() => { setRejectingId(null); setRejectNote(""); }}
+                          className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => void approveRequest(req)} disabled={actionLoading === req.id}
+                        className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-60 transition">
+                        {actionLoading === req.id ? "…" : "Approve"}
+                      </button>
+                      <button onClick={() => setRejectingId(req.id)}
+                        className="rounded-lg border border-red-900 bg-red-950/30 px-4 py-2 text-sm text-red-400 hover:bg-red-950/60 transition">
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {tab === "roster" && <>
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
@@ -406,6 +533,7 @@ export default function AdminRosterPage() {
             </table>
           </div>
         )}
+        </>}
       </div>
       {certsForMember && (
         <CertsModal member={certsForMember} onClose={() => setCertsForMember(null)} toast={toast} />
