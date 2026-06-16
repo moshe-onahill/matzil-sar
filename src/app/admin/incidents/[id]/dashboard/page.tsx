@@ -11,6 +11,8 @@ type Task = {
   id: string;
   task_number: string;
   description: string | null;
+  job_type: string | null;
+  color: string | null;
   status: string;
   task_lead_id: string | null;
   task_lead?: User | null;
@@ -70,6 +72,7 @@ export default function CommandDashboardPage() {
   const [updates, setUpdates] = useState<Update[]>([]);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [loading, setLoading] = useState(true);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -99,7 +102,7 @@ export default function CommandDashboardPage() {
         "id,title,incident_number,type,status,staging_name,staging_address,accepting_units,short_description"
       ).eq("id", id).single(),
       supabase.from("incident_tasks").select(`
-        id, task_number, description, status, task_lead_id,
+        id, task_number, description, job_type, color, status, task_lead_id,
         task_lead:users!incident_tasks_task_lead_id_fkey ( id, full_name, call_sign ),
         assignments:task_assignments ( user_id, user:users ( id, full_name, call_sign ) )
       `).eq("incident_id", id).order("task_number"),
@@ -161,6 +164,7 @@ export default function CommandDashboardPage() {
 
   return (
     <div className="fixed inset-0 z-50 bg-zinc-950 text-white flex flex-col overflow-hidden" style={{ fontFamily: "system-ui, sans-serif" }}>
+      {selectedTask && <TaskModal task={selectedTask} onClose={() => setSelectedTask(null)} />}
 
       {/* Top bar */}
       <header className="flex items-center justify-between border-b border-zinc-800 px-8 py-4">
@@ -227,7 +231,8 @@ export default function CommandDashboardPage() {
           ) : (
             <div className="space-y-3">
               {tasks.map((task) => (
-                <div key={task.id} className={`rounded-xl border p-4 ${TASK_STATUS_STYLE[task.status] ?? "border-zinc-800 bg-zinc-900"}`}>
+                <div key={task.id} onClick={() => setSelectedTask(task)}
+                  className={`cursor-pointer rounded-xl border p-4 transition hover:brightness-125 ${TASK_STATUS_STYLE[task.status] ?? "border-zinc-800 bg-zinc-900"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -318,6 +323,82 @@ export default function CommandDashboardPage() {
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskModal({ task, onClose }: { task: Task; onClose: () => void }) {
+  const colorDot = task.color
+    ? { red: "bg-red-500", orange: "bg-orange-500", yellow: "bg-yellow-400", green: "bg-green-500", blue: "bg-blue-500", purple: "bg-purple-500", teal: "bg-teal-500", gray: "bg-zinc-500" }[task.color]
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {colorDot && <div className={`h-4 w-4 rounded-full shrink-0 ${colorDot}`} />}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-bold font-mono text-zinc-50">{task.task_number}</span>
+                <span className={`rounded px-2.5 py-1 text-sm font-medium ${TASK_STATUS_BADGE[task.status] ?? "bg-zinc-700 text-zinc-400"}`}>
+                  {task.status}
+                </span>
+              </div>
+              {(task.job_type || task.description) && (
+                <p className="mt-1 text-zinc-300">
+                  {task.job_type}{task.description ? (task.job_type ? ` — ${task.description}` : task.description) : ""}
+                </p>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-2xl leading-none">×</button>
+        </div>
+
+        {/* Lead */}
+        {task.task_lead && (
+          <div className="rounded-xl bg-yellow-950/40 border border-yellow-800/60 px-4 py-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-yellow-600 mb-1">Task Lead</div>
+            <div className="font-mono text-lg font-semibold text-yellow-300">
+              ★ {task.task_lead.call_sign ?? task.task_lead.full_name ?? "?"}
+            </div>
+            {task.task_lead.call_sign && task.task_lead.full_name && (
+              <div className="text-sm text-yellow-600">{task.task_lead.full_name}</div>
+            )}
+          </div>
+        )}
+
+        {/* Units */}
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-2">
+            Assigned Units ({task.assignments.length})
+          </div>
+          {task.assignments.length === 0 ? (
+            <p className="text-sm text-zinc-600 italic">No units assigned</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {task.assignments.map((a) => (
+                <div key={a.user_id}
+                  className={`rounded-lg border px-3 py-2 text-sm ${task.task_lead_id === a.user_id ? "border-yellow-700 bg-yellow-950/40 text-yellow-200" : "border-zinc-700 bg-zinc-800 text-zinc-200"}`}>
+                  <span className="font-mono font-medium">{a.user?.call_sign ?? "—"}</span>
+                  {a.user?.full_name && a.user?.call_sign && (
+                    <span className="ml-1.5 text-xs opacity-60">{a.user.full_name}</span>
+                  )}
+                  {task.task_lead_id === a.user_id && <span className="ml-1 text-yellow-500"> ★</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button onClick={onClose}
+          className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-sm text-zinc-400 hover:bg-zinc-700 transition">
+          Close
+        </button>
       </div>
     </div>
   );
