@@ -254,24 +254,26 @@ export default function AdminEventsPage() {
         ) : (
           <div className="space-y-2">
             {filtered.map((e) => (
-              <div key={e.id} className="flex items-start justify-between gap-3 rounded-xl bg-gray-900 p-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold">{e.title}</span>
-                    <span className={`rounded px-2 py-0.5 text-xs ${statusColor[e.status ?? "Scheduled"] ?? "bg-gray-800 text-gray-400"}`}>
-                      {e.status ?? "Scheduled"}
-                    </span>
-                    {e.event_type && <span className="text-xs text-gray-500">{e.event_type}</span>}
+              <div key={e.id} className="rounded-xl bg-gray-900 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <Link href={`/admin/events/${e.id}`} className="min-w-0 flex-1 hover:opacity-80 transition">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{e.title}</span>
+                      <span className={`rounded px-2 py-0.5 text-xs ${statusColor[e.status ?? "Scheduled"] ?? "bg-gray-800 text-gray-400"}`}>
+                        {e.status ?? "Scheduled"}
+                      </span>
+                      {e.event_type && <span className="text-xs text-gray-500">{e.event_type}</span>}
+                    </div>
+                    <div className="mt-1 text-sm text-gray-400">{fmt(e)}</div>
+                    {(e.location_name || e.address) && (
+                      <div className="mt-0.5 text-sm text-gray-500">{e.location_name ?? e.address}</div>
+                    )}
+                    {e.notes && <div className="mt-1 text-xs text-gray-600 line-clamp-2">{e.notes}</div>}
+                  </Link>
+                  <div className="flex shrink-0 gap-1">
+                    <button onClick={() => startEdit(e)} className="rounded bg-gray-700 px-3 py-1.5 text-xs hover:bg-gray-600">Edit</button>
+                    <button onClick={() => void deleteEvent(e.id, e.title)} className="rounded bg-red-950/60 px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/60">Delete</button>
                   </div>
-                  <div className="mt-1 text-sm text-gray-400">{fmt(e)}</div>
-                  {(e.location_name || e.address) && (
-                    <div className="mt-0.5 text-sm text-gray-500">{e.location_name ?? e.address}</div>
-                  )}
-                  {e.notes && <div className="mt-1 text-xs text-gray-600 line-clamp-2">{e.notes}</div>}
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  <button onClick={() => startEdit(e)} className="rounded bg-gray-700 px-3 py-1.5 text-xs hover:bg-gray-600">Edit</button>
-                  <button onClick={() => void deleteEvent(e.id, e.title)} className="rounded bg-red-950/60 px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/60">Delete</button>
                 </div>
               </div>
             ))}

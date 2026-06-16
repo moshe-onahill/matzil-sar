@@ -36,7 +36,17 @@ type CalendarItem = {
   date: string;
   subtitle: string;
   status: string;
+  eventType?: string | null;
   href?: string;
+};
+
+const TYPE_COLOR: Record<string, string> = {
+  Training:              "bg-purple-900/80 text-purple-200",
+  "Non-Emergency Event": "bg-blue-900/80 text-blue-200",
+  "Standby Coverage":    "bg-yellow-900/80 text-yellow-200",
+  Meeting:               "bg-green-900/80 text-green-200",
+  "Community Event":     "bg-teal-900/80 text-teal-200",
+  incident:              "bg-red-900/80 text-red-200",
 };
 
 export default function EventsPage() {
@@ -166,6 +176,8 @@ export default function EventsPage() {
         date: event.event_date,
         subtitle: event.location_name || event.address || event.event_type || "Event",
         status: event.status || "Scheduled",
+        eventType: event.event_type,
+        href: `/events/${event.id}`,
       }));
 
     const incidentItems: CalendarItem[] = incidents.map((incident) => ({
@@ -282,20 +294,19 @@ export default function EventsPage() {
                 >
                   <div className="text-xs text-gray-300">{day.getDate()}</div>
 
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {items.slice(0, 3).map((item) => (
-                      <span
-                        key={`${item.kind}-${item.id}`}
-                        className={`h-2 w-2 rounded-full ${
-                          item.kind === "incident" ? "bg-red-500" : "bg-blue-400"
-                        }`}
-                      />
-                    ))}
-
-                    {items.length > 3 && (
-                      <span className="text-[10px] text-gray-400">
-                        +{items.length - 3}
-                      </span>
+                  <div className="mt-1 space-y-0.5">
+                    {items.slice(0, 2).map((item) => {
+                      const colorKey = item.kind === "incident" ? "incident" : (item.eventType ?? "");
+                      const cls = TYPE_COLOR[colorKey] ?? "bg-zinc-800 text-zinc-300";
+                      return (
+                        <div key={`${item.kind}-${item.id}`}
+                          className={`truncate rounded px-1 py-0.5 text-[9px] font-medium leading-tight ${cls}`}>
+                          {item.title}
+                        </div>
+                      );
+                    })}
+                    {items.length > 2 && (
+                      <div className="text-[9px] text-gray-500 pl-0.5">+{items.length - 2} more</div>
                     )}
                   </div>
                 </button>
@@ -321,39 +332,26 @@ export default function EventsPage() {
           ) : (
             <div className="space-y-2">
               {selectedItems.map((item) => {
-                const content = (
-                  <div className="rounded-lg bg-black/30 p-4">
+                const colorKey = item.kind === "incident" ? "incident" : (item.eventType ?? "");
+                const badgeCls = TYPE_COLOR[colorKey] ?? "bg-zinc-800 text-zinc-300";
+                const inner = (
+                  <div className={`rounded-lg bg-black/30 p-4 transition ${item.href ? "hover:bg-zinc-800/60 cursor-pointer" : ""}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="font-medium">{item.title}</div>
-                        <div className="mt-1 text-sm text-gray-400">
-                          {item.subtitle}
-                        </div>
+                        <div className="font-medium text-zinc-100">{item.title}</div>
+                        <div className="mt-1 text-sm text-gray-400">{item.subtitle}</div>
+                        <div className="mt-1 text-xs text-gray-600">Status: {item.status}</div>
                       </div>
-
-                      <span
-                        className={`rounded px-2 py-1 text-xs ${
-                          item.kind === "incident"
-                            ? "bg-red-950 text-red-200"
-                            : "bg-blue-950 text-blue-200"
-                        }`}
-                      >
-                        {item.kind}
+                      <span className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${badgeCls}`}>
+                        {item.kind === "incident" ? "Incident" : (item.eventType ?? "Event")}
                       </span>
-                    </div>
-
-                    <div className="mt-2 text-xs text-gray-500">
-                      Status: {item.status}
                     </div>
                   </div>
                 );
-
                 return item.href ? (
-                  <Link key={`${item.kind}-${item.id}`} href={item.href}>
-                    {content}
-                  </Link>
+                  <Link key={`${item.kind}-${item.id}`} href={item.href}>{inner}</Link>
                 ) : (
-                  <div key={`${item.kind}-${item.id}`}>{content}</div>
+                  <div key={`${item.kind}-${item.id}`}>{inner}</div>
                 );
               })}
             </div>
@@ -383,31 +381,23 @@ export default function EventsPage() {
                 </div>
               ) : (
                 upcomingEvents.map((event) => (
-                  <div key={event.id} className="rounded-xl bg-gray-900 p-4">
-                    <div className="break-words text-lg font-semibold">
-                      {event.title}
+                  <Link key={event.id} href={`/events/${event.id}`}
+                    className="block rounded-xl bg-gray-900 p-4 hover:bg-zinc-800 transition">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="break-words text-lg font-semibold">{event.title}</div>
+                      <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${TYPE_COLOR[event.event_type ?? ""] ?? "bg-zinc-800 text-zinc-400"}`}>
+                        {event.event_type ?? "Event"}
+                      </span>
                     </div>
-
-                    <div className="mt-1 text-sm text-gray-400">
-                      {event.event_type || "Event"} • {event.status || "Scheduled"}
-                    </div>
-
                     <div className="mt-2 text-sm text-gray-300">
                       {formatDate(event.event_date)}
-                      {formatTime(event.start_time)
-                        ? ` • ${formatTime(event.start_time)}`
-                        : ""}
-                      {formatTime(event.end_time)
-                        ? ` - ${formatTime(event.end_time)}`
-                        : ""}
+                      {formatTime(event.start_time) ? ` • ${formatTime(event.start_time)}` : ""}
+                      {formatTime(event.end_time) ? ` – ${formatTime(event.end_time)}` : ""}
                     </div>
-
                     {(event.location_name || event.address) && (
-                      <div className="mt-2 text-sm text-gray-400">
-                        {event.location_name || event.address}
-                      </div>
+                      <div className="mt-1 text-sm text-gray-400">{event.location_name ?? event.address}</div>
                     )}
-                  </div>
+                  </Link>
                 ))
               )}
             </div>
