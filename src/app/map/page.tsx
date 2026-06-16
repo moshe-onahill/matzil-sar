@@ -253,10 +253,29 @@ export default function MapPage() {
     return () => ro.disconnect();
   }, []);
 
-  // Sync React fullscreen state with the native browser fullscreen API
+  // Sync React fullscreen state with the native browser fullscreen API,
+  // and set an explicit pixel height on the map container so Leaflet can measure it.
   useEffect(() => {
     function onFsChange() {
-      setFullscreen(!!document.fullscreenElement);
+      const isFs = !!document.fullscreenElement;
+      setFullscreen(isFs);
+      // Use rAF to let the browser finish the fullscreen transition before measuring
+      requestAnimationFrame(() => {
+        const container = mapContainerRef.current;
+        const wrapper = mapWrapperRef.current;
+        if (!container || !wrapper) return;
+        if (isFs) {
+          // Measure the wrapper (now fullscreen) and subtract the header bar
+          const headerEl = wrapper.querySelector(":scope > div:first-child") as HTMLElement | null;
+          const headerH = headerEl ? headerEl.offsetHeight : 56;
+          container.style.height = `${wrapper.clientHeight - headerH}px`;
+          container.style.width = `${wrapper.clientWidth}px`;
+        } else {
+          container.style.height = "";
+          container.style.width = "";
+        }
+        mapRef.current?.invalidateSize({ animate: false });
+      });
     }
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
@@ -898,7 +917,7 @@ export default function MapPage() {
                   {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
                 </button>
               </div>
-              <div ref={mapContainerRef} className={fullscreen ? "flex-1" : "h-[520px] w-full"} />
+              <div ref={mapContainerRef} className="h-[520px] w-full" />
             </div>
 
             {canManagePins() && (
