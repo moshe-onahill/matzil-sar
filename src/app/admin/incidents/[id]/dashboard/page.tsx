@@ -77,7 +77,20 @@ export default function CommandDashboardPage() {
     if (!id) return;
     void loadAll();
     pollRef.current = setInterval(() => void loadAll(), 30_000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+
+    const channel = supabase
+      .channel(`dashboard-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "incident_tasks", filter: `incident_id=eq.${id}` }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_assignments" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "incident_responses", filter: `incident_id=eq.${id}` }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "incident_updates", filter: `incident_id=eq.${id}` }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "incidents", filter: `id=eq.${id}` }, () => void loadAll())
+      .subscribe();
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      void supabase.removeChannel(channel);
+    };
   }, [id]);
 
   async function loadAll() {
