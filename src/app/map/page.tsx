@@ -242,14 +242,15 @@ export default function MapPage() {
     mapRef.current.setView([focus.lat, focus.lng], 14);
   }, [focus]);
 
+  // ResizeObserver fires exactly when the container's pixel size changes — no timing guesswork
   useEffect(() => {
-    if (!mapRef.current) return;
-    // Wait for the browser to paint the new layout before telling Leaflet about the resize
-    const raf = requestAnimationFrame(() => {
-      setTimeout(() => mapRef.current?.invalidateSize(), 50);
+    if (!mapContainerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      mapRef.current?.invalidateSize({ animate: false });
     });
-    return () => cancelAnimationFrame(raf);
-  }, [fullscreen]);
+    ro.observe(mapContainerRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   async function ensureLeafletAndInit() {
     if (typeof window === "undefined") return;
