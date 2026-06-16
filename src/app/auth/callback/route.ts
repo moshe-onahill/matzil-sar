@@ -26,9 +26,12 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}/`);
+      const isRecovery = data.session?.user?.recovery_sent_at != null &&
+        searchParams.get("type") === "recovery";
+      const next = isRecovery ? "/reset-password" : (searchParams.get("next") ?? "/");
+      return NextResponse.redirect(`${origin}${next}`);
     }
   }
 

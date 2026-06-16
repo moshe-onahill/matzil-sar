@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "forgot">("login");
+  const [rememberMe, setRememberMe] = useState(true);
 
   async function login() {
     if (!email || !password) { toast("Enter your email and password.", "error"); return; }
@@ -17,6 +18,12 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
     if (error) { toast(error.message, "error"); return; }
+    if (!rememberMe) {
+      localStorage.setItem("session-temporary", "1");
+      sessionStorage.setItem("session-active", "1");
+    } else {
+      localStorage.removeItem("session-temporary");
+    }
     window.location.replace("/");
   }
 
@@ -31,7 +38,7 @@ export default function LoginPage() {
     if (!email) { toast("Enter your email first.", "error"); return; }
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
     });
     setLoading(false);
     if (error) { toast(error.message, "error"); return; }
@@ -102,6 +109,12 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
               />
+
+              <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
+                <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-700 bg-zinc-950 accent-red-600 cursor-pointer" />
+                <span className="text-sm text-zinc-400">Remember me</span>
+              </label>
 
               <button
                 onClick={() => void login()}

@@ -90,6 +90,10 @@ export default function IncidentCoordinationPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [onScene, setOnScene] = useState<OnSceneUnit[]>([]);
   const [updates, setUpdates] = useState<IncidentUpdate[]>([]);
+  const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
+  const [editUpdateTitle, setEditUpdateTitle] = useState("");
+  const [editUpdateBody, setEditUpdateBody] = useState("");
+  const [savingUpdate, setSavingUpdate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>("coordination");
 
@@ -194,6 +198,25 @@ export default function IncidentCoordinationPage() {
     setOnScene(units);
     setUpdates((updatesRes.data ?? []) as IncidentUpdate[]);
     setLoading(false);
+  }
+
+  function startEditUpdate(u: IncidentUpdate) {
+    setEditingUpdateId(u.id);
+    setEditUpdateTitle(u.title);
+    setEditUpdateBody(u.body ?? "");
+  }
+
+  async function saveEditUpdate() {
+    if (!editingUpdateId || !editUpdateTitle.trim()) return;
+    setSavingUpdate(true);
+    const { error } = await supabase.from("incident_updates")
+      .update({ title: editUpdateTitle.trim(), body: editUpdateBody.trim() || null })
+      .eq("id", editingUpdateId);
+    setSavingUpdate(false);
+    if (error) { toast(error.message, "error"); return; }
+    toast("Update saved.", "success");
+    setEditingUpdateId(null);
+    await loadAll();
   }
 
   async function deleteUpdate(updateId: string) {
@@ -611,22 +634,45 @@ export default function IncidentCoordinationPage() {
                 <div className="space-y-2">
                   {updates.map((u) => (
                     <div key={u.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-medium text-red-400">{u.update_type}</span>
-                            <span className="text-xs text-zinc-600">
-                              {new Date(u.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                            </span>
+                      {editingUpdateId === u.id ? (
+                        <div className="space-y-2">
+                          <div className="text-xs text-zinc-500">{u.update_type} · {new Date(u.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                          <input value={editUpdateTitle} onChange={(e) => setEditUpdateTitle(e.target.value)}
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500" />
+                          <textarea value={editUpdateBody} onChange={(e) => setEditUpdateBody(e.target.value)} rows={3}
+                            placeholder="Body (optional)"
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500 resize-none" />
+                          <div className="flex gap-2">
+                            <button onClick={() => void saveEditUpdate()} disabled={savingUpdate}
+                              className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 hover:bg-green-500">
+                              {savingUpdate ? "Saving…" : "Save"}
+                            </button>
+                            <button onClick={() => setEditingUpdateId(null)}
+                              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700">
+                              Cancel
+                            </button>
                           </div>
-                          <div className="mt-0.5 text-sm font-medium text-zinc-200">{u.title}</div>
-                          {u.body && <div className="mt-1 text-xs text-zinc-500">{u.body}</div>}
                         </div>
-                        <button onClick={() => void deleteUpdate(u.id)}
-                          className="shrink-0 text-xs text-zinc-700 hover:text-red-400 transition px-2 py-1">
-                          Delete
-                        </button>
-                      </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-medium text-red-400">{u.update_type}</span>
+                              <span className="text-xs text-zinc-600">
+                                {new Date(u.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 text-sm font-medium text-zinc-200">{u.title}</div>
+                            {u.body && <div className="mt-1 text-xs text-zinc-500">{u.body}</div>}
+                          </div>
+                          <div className="flex shrink-0 gap-1">
+                            <button onClick={() => startEditUpdate(u)}
+                              className="text-xs text-zinc-600 hover:text-zinc-300 transition px-2 py-1">Edit</button>
+                            <button onClick={() => void deleteUpdate(u.id)}
+                              className="text-xs text-zinc-700 hover:text-red-400 transition px-2 py-1">Delete</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -25,10 +25,19 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [reason, setReason] = useState("");
 
   useEffect(() => {
-    // Login page needs no check
-    if (pathname === "/login") {
+    if (pathname === "/login" || pathname === "/reset-password") {
       setChecking(false);
       return;
+    }
+    // If user chose "don't remember me", sign out when the browser session ends
+    if (typeof window !== "undefined" &&
+        localStorage.getItem("session-temporary") === "1" &&
+        !sessionStorage.getItem("session-active")) {
+      void supabase.auth.signOut().then(() => { window.location.href = "/login"; });
+      return;
+    }
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("session-active", "1");
     }
     void checkRoster();
   }, [pathname]);
@@ -92,6 +101,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem("auth-email");
     window.localStorage.removeItem("real-role");
     window.localStorage.removeItem("dev-role");
+    window.localStorage.removeItem("session-temporary");
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
