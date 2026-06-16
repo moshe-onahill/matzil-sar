@@ -125,7 +125,7 @@ export default function Dashboard() {
       <div className="mx-auto max-w-5xl space-y-4">
 
         <div className="flex items-center justify-between">
-          <MatzilLogo size={36} withText />
+          <MatzilLogo size={30} withText />
         </div>
 
         {/* Active Call hero */}

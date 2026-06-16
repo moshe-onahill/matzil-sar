@@ -69,12 +69,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar — hidden on mobile, visible md+ */}
       <aside className="hidden md:flex md:w-56 lg:w-64 flex-col border-r border-zinc-800 bg-zinc-900">
         {/* Brand */}
-        <div className="flex items-center gap-2.5 border-b border-zinc-800 px-5 py-4">
-          <MatzilLogo size={32} />
-          <div>
-            <div className="text-sm font-semibold text-zinc-50">Matzil SAR</div>
-            <div className="text-[11px] text-zinc-500">Admin Console</div>
-          </div>
+        <div className="flex flex-col border-b border-zinc-800 px-5 py-4 gap-1">
+          <MatzilLogo size={24} withText />
+          <div className="text-[11px] text-zinc-500">Admin Console</div>
         </div>
 
         {/* Nav links */}
