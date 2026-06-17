@@ -248,6 +248,7 @@ export default function AdminUnitsPage() {
                   <th className="px-4 py-3">ETA</th>
                   <th className="px-4 py-3">GPS</th>
                   <th className="px-4 py-3">Responded</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/60">
@@ -330,6 +331,18 @@ export default function AdminUnitsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">{new Date(r.responded_at).toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => void fetch("/api/send-push", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ user_id: r.user_id, title: "Location Requested", body: "An admin is requesting your current location.", url: "/" }),
+                          }).then(() => toast("Location request sent", "success"))}
+                          className="rounded px-2 py-1 text-xs bg-orange-900/50 text-orange-300 hover:bg-orange-900 transition whitespace-nowrap"
+                        >
+                          Request Location
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}

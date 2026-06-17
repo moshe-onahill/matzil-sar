@@ -136,7 +136,7 @@ export default function RespondersPage() {
             status
           )
         `)
-        .eq("response_type", "Responding")
+        .in("response_type", ["Responding", "On Location"])
         .order("responded_at", { ascending: false }),
 
       fetch("/api/location").then((r) => r.json()),
