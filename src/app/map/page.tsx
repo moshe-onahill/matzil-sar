@@ -162,6 +162,7 @@ export default function MapPage() {
   });
 
   const [pinTitle, setPinTitle] = useState("");
+  const [pinType, setPinType] = useState<"location" | "vehicle" | "other">("location");
   const [pinNotes, setPinNotes] = useState("");
   const [pinAddress, setPinAddress] = useState("");
   const [pinLat, setPinLat] = useState("");
@@ -710,6 +711,7 @@ export default function MapPage() {
 
     const { error } = await supabase.from("custom_pins").insert({
       title: pinTitle.trim(),
+      pin_type: pinType,
       notes: pinNotes.trim() || null,
       address: pinAddress.trim() || null,
       lat,
@@ -934,6 +936,15 @@ export default function MapPage() {
                     placeholder="Pin title"
                     className="w-full rounded bg-black px-3 py-2"
                   />
+
+                  <div className="flex gap-2">
+                    {(["location", "vehicle", "other"] as const).map((t) => (
+                      <button key={t} onClick={() => setPinType(t)}
+                        className={`flex-1 rounded py-2 text-sm capitalize transition ${pinType === t ? "bg-red-600 text-white" : "bg-black/60 text-zinc-400 hover:bg-zinc-800"}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
 
                   <textarea
                     value={pinNotes}

@@ -91,7 +91,7 @@ async function taskApi(body: object) {
 }
 
 
-type ActiveTab = "coordination" | "edit" | "updates" | "subject";
+type ActiveTab = "coordination" | "edit" | "updates" | "subject" | "attachments";
 
 type Subject = {
   id: string;
@@ -179,6 +179,11 @@ export default function IncidentCoordinationPage() {
   const [heightInInput, setHeightInInput] = useState("");
   const [weightLbsInput, setWeightLbsInput] = useState("");
 
+  // Attachments
+  type Attachment = { id: string; file_name: string; storage_path: string; mime_type: string | null; file_size: number | null; created_at: string };
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
   // Post update form state
   const [updateType, setUpdateType] = useState("General Update");
   const [updateTitle, setUpdateTitle] = useState("");
@@ -206,7 +211,7 @@ export default function IncidentCoordinationPage() {
   }
 
   async function loadAll() {
-    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes, subjectsRes] = await Promise.all([
+    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes, subjectsRes, attachmentsRes] = await Promise.all([
       supabase.from("incidents").select(
         "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng,coordinator_id"
       ).eq("id", id).single(),
@@ -226,6 +231,7 @@ export default function IncidentCoordinationPage() {
       supabase.from("users").select("id,full_name,call_sign").order("call_sign"),
       supabase.from("incident_staging_areas").select("id,name,address,lat,lng,notes").eq("incident_id", id).order("created_at"),
       supabase.from("incident_subjects").select("*").eq("incident_id", id).order("created_at"),
+      supabase.from("incident_attachments").select("id,file_name,storage_path,mime_type,file_size,created_at").eq("incident_id", id).order("created_at", { ascending: false }),
     ]);
 
     const inc = incRes.data as Incident;
@@ -266,6 +272,7 @@ export default function IncidentCoordinationPage() {
     setUpdates((updatesRes.data ?? []) as IncidentUpdate[]);
     setStagingAreas((areasRes.data ?? []) as StagingArea[]);
     setSubjects((subjectsRes.data ?? []) as Subject[]);
+    setAttachments((attachmentsRes.data ?? []) as Attachment[]);
     setLoading(false);
   }
 
@@ -442,13 +449,48 @@ export default function IncidentCoordinationPage() {
 
   async function deleteIncident() {
     if (!id || !incident) return;
-    if (!window.confirm(`Permanently delete "${incident.title}"? This cannot be undone.`)) return;
-    setDeleting(true);
-    const { error } = await supabase.from("incidents").delete().eq("id", id);
-    setDeleting(false);
-    if (error) { toast(error.message, "error"); return; }
-    void logAudit({ action: "delete_incident", entity_type: "incident", entity_id: id as string, entity_label: incident.title });
-    window.location.href = "/admin/incidents";
+    const isGlobalAdmin = currentUserRole === "Global Admin";
+    if (isGlobalAdmin) {
+      if (!window.confirm(`Permanently delete "${incident.title}"? This cannot be undone.`)) return;
+      setDeleting(true);
+      const { error } = await supabase.from("incidents").delete().eq("id", id);
+      setDeleting(false);
+      if (error) { toast(error.message, "error"); return; }
+      void logAudit({ action: "delete_incident", entity_type: "incident", entity_id: id as string, entity_label: incident.title });
+      window.location.href = "/admin/incidents";
+    } else {
+      if (!window.confirm(`Archive "${incident.title}"? It will be hidden but a Global Admin can restore it.`)) return;
+      setDeleting(true);
+      const { error } = await supabase.from("incidents").update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: currentUserId }).eq("id", id);
+      setDeleting(false);
+      if (error) { toast(error.message, "error"); return; }
+      void logAudit({ action: "delete_incident", entity_type: "incident", entity_id: id as string, entity_label: incident.title });
+      window.location.href = "/admin/incidents";
+    }
+  }
+
+  async function uploadAttachment(file: File) {
+    if (!id || !currentUserId) return;
+    setUploadingFile(true);
+    const path = `${id}/${Date.now()}-${file.name}`;
+    const { error: upErr } = await supabase.storage.from("incident-attachments").upload(path, file);
+    if (upErr) { toast(upErr.message, "error"); setUploadingFile(false); return; }
+    const { error: dbErr } = await supabase.from("incident_attachments").insert({
+      incident_id: id, storage_path: path, file_name: file.name,
+      file_size: file.size, mime_type: file.type, uploaded_by: currentUserId,
+    });
+    setUploadingFile(false);
+    if (dbErr) { toast(dbErr.message, "error"); return; }
+    toast("File uploaded.", "success");
+    await loadAll();
+  }
+
+  async function deleteAttachment(att: Attachment) {
+    if (!window.confirm(`Delete "${att.file_name}"?`)) return;
+    await supabase.storage.from("incident-attachments").remove([att.storage_path]);
+    await supabase.from("incident_attachments").delete().eq("id", att.id);
+    toast("File deleted.", "success");
+    await loadAll();
   }
 
   async function postUpdate() {
@@ -543,6 +585,7 @@ export default function IncidentCoordinationPage() {
   const TABS: { id: ActiveTab; label: string }[] = [
     { id: "coordination", label: "Coordination" },
     { id: "subject", label: "Subject" },
+    { id: "attachments", label: "Files" },
     { id: "edit", label: "Edit" },
     { id: "updates", label: "Updates" },
   ];
@@ -1266,6 +1309,58 @@ export default function IncidentCoordinationPage() {
                 </div>
               </section>
             )}
+          </div>
+        )}
+
+        {/* ── ATTACHMENTS TAB ── */}
+        {activeTab === "attachments" && (
+          <div className="space-y-4">
+            <section className="rounded-xl bg-zinc-900 p-5 space-y-4">
+              <div className="font-semibold text-zinc-50">Incident Files</div>
+              <div className="text-sm text-zinc-500">All members can view. Only admins/managers can upload or delete.</div>
+
+              {isGlobalAdmin || ["SAR Manager", "Dispatcher"].includes(getStoredRole()) ? (
+                <label className={`flex items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-zinc-700 py-6 cursor-pointer hover:border-zinc-500 transition ${uploadingFile ? "opacity-50 pointer-events-none" : ""}`}>
+                  <span className="text-sm text-zinc-400">{uploadingFile ? "Uploading…" : "Click to upload PDF or image (max 50 MB)"}</span>
+                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadAttachment(f); e.target.value = ""; }} />
+                </label>
+              ) : null}
+
+              {attachments.length === 0 ? (
+                <div className="rounded-lg bg-black/30 p-4 text-sm text-zinc-500">No files attached yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {attachments.map((att) => {
+                    const isPdf = att.mime_type === "application/pdf";
+                    const { data: urlData } = supabase.storage.from("incident-attachments").getPublicUrl(att.storage_path);
+                    return (
+                      <div key={att.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-zinc-200">{att.file_name}</div>
+                          <div className="text-xs text-zinc-600 mt-0.5">
+                            {att.file_size ? `${(att.file_size / 1024).toFixed(0)} KB · ` : ""}
+                            {new Date(att.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <a href={urlData.publicUrl} target="_blank" rel="noopener noreferrer"
+                            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+                            {isPdf ? "Open PDF" : "View"}
+                          </a>
+                          {(isGlobalAdmin || ["SAR Manager", "Dispatcher"].includes(getStoredRole())) && (
+                            <button onClick={() => void deleteAttachment(att)}
+                              className="rounded-lg px-3 py-1.5 text-xs text-zinc-600 hover:text-red-400 transition">
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
         )}
 
