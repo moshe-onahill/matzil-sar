@@ -72,7 +72,7 @@ export default async function FlyerPage({ params }: { params: { id: string } }) 
       </head>
       <body>
         <div className="page">
-          <button className="print-btn no-print" onClick="window.print()">🖨 Print / Save PDF</button>
+          <button className="print-btn no-print">🖨 Print / Save PDF</button>
 
           <div className="header">
             <div className="badge">MISSING PERSON</div>
