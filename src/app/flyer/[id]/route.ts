@@ -154,7 +154,8 @@ function subjectFlyer(s: Subject, origin: string): string {
     <img src="${origin}/matzil-logo.avif" class="footer-logo" alt="" />
     <div class="footer-cta">
       <div class="cta-line1">IF YOU HAVE ANY INFORMATION</div>
-      <div class="cta-line2">CALL 911 IMMEDIATELY</div>
+      <div class="cta-line2">1-833-628-9457</div>
+      <div class="cta-line3">or call 911 in an emergency</div>
     </div>
     <div class="footer-brand">
       <div class="brand-name">MATZIL SAR</div>
@@ -460,11 +461,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       text-transform: uppercase;
     }
     .cta-line2 {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 900;
       color: #dc2626;
       letter-spacing: 1px;
       margin-top: 2px;
+    }
+    .cta-line3 {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 3px;
+      letter-spacing: 0.5px;
     }
     .footer-brand { text-align: right; }
     .brand-name {
