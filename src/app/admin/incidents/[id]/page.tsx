@@ -176,6 +176,8 @@ export default function IncidentCoordinationPage() {
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [savingSubject, setSavingSubject] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [heightInInput, setHeightInInput] = useState("");
+  const [weightLbsInput, setWeightLbsInput] = useState("");
 
   // Post update form state
   const [updateType, setUpdateType] = useState("General Update");
@@ -294,11 +296,15 @@ export default function IncidentCoordinationPage() {
   function startNewSubject() {
     setEditingSubjectId("new");
     setSubjectForm({});
+    setHeightInInput("");
+    setWeightLbsInput("");
   }
 
   function startEditSubject(s: Subject) {
     setEditingSubjectId(s.id);
     setSubjectForm({ ...s });
+    setHeightInInput(s.height_cm ? String(Math.round(s.height_cm / 2.54)) : "");
+    setWeightLbsInput(s.weight_kg ? String(Math.round(s.weight_kg * 2.205)) : "");
   }
 
   async function uploadSubjectPhoto(file: File): Promise<string | null> {
@@ -323,8 +329,8 @@ export default function IncidentCoordinationPage() {
       age_estimate: subjectForm.age_estimate?.trim() || null,
       gender: subjectForm.gender?.trim() || null,
       nationality: subjectForm.nationality?.trim() || null,
-      height_cm: subjectForm.height_cm ?? null,
-      weight_kg: subjectForm.weight_kg ?? null,
+      height_cm: heightInInput ? Math.round(parseInt(heightInInput) * 2.54) : null,
+      weight_kg: weightLbsInput ? Math.round(parseInt(weightLbsInput) / 2.205) : null,
       hair_color: subjectForm.hair_color?.trim() || null,
       hair_length: subjectForm.hair_length?.trim() || null,
       eye_color: subjectForm.eye_color?.trim() || null,
@@ -876,23 +882,17 @@ export default function IncidentCoordinationPage() {
                       </div>
                     ))}
                     <div className="space-y-0.5">
-                      <label className="text-xs text-zinc-500">Height (inches)</label>
-                      <input type="number" value={subjectForm.height_cm ? Math.round(subjectForm.height_cm / 2.54) : ""}
-                        onChange={(e) => {
-                          const inches = parseInt(e.target.value);
-                          setSubjectForm((f) => ({ ...f, height_cm: isNaN(inches) ? undefined : Math.round(inches * 2.54) }));
-                        }}
-                        placeholder="e.g. 71 for 5′11″"
+                      <label className="text-xs text-zinc-500">Height (inches — e.g. 71 = 5′11″)</label>
+                      <input type="number" value={heightInInput}
+                        onChange={(e) => setHeightInInput(e.target.value)}
+                        placeholder="71"
                         className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                     </div>
                     <div className="space-y-0.5">
                       <label className="text-xs text-zinc-500">Weight (lbs)</label>
-                      <input type="number" value={subjectForm.weight_kg ? Math.round(subjectForm.weight_kg * 2.205) : ""}
-                        onChange={(e) => {
-                          const lbs = parseInt(e.target.value);
-                          setSubjectForm((f) => ({ ...f, weight_kg: isNaN(lbs) ? undefined : Math.round(lbs / 2.205) }));
-                        }}
-                        placeholder="e.g. 160"
+                      <input type="number" value={weightLbsInput}
+                        onChange={(e) => setWeightLbsInput(e.target.value)}
+                        placeholder="160"
                         className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                     </div>
                   </div>
@@ -970,7 +970,7 @@ export default function IncidentCoordinationPage() {
                     className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-semibold disabled:opacity-60 hover:bg-red-500 transition">
                     {savingSubject ? "Saving…" : "Save Subject"}
                   </button>
-                  <button onClick={() => { setEditingSubjectId(null); setSubjectForm({}); }}
+                  <button onClick={() => { setEditingSubjectId(null); setSubjectForm({}); setHeightInInput(""); setWeightLbsInput(""); }}
                     className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm hover:bg-zinc-700 transition">
                     Cancel
                   </button>
