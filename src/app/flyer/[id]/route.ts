@@ -149,15 +149,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .order("created_at"),
   ]);
 
+  // DEBUG — remove after fix
+  return new NextResponse(
+    JSON.stringify({ incidentId: id, incident, subjectsError, rawSubjects }, null, 2),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
+
   if (!incident) {
     return new NextResponse("Incident not found", { status: 404 });
   }
-
-  // DEBUG — remove after fix
-  return new NextResponse(
-    JSON.stringify({ incidentId: id, subjectsError, rawSubjects }, null, 2),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
 
   const subjects = (rawSubjects ?? []) as Subject[];
 
