@@ -233,7 +233,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       display: flex; align-items: center; gap: 16px;
       flex-shrink: 0;
     }
-    .org-logo { height: 68px; width: auto; flex-shrink: 0; }
+    .org-logo { height: 68px; width: auto; flex-shrink: 0; filter: brightness(0) invert(1); }
     .org-text { flex: 1; }
     .org-name { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 3px; line-height: 1; }
     .org-sub  { font-size: 12px; color: rgba(255,255,255,0.8); letter-spacing: 2px; margin-top: 3px; }
