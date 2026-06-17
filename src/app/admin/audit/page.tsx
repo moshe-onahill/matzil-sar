@@ -32,6 +32,9 @@ const ACTION_LABELS: Record<string, string> = {
   send_alert: "Sent alert",
   post_event_update: "Posted event update",
   delete_incident: "Deleted incident",
+  create_vehicle: "Added vehicle",
+  edit_vehicle: "Edited vehicle",
+  delete_vehicle: "Deleted vehicle",
 };
 
 const ACTION_COLORS: Record<string, string> = {

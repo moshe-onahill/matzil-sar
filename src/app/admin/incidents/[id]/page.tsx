@@ -391,6 +391,10 @@ export default function IncidentCoordinationPage() {
                 className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">
                 Command Dashboard ↗
               </Link>
+              <Link href={`/incidents/${incident.id}/flyer`} target="_blank"
+                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">
+                Flyer ↗
+              </Link>
               <Link href={`/incidents/${incident.id}`}
                 className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700">
                 Full Incident →
