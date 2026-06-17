@@ -110,6 +110,7 @@ export default function IncidentDetailClient() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<{ id: string; file_name: string; file_url: string; mime_type: string | null; file_size: number | null; created_at: string }[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Location tracking while responding
   const watchIdRef = useRef<number | null>(null);
@@ -901,7 +902,9 @@ export default function IncidentDetailClient() {
                 <div key={s.id} className="rounded-xl bg-gray-900 p-5 space-y-4">
                   <div className="flex gap-4 items-start">
                     {s.photo_url && (
-                      <img src={s.photo_url} alt="Subject" className="h-24 w-24 rounded-xl object-cover shrink-0 border border-gray-700" />
+                      <img src={s.photo_url} alt="Subject"
+                        onClick={() => setLightboxUrl(s.photo_url!)}
+                        className="h-24 w-24 rounded-xl object-cover shrink-0 border border-gray-700 cursor-zoom-in" />
                     )}
                     <div>
                       <div className="text-xl font-bold">{s.full_name || "Unknown"}</div>
@@ -1000,6 +1003,13 @@ export default function IncidentDetailClient() {
           )}
         </div>
       </main>
+
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setLightboxUrl(null)}>
+          <img src={lightboxUrl} alt="Subject photo" className="max-h-full max-w-full rounded-xl object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <button onClick={() => setLightboxUrl(null)} className="absolute top-4 right-4 rounded-full bg-zinc-800 p-2 text-zinc-300 hover:bg-zinc-700 transition">✕</button>
+        </div>
+      )}
 
       {timePickerOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4">
