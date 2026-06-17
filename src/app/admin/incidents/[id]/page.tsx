@@ -488,10 +488,13 @@ export default function IncidentCoordinationPage() {
 
   async function deleteAttachment(att: Attachment) {
     if (!window.confirm(`Delete "${att.file_name}"?`)) return;
-    // Extract storage path from URL
     const storagePath = att.file_url.split("/incident-attachments/")[1];
-    if (storagePath) await supabase.storage.from("incident-attachments").remove([storagePath]);
-    await supabase.from("incident_attachments").delete().eq("id", att.id);
+    if (storagePath) {
+      const { error: stErr } = await supabase.storage.from("incident-attachments").remove([storagePath]);
+      if (stErr) { toast(`Storage error: ${stErr.message}`, "error"); return; }
+    }
+    const { error: dbErr } = await supabase.from("incident_attachments").delete().eq("id", att.id);
+    if (dbErr) { toast(`Delete failed: ${dbErr.message}`, "error"); return; }
     toast("File deleted.", "success");
     await loadAll();
   }
