@@ -240,11 +240,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       display: flex; align-items: center; gap: 16px;
       flex-shrink: 0;
     }
-    .org-logo { height: 68px; width: auto; filter: brightness(0) invert(1); flex-shrink: 0; }
+    .org-logo { height: 68px; width: auto; flex-shrink: 0; }
     .org-text { flex: 1; }
     .org-name { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 3px; line-height: 1; }
     .org-sub  { font-size: 12px; color: rgba(255,255,255,0.8); letter-spacing: 2px; margin-top: 3px; }
-    .org-words { height: 44px; width: auto; filter: brightness(0) invert(1); flex-shrink: 0; }
+    .org-words { height: 44px; width: auto; flex-shrink: 0; }
 
     /* MISSING PERSON */
     .banner {
@@ -291,7 +291,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       width: 100%; height: 100%;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
     }
-    .np-logo { height: 70px; opacity: 0.12; filter: brightness(0) invert(1); }
+    .np-logo { height: 70px; opacity: 0.18; }
     .np-text { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #444; text-align: center; line-height: 1.6; }
 
     /* Details — flex column, space-between so rows fill the height */

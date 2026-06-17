@@ -843,7 +843,6 @@ export default function IncidentCoordinationPage() {
                       { key: "full_name", label: "Full Name" },
                       { key: "also_known_as", label: "Also Known As / Nickname" },
                       { key: "age_estimate", label: "Age / Estimate" },
-                      { key: "gender", label: "Gender" },
                       { key: "nationality", label: "Nationality" },
                       { key: "languages_spoken", label: "Languages Spoken" },
                     ].map(({ key, label }) => (
@@ -854,6 +853,15 @@ export default function IncidentCoordinationPage() {
                           className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                       </div>
                     ))}
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-zinc-500">Gender</label>
+                      <select value={subjectForm.gender ?? ""}
+                        onChange={(e) => setSubjectForm((f) => ({ ...f, gender: e.target.value }))}
+                        className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600">
+                        <option value="">— Select —</option>
+                        {["Male","Female","Non-binary","Unknown"].map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
                     <div className="space-y-0.5">
                       <label className="text-xs text-zinc-500">Date of Birth</label>
                       <input type="date" value={subjectForm.date_of_birth ?? ""}
@@ -867,18 +875,21 @@ export default function IncidentCoordinationPage() {
                 <div>
                   <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Physical Description</div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {[
-                      { key: "hair_color", label: "Hair Color" },
-                      { key: "hair_length", label: "Hair Length" },
-                      { key: "eye_color", label: "Eye Color" },
-                      { key: "skin_tone", label: "Skin Tone" },
-                      { key: "build", label: "Build" },
-                    ].map(({ key, label }) => (
+                    {([
+                      { key: "hair_color", label: "Hair Color", opts: ["Black","Dark Brown","Brown","Light Brown","Blonde","Dirty Blonde","Auburn","Red","Gray","White","Salt & Pepper","Bald","Other"] },
+                      { key: "hair_length", label: "Hair Length", opts: ["Bald","Buzzed","Short","Medium","Long","Very Long"] },
+                      { key: "eye_color", label: "Eye Color", opts: ["Brown","Dark Brown","Hazel","Green","Blue","Gray","Amber","Black","Other"] },
+                      { key: "skin_tone", label: "Skin Tone", opts: ["Fair","Light","Medium","Olive","Tan","Brown","Dark Brown","Dark","Other"] },
+                      { key: "build", label: "Build", opts: ["Slim","Slender","Average","Medium","Athletic","Muscular","Stocky","Heavy","Large","Obese"] },
+                    ] as { key: keyof typeof subjectForm; label: string; opts: string[] }[]).map(({ key, label, opts }) => (
                       <div key={key} className="space-y-0.5">
                         <label className="text-xs text-zinc-500">{label}</label>
-                        <input value={(subjectForm as any)[key] ?? ""}
+                        <select value={(subjectForm as any)[key] ?? ""}
                           onChange={(e) => setSubjectForm((f) => ({ ...f, [key]: e.target.value }))}
-                          className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                          className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600">
+                          <option value="">— Select —</option>
+                          {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
                       </div>
                     ))}
                     <div className="space-y-0.5">
