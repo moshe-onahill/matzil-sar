@@ -46,8 +46,8 @@ function subjectFlyer(s: Subject, origin: string): string {
   const physChips = [
     chip("Gender", s.gender),
     chip("Age", s.age_estimate || (s.date_of_birth ? `DOB ${s.date_of_birth}` : null)),
-    chip("Height", s.height_cm ? (() => { const totalIn = Math.round(s.height_cm! / 2.54); return `${Math.floor(totalIn / 12)}′${totalIn % 12}″`; })() : null),
-    chip("Weight", s.weight_kg ? `${Math.round(s.weight_kg! * 2.205)} lbs` : null),
+    chip("Height", s.height_cm ? `${Math.floor(s.height_cm / 12)}′${s.height_cm % 12}″` : null),
+    chip("Weight", s.weight_kg ? `${s.weight_kg} lbs` : null),
     chip("Hair", s.hair_color ? `${s.hair_color}${s.hair_length ? `, ${s.hair_length}` : ""}` : null),
     chip("Eyes", s.eye_color),
     chip("Build", s.build),

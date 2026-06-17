@@ -303,8 +303,8 @@ export default function IncidentCoordinationPage() {
   function startEditSubject(s: Subject) {
     setEditingSubjectId(s.id);
     setSubjectForm({ ...s });
-    setHeightInInput(s.height_cm ? String(Math.round(s.height_cm / 2.54)) : "");
-    setWeightLbsInput(s.weight_kg ? String(Math.round(s.weight_kg * 2.205)) : "");
+    setHeightInInput(s.height_cm ? String(s.height_cm) : "");
+    setWeightLbsInput(s.weight_kg ? String(s.weight_kg) : "");
   }
 
   async function uploadSubjectPhoto(file: File): Promise<string | null> {
@@ -329,8 +329,8 @@ export default function IncidentCoordinationPage() {
       age_estimate: subjectForm.age_estimate?.trim() || null,
       gender: subjectForm.gender?.trim() || null,
       nationality: subjectForm.nationality?.trim() || null,
-      height_cm: heightInInput ? Math.round(parseInt(heightInInput) * 2.54) : null,
-      weight_kg: weightLbsInput ? Math.round(parseInt(weightLbsInput) / 2.205) : null,
+      height_cm: heightInInput ? parseInt(heightInInput) : null,
+      weight_kg: weightLbsInput ? parseInt(weightLbsInput) : null,
       hair_color: subjectForm.hair_color?.trim() || null,
       hair_length: subjectForm.hair_length?.trim() || null,
       eye_color: subjectForm.eye_color?.trim() || null,
@@ -743,8 +743,8 @@ export default function IncidentCoordinationPage() {
                     <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-400">
                       {s.hair_color && <span>Hair: {s.hair_color}{s.hair_length ? ` (${s.hair_length})` : ""}</span>}
                       {s.eye_color && <span>Eyes: {s.eye_color}</span>}
-                      {s.height_cm && <span>Height: {(() => { const i = Math.round(s.height_cm! / 2.54); return `${Math.floor(i/12)}′${i%12}″`; })()}</span>}
-                      {s.weight_kg && <span>Weight: {Math.round(s.weight_kg * 2.205)} lbs</span>}
+                      {s.height_cm && <span>Height: {Math.floor(s.height_cm / 12)}′{s.height_cm % 12}″</span>}
+                      {s.weight_kg && <span>Weight: {s.weight_kg} lbs</span>}
                       {s.build && <span>Build: {s.build}</span>}
                       {s.skin_tone && <span>Skin: {s.skin_tone}</span>}
                     </div>
