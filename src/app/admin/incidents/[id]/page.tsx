@@ -449,7 +449,6 @@ export default function IncidentCoordinationPage() {
 
   async function deleteIncident() {
     if (!id || !incident) return;
-    const isGlobalAdmin = currentUserRole === "Global Admin";
     if (isGlobalAdmin) {
       if (!window.confirm(`Permanently delete "${incident.title}"? This cannot be undone.`)) return;
       setDeleting(true);
