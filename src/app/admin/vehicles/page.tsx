@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import { logAudit } from "@/lib/audit";
+import { getCurrentTestEmail } from "@/lib/dev-user";
 
 type Vehicle = {
   id: string;
@@ -13,6 +15,15 @@ type Vehicle = {
   lng: number | null;
   is_active: boolean | null;
   updated_at: string | null;
+};
+
+type ServiceRequest = {
+  id: string;
+  vehicle_id: string;
+  description: string;
+  status: "pending" | "in_progress" | "completed";
+  admin_note: string | null;
+  created_at: string;
 };
 
 const VEHICLE_TYPES = ["SUV", "Truck", "Van", "ATV", "Boat", "Helicopter", "Other"];
@@ -34,15 +45,58 @@ export default function AdminVehiclesPage() {
   const [newType, setNewType] = useState("");
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => { void load(); }, []);
+  // Service requests
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [serviceVehicleId, setServiceVehicleId] = useState<string | null>(null);
+  const [serviceDesc, setServiceDesc] = useState("");
+  const [submittingService, setSubmittingService] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => { void load(); void loadUser(); }, []);
+
+  async function loadUser() {
+    const email = getCurrentTestEmail();
+    if (!email) return;
+    const { data } = await supabase.from("users").select("id").eq("email", email).single();
+    if (data) setCurrentUserId(data.id);
+  }
 
   async function load() {
-    const { data } = await supabase
-      .from("agency_vehicles")
-      .select("id,name,vehicle_type,lat,lng,is_active,updated_at")
-      .order("name");
-    setVehicles((data ?? []) as Vehicle[]);
+    const [vRes, srRes] = await Promise.all([
+      supabase.from("agency_vehicles").select("id,name,vehicle_type,lat,lng,is_active,updated_at").order("name"),
+      supabase.from("vehicle_service_requests").select("id,vehicle_id,description,status,admin_note,created_at").order("created_at", { ascending: false }),
+    ]);
+    setVehicles((vRes.data ?? []) as Vehicle[]);
+    setServiceRequests((srRes.data ?? []) as ServiceRequest[]);
     setLoading(false);
+  }
+
+  async function submitServiceRequest() {
+    if (!serviceVehicleId || !serviceDesc.trim()) return;
+    setSubmittingService(true);
+    const { error } = await supabase.from("vehicle_service_requests").insert({
+      vehicle_id: serviceVehicleId, description: serviceDesc.trim(), reported_by: currentUserId,
+    });
+    setSubmittingService(false);
+    if (error) { toast(error.message, "error"); return; }
+    toast("Service request submitted.", "success");
+    setServiceVehicleId(null); setServiceDesc("");
+    void load();
+    // Notify global admins
+    void fetch("/api/alert-admins", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "🔧 Vehicle Service Request",
+        message: `${vehicles.find((v) => v.id === serviceVehicleId)?.name ?? "Vehicle"}: ${serviceDesc.trim()}`,
+        url: "/admin/vehicles",
+      }),
+    });
+  }
+
+  async function updateServiceStatus(id: string, status: "in_progress" | "completed") {
+    await supabase.from("vehicle_service_requests").update({ status, completed_at: status === "completed" ? new Date().toISOString() : null }).eq("id", id);
+    void load();
   }
 
   function startEdit(v: Vehicle) {
@@ -193,13 +247,70 @@ export default function AdminVehiclesPage() {
                   <button onClick={() => void toggleActive(v)} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-700 transition">
                     {v.is_active !== false ? "Deactivate" : "Activate"}
                   </button>
+                  <button onClick={() => setServiceVehicleId(v.id)} className="rounded-lg bg-yellow-950/40 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-950 transition">Service</button>
                   <button onClick={() => void deleteVehicle(v)} className="rounded-lg bg-red-950/40 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950 transition">Delete</button>
                 </div>
               </div>
             ))}
           </div>
         )}
+        {/* Service requests list */}
+        {serviceRequests.filter((r) => r.status !== "completed").length > 0 && (
+          <div className="rounded-xl bg-zinc-900 p-5 space-y-3">
+            <div className="font-semibold text-zinc-100">Open Service Requests</div>
+            <div className="space-y-2">
+              {serviceRequests.filter((r) => r.status !== "completed").map((r) => {
+                const veh = vehicles.find((v) => v.id === r.vehicle_id);
+                return (
+                  <div key={r.id} className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-zinc-200">{veh?.name ?? "Unknown"}</div>
+                      <div className="text-xs text-zinc-400 mt-0.5">{r.description}</div>
+                      <div className="text-xs text-zinc-600 mt-0.5">{new Date(r.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      {r.status === "pending" && (
+                        <button onClick={() => void updateServiceStatus(r.id, "in_progress")}
+                          className="rounded-lg bg-blue-950/40 px-3 py-1.5 text-xs text-blue-400 hover:bg-blue-950 transition">
+                          In Progress
+                        </button>
+                      )}
+                      <button onClick={() => void updateServiceStatus(r.id, "completed")}
+                        className="rounded-lg bg-green-950/40 px-3 py-1.5 text-xs text-green-400 hover:bg-green-950 transition">
+                        Complete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Service request modal */}
+      {serviceVehicleId && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setServiceVehicleId(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <div className="text-lg font-bold text-zinc-50">Request Service</div>
+              <div className="text-sm text-zinc-500 mt-0.5">{vehicles.find((v) => v.id === serviceVehicleId)?.name}</div>
+            </div>
+            <textarea value={serviceDesc} onChange={(e) => setServiceDesc(e.target.value)}
+              autoFocus placeholder="Describe the issue…" rows={4}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none resize-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setServiceVehicleId(null)}
+                className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-700 transition">Cancel</button>
+              <button onClick={() => void submitServiceRequest()} disabled={submittingService || !serviceDesc.trim()}
+                className="flex-1 rounded-xl bg-yellow-600 px-4 py-3 text-sm font-semibold text-white hover:bg-yellow-500 disabled:opacity-50 transition">
+                {submittingService ? "Submitting…" : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </main>
   );
 }

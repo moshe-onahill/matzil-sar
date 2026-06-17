@@ -73,6 +73,12 @@ export default function SettingsPage() {
   const [notifications, setNotifications] = useState<NotificationSettings>(defaultNotifications);
   const [saving, setSaving] = useState(false);
 
+  // Cert request modal
+  const [certRequestOpen, setCertRequestOpen] = useState(false);
+  const [certRequestName, setCertRequestName] = useState("");
+  const [certRequestNotes, setCertRequestNotes] = useState("");
+  const [submittingCert, setSubmittingCert] = useState(false);
+
   // Edit-request modal
   const [requestField, setRequestField] = useState<"full_name" | "call_sign" | null>(null);
   const [requestValue, setRequestValue] = useState("");
@@ -92,6 +98,18 @@ export default function SettingsPage() {
     setDevRole(getStoredRole());
     setLightMode(localStorage.getItem("theme") === "light");
   }, []);
+
+  async function submitCertRequest() {
+    if (!profile || !certRequestName.trim()) { toast("Certification name is required.", "error"); return; }
+    setSubmittingCert(true);
+    const { error } = await supabase.from("certification_requests").insert({
+      user_id: profile.id, cert_name: certRequestName.trim(), notes: certRequestNotes.trim() || null,
+    });
+    setSubmittingCert(false);
+    if (error) { toast(error.message, "error"); return; }
+    toast("Request submitted. An admin will review it.", "success");
+    setCertRequestOpen(false); setCertRequestName(""); setCertRequestNotes("");
+  }
 
   function toggleTheme() {
     const next = !lightMode;
@@ -373,9 +391,15 @@ export default function SettingsPage() {
 
         {/* Certifications */}
         <section className="rounded-xl bg-gray-900 p-5 space-y-3">
-          <div>
-            <div className="text-xl font-semibold">Certifications</div>
-            <div className="text-sm text-gray-400">Managed by an admin.</div>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xl font-semibold">Certifications</div>
+              <div className="text-sm text-gray-400">Managed by an admin. You can request to add one.</div>
+            </div>
+            <button onClick={() => setCertRequestOpen(true)}
+              className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 transition">
+              + Request
+            </button>
           </div>
           {certifications.length === 0 ? (
             <div className="rounded-lg bg-black/30 p-4 text-gray-400">No certifications listed.</div>
@@ -508,6 +532,33 @@ export default function SettingsPage() {
               <button onClick={() => void submitRequest()} disabled={submitting}
                 className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50 transition">
                 {submitting ? "Submitting…" : "Submit Request"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Cert request modal */}
+      {certRequestOpen && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setCertRequestOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <div className="text-lg font-bold text-zinc-50">Request Certification</div>
+              <div className="text-sm text-zinc-500 mt-0.5">An admin will review and approve your request.</div>
+            </div>
+            <input autoFocus value={certRequestName} onChange={(e) => setCertRequestName(e.target.value)}
+              placeholder="Certification name (e.g. Wilderness First Aid)"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none" />
+            <textarea value={certRequestNotes} onChange={(e) => setCertRequestNotes(e.target.value)}
+              placeholder="Notes / issuing body / expiry (optional)" rows={3}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none resize-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setCertRequestOpen(false)}
+                className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-700 transition">Cancel</button>
+              <button onClick={() => void submitCertRequest()} disabled={submittingCert}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50 transition">
+                {submittingCert ? "Submitting…" : "Submit"}
               </button>
             </div>
           </div>

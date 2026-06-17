@@ -17,8 +17,23 @@ export default function LoginPage() {
     if (!email || !password) { toast("Enter your email and password.", "error"); return; }
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) { setLoading(false); toast(error.message, "error"); return; }
+
+    // Check if this email is a registered member
+    const { data: userRow } = await supabase.from("users").select("id").eq("email", email.trim().toLowerCase()).maybeSingle();
+    if (!userRow) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      toast("Access denied. Your account is not registered with Matzil SAR.", "error");
+      void fetch("/api/alert-admins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "⚠️ Unknown Login Attempt", message: `Unregistered user tried to log in: ${email.trim()}`, url: "/admin/audit" }),
+      });
+      return;
+    }
+
     setLoading(false);
-    if (error) { toast(error.message, "error"); return; }
     if (!rememberMe) {
       localStorage.setItem("session-temporary", "1");
       sessionStorage.setItem("session-active", "1");
