@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   remove_cert: "Removed certification",
   send_alert: "Sent alert",
   post_event_update: "Posted event update",
+  delete_incident: "Deleted incident",
 };
 
 const ACTION_COLORS: Record<string, string> = {

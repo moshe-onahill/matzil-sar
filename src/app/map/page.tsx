@@ -169,6 +169,7 @@ export default function MapPage() {
   const [creatingPin, setCreatingPin] = useState(false);
   const [geocodingPin, setGeocodingPin] = useState(false);
 
+  const [responderSearch, setResponderSearch] = useState("");
   const [editingPinId, setEditingPinId] = useState<string | null>(null);
   const [editPinTitle, setEditPinTitle] = useState("");
   const [editPinNotes, setEditPinNotes] = useState("");
@@ -994,6 +995,40 @@ export default function MapPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Responder search */}
+            {responders.length > 0 && (
+              <div className="rounded-xl bg-gray-900 p-4 space-y-2">
+                <div className="text-sm font-semibold text-gray-300">Find Responder</div>
+                <input
+                  value={responderSearch}
+                  onChange={(e) => setResponderSearch(e.target.value)}
+                  placeholder="Name or call sign…"
+                  className="w-full rounded-lg bg-black px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-600"
+                />
+                {responderSearch.trim() && (() => {
+                  const q = responderSearch.toLowerCase();
+                  const matches = responders.filter((r) => {
+                    const u = Array.isArray(r.users) ? r.users[0] : r.users;
+                    return (u?.call_sign ?? "").toLowerCase().includes(q) || (u?.full_name ?? "").toLowerCase().includes(q);
+                  });
+                  return matches.length > 0 ? (
+                    <div className="rounded-lg border border-gray-700 bg-gray-800 divide-y divide-gray-700 overflow-hidden max-h-40 overflow-y-auto">
+                      {matches.map((r) => (
+                        <button key={r.id} onClick={() => {
+                          setFocus({ kind: "responder", id: r.id, title: responderName(r), subtitle: r.is_moving ? `Moving • ${r.speed_mph ?? 0} mph` : "Stationary", lat: r.lat, lng: r.lng, color: "blue", navigable: false });
+                          setResponderSearch("");
+                        }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition">
+                          <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                          <span className="font-mono text-blue-300">{responderName(r)}</span>
+                          <span className="text-gray-500 text-xs">{r.is_moving ? "moving" : "stationary"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : <p className="text-xs text-gray-600">No match</p>;
+                })()}
+              </div>
+            )}
+
             <div className="rounded-xl bg-gray-900 p-4">
               <div className="mb-3 text-lg font-semibold">Focused Item</div>
 
@@ -1011,7 +1046,7 @@ export default function MapPage() {
                         Navigate
                       </button>
                     ) : (
-                      <div className="text-sm text-gray-500">Live tracking — navigation not available</div>
+                      <div className="text-sm text-gray-500">Live tracking</div>
                     )}
                     <button
                       onClick={() => {
@@ -1023,6 +1058,20 @@ export default function MapPage() {
                     >
                       Copy Coords
                     </button>
+                    {focus.kind === "responder" && (
+                      <button
+                        onClick={() => {
+                          void fetch("/api/send-push", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ user_id: focus.id, title: "Location Requested", body: "An admin is requesting your current location. Open the app to update.", url: "/" }),
+                          }).then(() => toast("Location request sent", "success"));
+                        }}
+                        className="rounded bg-orange-600 px-3 py-2 text-sm hover:bg-orange-700 transition"
+                      >
+                        Request Location
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (

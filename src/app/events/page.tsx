@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { getStoredRole } from "@/lib/dev-user";
 
 type EventRow = {
   id: string;
@@ -52,6 +53,7 @@ const TYPE_COLOR: Record<string, string> = {
 export default function EventsPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
+  const isAdmin = ["SAR Manager", "Global Admin"].includes(getStoredRole());
   const [upcomingOpen, setUpcomingOpen] = useState(false);
 
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
@@ -240,12 +242,17 @@ export default function EventsPage() {
             <h1 className="text-3xl font-bold">Calendar</h1>
           </div>
 
-          <Link
-            href="/"
-            className="rounded border border-gray-800 bg-gray-900 px-4 py-2 text-sm"
-          >
-            Dashboard
-          </Link>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Link href="/admin/events"
+                className="rounded border border-red-900 bg-red-950/40 px-4 py-2 text-sm text-red-300 hover:bg-red-950 transition">
+                Admin →
+              </Link>
+            )}
+            <Link href="/" className="rounded border border-gray-800 bg-gray-900 px-4 py-2 text-sm">
+              Dashboard
+            </Link>
+          </div>
         </div>
 
         <section className="rounded-xl bg-gray-900 p-4">

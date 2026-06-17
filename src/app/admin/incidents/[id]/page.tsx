@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
-import { getCurrentTestEmail } from "@/lib/dev-user";
+import { getCurrentTestEmail, getStoredRole } from "@/lib/dev-user";
 import { logAudit } from "@/lib/audit";
 
 type User = { id: string; full_name: string | null; call_sign: string | null };
@@ -42,6 +42,7 @@ type Incident = {
   staging_address: string | null;
   staging_lat: number | null;
   staging_lng: number | null;
+  coordinator_id: string | null;
 };
 
 const JOB_TYPES = [
@@ -117,6 +118,10 @@ export default function IncidentCoordinationPage() {
   const [editStagingLng, setEditStagingLng] = useState("");
   const [editAcceptingUnits, setEditAcceptingUnits] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [editCoordinatorId, setEditCoordinatorId] = useState<string>("");
+  const [deleting, setDeleting] = useState(false);
+  const isGlobalAdmin = getStoredRole() === "Global Admin";
 
   // Post update form state
   const [updateType, setUpdateType] = useState("General Update");
@@ -145,9 +150,9 @@ export default function IncidentCoordinationPage() {
   }
 
   async function loadAll() {
-    const [incRes, tasksRes, responsesRes, updatesRes] = await Promise.all([
+    const [incRes, tasksRes, responsesRes, updatesRes, usersRes] = await Promise.all([
       supabase.from("incidents").select(
-        "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng"
+        "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng,coordinator_id"
       ).eq("id", id).single(),
       supabase.from("incident_tasks").select(`
         id, task_number, description, job_type, color, status, task_lead_id,
@@ -162,6 +167,7 @@ export default function IncidentCoordinationPage() {
         .select("id,update_type,title,body,created_at")
         .eq("incident_id", id)
         .order("created_at", { ascending: false }),
+      supabase.from("users").select("id,full_name,call_sign").order("call_sign"),
     ]);
 
     const inc = incRes.data as Incident;
@@ -176,7 +182,9 @@ export default function IncidentCoordinationPage() {
       setEditStagingLat(inc.staging_lat != null ? String(inc.staging_lat) : "");
       setEditStagingLng(inc.staging_lng != null ? String(inc.staging_lng) : "");
       setEditAcceptingUnits(inc.accepting_units);
+      setEditCoordinatorId(inc.coordinator_id ?? "");
     }
+    setAllUsers((usersRes.data ?? []) as User[]);
 
     const rawTasks = (tasksRes.data ?? []) as any[];
     setTasks(rawTasks.map((t) => ({
@@ -242,12 +250,24 @@ export default function IncidentCoordinationPage() {
       staging_lat: isNaN(lat as number) ? null : lat,
       staging_lng: isNaN(lng as number) ? null : lng,
       accepting_units: editAcceptingUnits,
+      coordinator_id: editCoordinatorId || null,
     }).eq("id", id);
     setSaving(false);
     if (error) { toast(error.message, "error"); return; }
     toast("Incident updated.", "success");
     void logAudit({ action: "edit_incident", entity_type: "incident", entity_id: id as string, entity_label: editTitle.trim(), details: { status: editStatus } });
     await loadAll();
+  }
+
+  async function deleteIncident() {
+    if (!id || !incident) return;
+    if (!window.confirm(`Permanently delete "${incident.title}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    const { error } = await supabase.from("incidents").delete().eq("id", id);
+    setDeleting(false);
+    if (error) { toast(error.message, "error"); return; }
+    void logAudit({ action: "delete_incident", entity_type: "incident", entity_id: id as string, entity_label: incident.title });
+    window.location.href = "/admin/incidents";
   }
 
   async function postUpdate() {
@@ -366,7 +386,7 @@ export default function IncidentCoordinationPage() {
               <h1 className="text-2xl font-bold text-zinc-50">{incident.title}</h1>
               <p className="text-sm text-gray-500">{incident.type}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Link href={`/admin/incidents/${incident.id}/dashboard`}
                 className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">
                 Command Dashboard ↗
@@ -375,6 +395,12 @@ export default function IncidentCoordinationPage() {
                 className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700">
                 Full Incident →
               </Link>
+              {isGlobalAdmin && (
+                <button onClick={() => void deleteIncident()} disabled={deleting}
+                  className="rounded-lg bg-red-950 border border-red-800 px-3 py-1.5 text-sm text-red-400 hover:bg-red-900 disabled:opacity-50 transition">
+                  {deleting ? "Deleting…" : "Delete"}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -392,6 +418,18 @@ export default function IncidentCoordinationPage() {
         {/* ── COORDINATION TAB ── */}
         {activeTab === "coordination" && (
           <div className="space-y-5">
+            {/* Coordinator */}
+            {incident.coordinator_id && (() => {
+              const coord = allUsers.find((u) => u.id === incident.coordinator_id);
+              return coord ? (
+                <section className="rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 flex items-center gap-3">
+                  <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Logistics Coordinator</span>
+                  <span className="font-mono text-zinc-100 font-medium">{coord.call_sign ?? coord.full_name}</span>
+                  {coord.call_sign && coord.full_name && <span className="text-zinc-400 text-sm">{coord.full_name}</span>}
+                </section>
+              ) : null;
+            })()}
+
             {/* On-scene roster */}
             <section className="rounded-xl bg-gray-900 p-4 space-y-2">
               <div className="flex items-center justify-between">
@@ -550,6 +588,17 @@ export default function IncidentCoordinationPage() {
                     className="w-full rounded-lg bg-black px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                 </div>
               </div>
+            </section>
+
+            <section className="rounded-xl bg-zinc-900 p-5 space-y-2">
+              <div className="font-semibold text-zinc-50">Logistics Coordinator</div>
+              <select value={editCoordinatorId} onChange={(e) => setEditCoordinatorId(e.target.value)}
+                className="w-full rounded-lg bg-black px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-red-600">
+                <option value="">— None —</option>
+                {allUsers.map((u) => (
+                  <option key={u.id} value={u.id}>{u.call_sign ?? u.full_name ?? u.id}</option>
+                ))}
+              </select>
             </section>
 
             <button onClick={() => void saveIncident()} disabled={saving}
