@@ -47,7 +47,41 @@ type Incident = {
   incident_updates: IncidentUpdate[];
 };
 
-type TabKey = "overview" | "updates" | "responders" | "attachments";
+type TabKey = "overview" | "updates" | "responders" | "subject" | "attachments";
+
+type Subject = {
+  id: string;
+  full_name: string | null;
+  also_known_as: string | null;
+  date_of_birth: string | null;
+  age_estimate: string | null;
+  gender: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  hair_color: string | null;
+  hair_length: string | null;
+  eye_color: string | null;
+  skin_tone: string | null;
+  build: string | null;
+  distinguishing_features: string | null;
+  last_seen_wearing: string | null;
+  last_seen_location: string | null;
+  last_seen_at: string | null;
+  medical_conditions: string | null;
+  medications: string | null;
+  mobility: string | null;
+  photo_url: string | null;
+  notes: string | null;
+};
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2">
+      <span className="shrink-0 text-gray-500 w-28">{label}</span>
+      <span className="text-gray-200">{value}</span>
+    </div>
+  );
+}
 
 export default function IncidentDetailClient() {
   const params = useParams<{ id: string }>();
@@ -75,6 +109,7 @@ export default function IncidentDetailClient() {
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<{ id: string; file_name: string; file_url: string; mime_type: string | null; file_size: number | null; created_at: string }[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
 
   // Location tracking while responding
   const watchIdRef = useRef<number | null>(null);
@@ -188,12 +223,12 @@ export default function IncidentDetailClient() {
 
     setIncident(data as unknown as Incident);
 
-    const { data: attData } = await supabase
-      .from("incident_attachments")
-      .select("id,file_name,file_url,mime_type,file_size,created_at")
-      .eq("incident_id", incidentId)
-      .order("created_at", { ascending: false });
-    setAttachments((attData ?? []) as any[]);
+    const [attRes, subRes] = await Promise.all([
+      supabase.from("incident_attachments").select("id,file_name,file_url,mime_type,file_size,created_at").eq("incident_id", incidentId).order("created_at", { ascending: false }),
+      supabase.from("incident_subjects").select("id,full_name,also_known_as,date_of_birth,age_estimate,gender,height_cm,weight_kg,hair_color,hair_length,eye_color,skin_tone,build,distinguishing_features,last_seen_wearing,last_seen_location,last_seen_at,medical_conditions,medications,mobility,photo_url,notes").eq("incident_id", incidentId).order("created_at"),
+    ]);
+    setAttachments((attRes.data ?? []) as any[]);
+    setSubjects((subRes.data ?? []) as Subject[]);
 
     setLoading(false);
   }
@@ -685,10 +720,11 @@ export default function IncidentDetailClient() {
                 )}
               </div>
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button onClick={() => setActiveTab("overview")} className={tabButtonClass("overview")}>Overview</button>
                 <button onClick={() => setActiveTab("updates")} className={tabButtonClass("updates")}>Updates</button>
                 <button onClick={() => setActiveTab("responders")} className={tabButtonClass("responders")}>Responders</button>
+                <button onClick={() => setActiveTab("subject")} className={tabButtonClass("subject")}>Subject</button>
                 <button onClick={() => setActiveTab("attachments")} className={tabButtonClass("attachments")}>Files</button>
               </div>
             </div>
@@ -854,6 +890,87 @@ export default function IncidentDetailClient() {
                   ))
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === "subject" && (
+            <div className="space-y-4">
+              {subjects.length === 0 ? (
+                <div className="rounded-xl bg-gray-900 p-6 text-center text-sm text-gray-500">No subject information added yet.</div>
+              ) : subjects.map((s) => (
+                <div key={s.id} className="rounded-xl bg-gray-900 p-5 space-y-4">
+                  <div className="flex gap-4 items-start">
+                    {s.photo_url && (
+                      <img src={s.photo_url} alt="Subject" className="h-24 w-24 rounded-xl object-cover shrink-0 border border-gray-700" />
+                    )}
+                    <div>
+                      <div className="text-xl font-bold">{s.full_name || "Unknown"}</div>
+                      {s.also_known_as && <div className="text-sm text-gray-400">AKA: {s.also_known_as}</div>}
+                      {(s.age_estimate || s.date_of_birth) && (
+                        <div className="text-sm text-gray-400 mt-0.5">
+                          {s.age_estimate ? `Age: ${s.age_estimate}` : ""}
+                          {s.date_of_birth ? ` · DOB: ${s.date_of_birth}` : ""}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Physical description */}
+                  {(s.gender || s.height_cm || s.weight_kg || s.hair_color || s.hair_length || s.eye_color || s.skin_tone || s.build) && (
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Physical Description</div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                        {s.gender && <Row label="Gender" value={s.gender} />}
+                        {s.build && <Row label="Build" value={s.build} />}
+                        {s.height_cm && <Row label="Height" value={`${s.height_cm} cm`} />}
+                        {s.weight_kg && <Row label="Weight" value={`${s.weight_kg} kg`} />}
+                        {s.hair_color && <Row label="Hair color" value={s.hair_color} />}
+                        {s.hair_length && <Row label="Hair length" value={s.hair_length} />}
+                        {s.eye_color && <Row label="Eyes" value={s.eye_color} />}
+                        {s.skin_tone && <Row label="Skin tone" value={s.skin_tone} />}
+                      </div>
+                    </div>
+                  )}
+
+                  {s.distinguishing_features && (
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Distinguishing Features</div>
+                      <div className="text-sm text-gray-300 whitespace-pre-wrap">{s.distinguishing_features}</div>
+                    </div>
+                  )}
+
+                  {/* Last seen */}
+                  {(s.last_seen_location || s.last_seen_at || s.last_seen_wearing) && (
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Last Seen</div>
+                      <div className="space-y-1 text-sm">
+                        {s.last_seen_location && <Row label="Location" value={s.last_seen_location} />}
+                        {s.last_seen_at && <Row label="Time" value={new Date(s.last_seen_at).toLocaleString()} />}
+                        {s.last_seen_wearing && <Row label="Wearing" value={s.last_seen_wearing} />}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Medical */}
+                  {(s.medical_conditions || s.medications || s.mobility) && (
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Medical</div>
+                      <div className="space-y-1 text-sm">
+                        {s.medical_conditions && <Row label="Conditions" value={s.medical_conditions} />}
+                        {s.medications && <Row label="Medications" value={s.medications} />}
+                        {s.mobility && <Row label="Mobility" value={s.mobility} />}
+                      </div>
+                    </div>
+                  )}
+
+                  {s.notes && (
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Notes</div>
+                      <div className="text-sm text-gray-300 whitespace-pre-wrap">{s.notes}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
