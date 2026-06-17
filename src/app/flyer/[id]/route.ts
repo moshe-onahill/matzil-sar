@@ -136,7 +136,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const [{ data: incident }, { data: rawSubjects }] = await Promise.all([
+  const [{ data: incident }, { data: rawSubjects, error: subjectsError }] = await Promise.all([
     supabase
       .from("incidents")
       .select("id,incident_number,title")
@@ -151,6 +151,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (!incident) {
     return new NextResponse("Incident not found", { status: 404 });
+  }
+
+  if (subjectsError) {
+    return new NextResponse(
+      `Database error: ${subjectsError.message}\n\nRun the migration supabase/migrations/20260617_incident_subjects.sql in your Supabase SQL editor.`,
+      { status: 500, headers: { "Content-Type": "text/plain" } }
+    );
   }
 
   const subjects = (rawSubjects ?? []) as Subject[];
