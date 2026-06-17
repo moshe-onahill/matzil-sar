@@ -197,9 +197,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       print-color-adjust: exact;
     }
     @media print {
-      html, body { background: #fff; }
+      html, body { background: #fff; height: 100%; }
       .print-bar { display: none !important; }
-      .poster { width: 100%; height: 100vh; margin: 0; box-shadow: none; page-break-after: always; }
+      .poster {
+        width: 100% !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        page-break-after: always;
+      }
     }
 
     /* Print bar */
@@ -218,7 +225,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     /* Poster */
     .poster {
       width: 816px;
-      min-height: 1056px;
+      height: 1056px;
       margin: 52px auto 32px;
       background: #fff;
       border-radius: 4px;
@@ -279,10 +286,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     /* Photo col */
     .photo-col {
-      width: 300px;
+      width: 310px;
       flex-shrink: 0;
       border-right: 3px solid #E94E1B;
       background: #111;
+      overflow: hidden;
     }
     .photo {
       width: 100%; height: 100%;
@@ -291,7 +299,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       display: block;
     }
     .no-photo {
-      width: 100%; height: 100%; min-height: 340px;
+      width: 100%; height: 100%;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 14px;
       background: #1a1a1a;
@@ -302,28 +310,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     /* Details col */
     .details-col {
       flex: 1;
-      padding: 18px 20px;
+      padding: 20px 24px;
+      display: flex;
+      align-items: flex-start;
     }
     .details-table { width: 100%; border-collapse: collapse; }
     .rl {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 900;
       color: #E94E1B;
       letter-spacing: 0.5px;
-      padding: 5px 12px 5px 0;
+      padding: 7px 14px 7px 0;
       vertical-align: top;
       white-space: nowrap;
-      width: 90px;
+      width: 100px;
     }
     .rv {
-      font-size: 15px;
+      font-size: 17px;
       font-weight: 700;
       color: #111;
-      padding: 5px 0;
+      padding: 7px 0;
       vertical-align: top;
       line-height: 1.3;
     }
-    .spacer { height: 8px; }
+    .spacer { height: 12px; }
 
     /* If you have seen bar */
     .seen-bar {
