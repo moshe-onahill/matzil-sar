@@ -417,6 +417,22 @@ export default function SettingsPage() {
 
         <button
           onClick={async () => {
+            if (!profile) return;
+            const res = await fetch("/api/send-push", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ user_id: profile.id, title: "Test Notification", body: "Notifications are working correctly.", url: "/settings" }),
+            });
+            if (res.ok) toast("Test notification sent!", "success");
+            else toast("Failed — make sure notifications are enabled.", "error");
+          }}
+          className="w-full rounded-xl bg-gray-900 px-4 py-3 font-medium text-gray-300 hover:bg-gray-800 transition"
+        >
+          Test Notification
+        </button>
+
+        <button
+          onClick={async () => {
             window.localStorage.removeItem("auth-email");
             window.localStorage.removeItem("real-role");
             window.localStorage.removeItem("dev-role");

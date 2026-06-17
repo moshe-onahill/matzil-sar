@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
@@ -68,6 +67,9 @@ export default function AdminRosterPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => { void loadAll(); }, []);
 
@@ -197,7 +199,29 @@ export default function AdminRosterPage() {
       entity_label: editState.full_name || m.email,
       details: { roles: editState.roles, units: editState.units, is_active: editState.is_active },
     });
+    // Notify the member their profile was updated
+    void fetch("/api/send-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: m.id, title: "Profile Updated", body: "An admin has updated your profile.", url: "/settings" }),
+    });
     await loadAll();
+  }
+
+  async function inviteNew() {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    try {
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail.trim(), full_name: inviteName.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || "Failed to send invite.", "error"); }
+      else { toast(`Invite sent to ${inviteEmail.trim()}.`, "success"); setInviteEmail(""); setInviteName(""); void loadAll(); }
+    } catch { toast("Failed to send invite.", "error"); }
+    setInviting(false);
   }
 
   async function sendInvite(m: Member) {
@@ -276,10 +300,30 @@ export default function AdminRosterPage() {
             <button onClick={exportCsv} className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition">
               Export CSV
             </button>
-            <Link href="/roster/new" className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 transition">
-              + Add Member
-            </Link>
           </div>
+        </div>
+
+        {/* Invite new member */}
+        <div className="rounded-xl bg-zinc-900 p-4 flex flex-wrap items-end gap-3">
+          <div className="space-y-1 flex-1 min-w-36">
+            <label className="text-xs text-zinc-500">Email *</label>
+            <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void inviteNew()}
+              placeholder="member@example.com"
+              type="email"
+              className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-red-600 placeholder-zinc-600" />
+          </div>
+          <div className="space-y-1 flex-1 min-w-36">
+            <label className="text-xs text-zinc-500">Name (optional)</label>
+            <input value={inviteName} onChange={(e) => setInviteName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void inviteNew()}
+              placeholder="Full name"
+              className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-red-600 placeholder-zinc-600" />
+          </div>
+          <button onClick={() => void inviteNew()} disabled={inviting || !inviteEmail.trim()}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition shrink-0">
+            {inviting ? "Sending…" : "Send Invite"}
+          </button>
         </div>
 
         {/* Tabs */}
