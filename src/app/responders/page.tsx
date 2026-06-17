@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import RoleSwitcher from "@/components/RoleSwitcher";
+import { getStoredRole } from "@/lib/dev-user";
+import { useToast } from "@/components/Toast";
 
 type ResponderRow = {
   id: string;
@@ -68,6 +70,8 @@ type ResponderView = {
 };
 
 export default function RespondersPage() {
+  const toast = useToast();
+  const isAdmin = ["SAR Manager", "Global Admin", "Dispatcher"].includes(getStoredRole());
   const [responders, setResponders] = useState<ResponderView[]>([]);
   const [search, setSearch] = useState("");
 
@@ -313,10 +317,22 @@ export default function RespondersPage() {
                 )}
               </div>
 
-              {/* Right: GPS */}
-              <div className="shrink-0 text-right text-xs text-gray-500">
+              {/* Right: GPS + request location */}
+              <div className="shrink-0 text-right text-xs text-gray-500 space-y-1">
                 <div>{formatLocationLabel(row)}</div>
                 {formatUpdatedTime(row) && <div>{formatUpdatedTime(row)}</div>}
+                {isAdmin && (
+                  <button
+                    onClick={() => void fetch("/api/send-push", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ user_id: row.id, title: "Location Requested", body: "An admin is requesting your current location.", url: "/" }),
+                    }).then(() => toast("Location request sent", "success"))}
+                    className="rounded px-2 py-0.5 text-[11px] bg-orange-900/50 text-orange-300 hover:bg-orange-900 transition"
+                  >
+                    Request Location
+                  </button>
+                )}
               </div>
             </div>
           ))}

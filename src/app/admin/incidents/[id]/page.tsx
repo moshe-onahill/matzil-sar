@@ -441,21 +441,10 @@ export default function IncidentCoordinationPage() {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {onScene.map((u) => (
-                    <div key={u.id} className={`rounded-lg border px-3 py-1.5 text-sm flex items-center gap-2 ${u.response_type === "On Location" ? "border-green-800 bg-green-950/40 text-green-300" : "border-gray-700 bg-gray-800 text-gray-300"}`}>
+                    <div key={u.id} className={`rounded-lg border px-3 py-1.5 text-sm ${u.response_type === "On Location" ? "border-green-800 bg-green-950/40 text-green-300" : "border-gray-700 bg-gray-800 text-gray-300"}`}>
                       <span className="font-mono font-medium">{u.call_sign ?? "—"}</span>
-                      {u.full_name ? <span className="text-xs opacity-70">{u.full_name}</span> : null}
-                      <span className="text-xs opacity-50">{u.response_type === "On Location" ? "On Scene" : "En Route"}</span>
-                      <button
-                        onClick={() => void fetch("/api/send-push", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ user_id: u.id, title: "Location Requested", body: "An admin is requesting your current location.", url: "/" }),
-                        }).then(() => toast("Location request sent", "success"))}
-                        className="rounded px-1.5 py-0.5 text-[11px] bg-orange-900/50 text-orange-300 hover:bg-orange-900 transition"
-                        title="Request location update"
-                      >
-                        📍
-                      </button>
+                      {u.full_name ? <span className="ml-1.5 text-xs opacity-70">{u.full_name}</span> : null}
+                      <span className="ml-2 text-xs opacity-50">{u.response_type === "On Location" ? "On Scene" : "En Route"}</span>
                     </div>
                   ))}
                 </div>
