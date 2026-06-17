@@ -235,7 +235,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     .print-bar span { font-size: 13px; color: #666; }
     .print-btn {
-      background: #dc2626;
+      background: #E94E1B;
       color: #fff;
       border: none;
       border-radius: 6px;
@@ -245,7 +245,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       cursor: pointer;
       letter-spacing: 0.3px;
     }
-    .print-btn:hover { background: #b91c1c; }
+    .print-btn:hover { background: #c73e12; }
 
     /* ── Poster ── */
     .poster {
@@ -262,7 +262,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     /* ── Top bar ── */
     .top-bar {
-      background: #dc2626;
+      background: #E94E1B;
       padding: 14px 28px;
       display: flex;
       align-items: center;
@@ -353,7 +353,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     /* ── Last seen box ── */
     .last-seen-box {
-      background: #dc2626;
+      background: #E94E1B;
       border-radius: 8px;
       padding: 14px 18px;
     }
@@ -404,7 +404,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       font-size: 8px;
       font-weight: 900;
       letter-spacing: 2px;
-      color: #dc2626;
+      color: #E94E1B;
       text-transform: uppercase;
       margin-bottom: 3px;
     }
@@ -432,7 +432,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       font-size: 12px;
       color: #6b7280;
       font-style: italic;
-      border-left: 3px solid #dc2626;
+      border-left: 3px solid #E94E1B;
       padding-left: 10px;
     }
 
@@ -463,7 +463,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .cta-line2 {
       font-size: 20px;
       font-weight: 900;
-      color: #dc2626;
+      color: #E94E1B;
       letter-spacing: 1px;
       margin-top: 2px;
     }
