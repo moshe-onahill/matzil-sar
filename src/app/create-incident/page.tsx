@@ -104,6 +104,14 @@ export default function CreateIncidentPage() {
       }
 
       applyCoordinateValues(lat, lng);
+
+      // Auto-suggest location name from geocode result
+      const placeName = (data[0].display_name as string)?.split(",")[0]?.trim();
+      if (placeName) {
+        if (!stagingName.trim()) setStagingName(placeName);
+        if (!title.trim()) setTitle(placeName);
+      }
+
       toast("Coordinates updated.", "success");
     } catch {
       toast("Geocoding failed. Check your connection.", "error");

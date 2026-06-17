@@ -6,6 +6,7 @@ import PushPermission from "@/components/PushPermission";
 import NotificationListener from "@/components/NotificationListener";
 import { ToastProvider } from "@/components/Toast";
 import SwipeNav from "@/components/SwipeNav";
+import PrivacyGate from "@/components/PrivacyGate";
 
 export const metadata: Metadata = {
   title: { default: "Matzil SAR", template: "%s · Matzil SAR" },
@@ -32,6 +33,7 @@ export default function RootLayout({
               </div>
             </SwipeNav>
             <AppBottomNav />
+            <PrivacyGate />
           </ToastProvider>
         </AuthGate>
       </body>

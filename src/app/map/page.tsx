@@ -1172,22 +1172,31 @@ export default function MapPage() {
                           </div>
                         </button>
 
-                        {canManagePins() && (
-                          <div className="mt-2 flex gap-2">
-                            <button
-                              onClick={() => startEditPin(pin)}
-                              className="rounded bg-gray-700 px-3 py-1 text-sm"
-                            >
-                              Edit Pin
-                            </button>
-                            <button
-                              onClick={() => void deletePin(pin.id)}
-                              className="rounded bg-red-900 px-3 py-1 text-sm"
-                            >
-                              Delete Pin
-                            </button>
-                          </div>
-                        )}
+                        <div className="mt-2 flex gap-2 flex-wrap">
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${pin.lat},${pin.lng}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="rounded bg-blue-700 px-3 py-1 text-sm hover:bg-blue-600 transition"
+                          >
+                            Navigate
+                          </a>
+                          {canManagePins() && (
+                            <>
+                              <button
+                                onClick={() => startEditPin(pin)}
+                                className="rounded bg-gray-700 px-3 py-1 text-sm"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => void deletePin(pin.id)}
+                                className="rounded bg-red-900 px-3 py-1 text-sm"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>

@@ -22,6 +22,15 @@ type Task = {
   task_lead?: User | null;
   assignments: Assignment[];
 };
+type StagingArea = {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  notes: string | null;
+};
+
 type IncidentUpdate = {
   id: string;
   update_type: string;
@@ -123,6 +132,15 @@ export default function IncidentCoordinationPage() {
   const [deleting, setDeleting] = useState(false);
   const isGlobalAdmin = getStoredRole() === "Global Admin";
 
+  // Staging areas
+  const [stagingAreas, setStagingAreas] = useState<StagingArea[]>([]);
+  const [newAreaName, setNewAreaName] = useState("");
+  const [newAreaAddress, setNewAreaAddress] = useState("");
+  const [newAreaLat, setNewAreaLat] = useState("");
+  const [newAreaLng, setNewAreaLng] = useState("");
+  const [newAreaNotes, setNewAreaNotes] = useState("");
+  const [addingArea, setAddingArea] = useState(false);
+
   // Post update form state
   const [updateType, setUpdateType] = useState("General Update");
   const [updateTitle, setUpdateTitle] = useState("");
@@ -150,7 +168,7 @@ export default function IncidentCoordinationPage() {
   }
 
   async function loadAll() {
-    const [incRes, tasksRes, responsesRes, updatesRes, usersRes] = await Promise.all([
+    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes] = await Promise.all([
       supabase.from("incidents").select(
         "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng,coordinator_id"
       ).eq("id", id).single(),
@@ -168,6 +186,7 @@ export default function IncidentCoordinationPage() {
         .eq("incident_id", id)
         .order("created_at", { ascending: false }),
       supabase.from("users").select("id,full_name,call_sign").order("call_sign"),
+      supabase.from("incident_staging_areas").select("id,name,address,lat,lng,notes").eq("incident_id", id).order("created_at"),
     ]);
 
     const inc = incRes.data as Incident;
@@ -206,7 +225,51 @@ export default function IncidentCoordinationPage() {
     }));
     setOnScene(units);
     setUpdates((updatesRes.data ?? []) as IncidentUpdate[]);
+    setStagingAreas((areasRes.data ?? []) as StagingArea[]);
     setLoading(false);
+  }
+
+  async function addStagingArea() {
+    if (!newAreaName.trim()) { toast("Name is required.", "error"); return; }
+    setAddingArea(true);
+    const { error } = await supabase.from("incident_staging_areas").insert({
+      incident_id: id,
+      name: newAreaName.trim(),
+      address: newAreaAddress.trim() || null,
+      lat: newAreaLat ? parseFloat(newAreaLat) : null,
+      lng: newAreaLng ? parseFloat(newAreaLng) : null,
+      notes: newAreaNotes.trim() || null,
+    });
+    setAddingArea(false);
+    if (error) { toast(error.message, "error"); return; }
+    setNewAreaName(""); setNewAreaAddress(""); setNewAreaLat(""); setNewAreaLng(""); setNewAreaNotes("");
+    toast("Staging area added.", "success");
+    await loadAll();
+  }
+
+  async function deleteStagingArea(areaId: string) {
+    const { error } = await supabase.from("incident_staging_areas").delete().eq("id", areaId);
+    if (error) { toast(error.message, "error"); return; }
+    await loadAll();
+  }
+
+  function downloadIncidentData() {
+    if (!incident) return;
+    const data = {
+      incident,
+      tasks,
+      updates,
+      onScene,
+      stagingAreas,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${incident.incident_number.replace(/\//g, "-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function startEditUpdate(u: IncidentUpdate) {
@@ -395,6 +458,10 @@ export default function IncidentCoordinationPage() {
                 className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">
                 Flyer ↗
               </Link>
+              <button onClick={downloadIncidentData}
+                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">
+                Export ↓
+              </button>
               <Link href={`/incidents/${incident.id}`}
                 className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm hover:bg-gray-700">
                 Full Incident →
@@ -609,6 +676,57 @@ export default function IncidentCoordinationPage() {
               className="w-full rounded-xl bg-red-600 py-3 text-sm font-semibold disabled:opacity-60 hover:bg-red-500">
               {saving ? "Saving…" : "Save Changes"}
             </button>
+
+            {/* Additional Staging Areas */}
+            <section className="rounded-xl bg-zinc-900 p-5 space-y-4">
+              <div className="font-semibold text-zinc-50">Additional Staging Areas</div>
+
+              {stagingAreas.length > 0 && (
+                <div className="space-y-2">
+                  {stagingAreas.map((area) => (
+                    <div key={area.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-zinc-200">{area.name}</div>
+                        {area.address && <div className="text-xs text-zinc-500">{area.address}</div>}
+                        {area.lat != null && area.lng != null && (
+                          <div className="text-xs text-zinc-600 font-mono">{area.lat.toFixed(5)}, {area.lng.toFixed(5)}</div>
+                        )}
+                        {area.notes && <div className="text-xs text-zinc-600 italic">{area.notes}</div>}
+                      </div>
+                      <button onClick={() => void deleteStagingArea(area.id)}
+                        className="shrink-0 text-xs text-zinc-600 hover:text-red-400 transition px-2 py-1">
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-2 rounded-lg bg-zinc-800/50 p-3">
+                <div className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Add Staging Area</div>
+                <input value={newAreaName} onChange={(e) => setNewAreaName(e.target.value)}
+                  placeholder="Name *"
+                  className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                <input value={newAreaAddress} onChange={(e) => setNewAreaAddress(e.target.value)}
+                  placeholder="Address (optional)"
+                  className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input value={newAreaLat} onChange={(e) => setNewAreaLat(e.target.value)}
+                    placeholder="Latitude" type="number" step="any"
+                    className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                  <input value={newAreaLng} onChange={(e) => setNewAreaLng(e.target.value)}
+                    placeholder="Longitude" type="number" step="any"
+                    className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                </div>
+                <input value={newAreaNotes} onChange={(e) => setNewAreaNotes(e.target.value)}
+                  placeholder="Notes (optional)"
+                  className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                <button onClick={() => void addStagingArea()} disabled={addingArea}
+                  className="w-full rounded-lg bg-zinc-700 py-2 text-sm font-medium hover:bg-zinc-600 disabled:opacity-60 transition">
+                  {addingArea ? "Adding…" : "+ Add"}
+                </button>
+              </div>
+            </section>
           </div>
         )}
 
