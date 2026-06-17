@@ -46,8 +46,8 @@ function subjectFlyer(s: Subject, origin: string): string {
   const physChips = [
     chip("Gender", s.gender),
     chip("Age", s.age_estimate || (s.date_of_birth ? `DOB ${s.date_of_birth}` : null)),
-    chip("Height", s.height_cm ? `${s.height_cm} cm` : null),
-    chip("Weight", s.weight_kg ? `${s.weight_kg} kg` : null),
+    chip("Height", s.height_cm ? (() => { const totalIn = Math.round(s.height_cm! / 2.54); return `${Math.floor(totalIn / 12)}′${totalIn % 12}″`; })() : null),
+    chip("Weight", s.weight_kg ? `${Math.round(s.weight_kg! * 2.205)} lbs` : null),
     chip("Hair", s.hair_color ? `${s.hair_color}${s.hair_length ? `, ${s.hair_length}` : ""}` : null),
     chip("Eyes", s.eye_color),
     chip("Build", s.build),
@@ -153,11 +153,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new NextResponse("Incident not found", { status: 404 });
   }
 
-  // DEBUG — remove after fix
-  return new NextResponse(
-    JSON.stringify({ incidentId: id, incident, subjectsError, rawSubjects }, null, 2),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
+  if (subjectsError) {
+    return new NextResponse(`Database error: ${subjectsError.message}`, { status: 500, headers: { "Content-Type": "text/plain" } });
+  }
 
   const subjects = (rawSubjects ?? []) as Subject[];
 

@@ -737,8 +737,8 @@ export default function IncidentCoordinationPage() {
                     <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-400">
                       {s.hair_color && <span>Hair: {s.hair_color}{s.hair_length ? ` (${s.hair_length})` : ""}</span>}
                       {s.eye_color && <span>Eyes: {s.eye_color}</span>}
-                      {s.height_cm && <span>Height: {s.height_cm} cm</span>}
-                      {s.weight_kg && <span>Weight: {s.weight_kg} kg</span>}
+                      {s.height_cm && <span>Height: {(() => { const i = Math.round(s.height_cm! / 2.54); return `${Math.floor(i/12)}′${i%12}″`; })()}</span>}
+                      {s.weight_kg && <span>Weight: {Math.round(s.weight_kg * 2.205)} lbs</span>}
                       {s.build && <span>Build: {s.build}</span>}
                       {s.skin_tone && <span>Skin: {s.skin_tone}</span>}
                     </div>
@@ -876,15 +876,28 @@ export default function IncidentCoordinationPage() {
                       </div>
                     ))}
                     <div className="space-y-0.5">
-                      <label className="text-xs text-zinc-500">Height (cm)</label>
-                      <input type="number" value={subjectForm.height_cm ?? ""}
-                        onChange={(e) => setSubjectForm((f) => ({ ...f, height_cm: e.target.value ? parseInt(e.target.value) : undefined }))}
+                      <label className="text-xs text-zinc-500">Height (ft — e.g. 5.11)</label>
+                      <input type="number" step="0.01" value={subjectForm.height_cm ? (Math.round(subjectForm.height_cm / 2.54) / 12).toFixed(2) : ""}
+                        onChange={(e) => {
+                          const ft = parseFloat(e.target.value);
+                          if (!isNaN(ft)) {
+                            const totalIn = ft * 12;
+                            setSubjectForm((f) => ({ ...f, height_cm: Math.round(totalIn * 2.54) }));
+                          } else {
+                            setSubjectForm((f) => ({ ...f, height_cm: undefined }));
+                          }
+                        }}
+                        placeholder="e.g. 5.11 for 5′11″"
                         className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                     </div>
                     <div className="space-y-0.5">
-                      <label className="text-xs text-zinc-500">Weight (kg)</label>
-                      <input type="number" value={subjectForm.weight_kg ?? ""}
-                        onChange={(e) => setSubjectForm((f) => ({ ...f, weight_kg: e.target.value ? parseInt(e.target.value) : undefined }))}
+                      <label className="text-xs text-zinc-500">Weight (lbs)</label>
+                      <input type="number" value={subjectForm.weight_kg ? Math.round(subjectForm.weight_kg * 2.205) : ""}
+                        onChange={(e) => {
+                          const lbs = parseInt(e.target.value);
+                          setSubjectForm((f) => ({ ...f, weight_kg: isNaN(lbs) ? undefined : Math.round(lbs / 2.205) }));
+                        }}
+                        placeholder="e.g. 160"
                         className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                     </div>
                   </div>
