@@ -174,6 +174,7 @@ export default function IncidentCoordinationPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectForm, setSubjectForm] = useState<Partial<Subject>>({});
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [savingSubject, setSavingSubject] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [heightInInput, setHeightInInput] = useState("");
@@ -759,7 +760,8 @@ export default function IncidentCoordinationPage() {
                 <div className="flex items-start gap-4 p-4 border-b border-zinc-800">
                   {s.photo_url ? (
                     <img src={s.photo_url} alt={s.full_name ?? "Subject"}
-                      className="h-24 w-24 rounded-lg object-cover shrink-0 border border-zinc-700" />
+                      onClick={() => setLightboxUrl(s.photo_url!)}
+                      className="h-24 w-24 rounded-lg object-cover shrink-0 border border-zinc-700 cursor-zoom-in" />
                   ) : (
                     <div className="h-24 w-24 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
                       <span className="text-zinc-600 text-3xl">👤</span>
@@ -1370,6 +1372,13 @@ export default function IncidentCoordinationPage() {
         )}
 
       </div>
+
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setLightboxUrl(null)}>
+          <img src={lightboxUrl} alt="Subject photo" className="max-h-full max-w-full rounded-xl object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <button onClick={() => setLightboxUrl(null)} className="absolute top-4 right-4 rounded-full bg-zinc-800 p-2 text-zinc-300 hover:bg-zinc-700 transition">✕</button>
+        </div>
+      )}
     </main>
   );
 }
