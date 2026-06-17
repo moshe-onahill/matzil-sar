@@ -876,18 +876,13 @@ export default function IncidentCoordinationPage() {
                       </div>
                     ))}
                     <div className="space-y-0.5">
-                      <label className="text-xs text-zinc-500">Height (ft — e.g. 5.11)</label>
-                      <input type="number" step="0.01" value={subjectForm.height_cm ? (Math.round(subjectForm.height_cm / 2.54) / 12).toFixed(2) : ""}
+                      <label className="text-xs text-zinc-500">Height (inches)</label>
+                      <input type="number" value={subjectForm.height_cm ? Math.round(subjectForm.height_cm / 2.54) : ""}
                         onChange={(e) => {
-                          const ft = parseFloat(e.target.value);
-                          if (!isNaN(ft)) {
-                            const totalIn = ft * 12;
-                            setSubjectForm((f) => ({ ...f, height_cm: Math.round(totalIn * 2.54) }));
-                          } else {
-                            setSubjectForm((f) => ({ ...f, height_cm: undefined }));
-                          }
+                          const inches = parseInt(e.target.value);
+                          setSubjectForm((f) => ({ ...f, height_cm: isNaN(inches) ? undefined : Math.round(inches * 2.54) }));
                         }}
-                        placeholder="e.g. 5.11 for 5′11″"
+                        placeholder="e.g. 71 for 5′11″"
                         className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
                     </div>
                     <div className="space-y-0.5">
