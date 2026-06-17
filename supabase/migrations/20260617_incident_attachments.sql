@@ -4,13 +4,14 @@ values (
   'incident-attachments',
   'incident-attachments',
   false,
-  52428800,  -- 50 MB per file
+  52428800,
   array['image/png','image/jpeg','image/jpg','image/webp','application/pdf']
 )
 on conflict (id) do nothing;
 
--- Admins/managers can upload/delete; all authenticated users can read
-create policy if not exists "Admins upload attachments"
+-- Storage policies (drop first to allow re-running)
+drop policy if exists "Admins upload attachments" on storage.objects;
+create policy "Admins upload attachments"
   on storage.objects for insert to authenticated
   with check (
     bucket_id = 'incident-attachments'
@@ -23,7 +24,8 @@ create policy if not exists "Admins upload attachments"
     )
   );
 
-create policy if not exists "Admins delete attachments"
+drop policy if exists "Admins delete attachments" on storage.objects;
+create policy "Admins delete attachments"
   on storage.objects for delete to authenticated
   using (
     bucket_id = 'incident-attachments'
@@ -36,11 +38,12 @@ create policy if not exists "Admins delete attachments"
     )
   );
 
-create policy if not exists "Members read attachments"
+drop policy if exists "Members read attachments" on storage.objects;
+create policy "Members read attachments"
   on storage.objects for select to authenticated
   using (bucket_id = 'incident-attachments');
 
--- Table to track attachments per incident
+-- Table
 create table if not exists incident_attachments (
   id uuid primary key default gen_random_uuid(),
   incident_id uuid not null references incidents(id) on delete cascade,
@@ -56,10 +59,12 @@ create index if not exists idx_incident_attachments_incident on incident_attachm
 
 alter table incident_attachments enable row level security;
 
-create policy if not exists "All members read incident attachments"
+drop policy if exists "All members read incident attachments" on incident_attachments;
+create policy "All members read incident attachments"
   on incident_attachments for select to authenticated using (true);
 
-create policy if not exists "Admins insert incident attachments"
+drop policy if exists "Admins insert incident attachments" on incident_attachments;
+create policy "Admins insert incident attachments"
   on incident_attachments for insert to authenticated
   with check (
     exists (
@@ -71,7 +76,8 @@ create policy if not exists "Admins insert incident attachments"
     )
   );
 
-create policy if not exists "Admins delete incident attachments"
+drop policy if exists "Admins delete incident attachments" on incident_attachments;
+create policy "Admins delete incident attachments"
   on incident_attachments for delete to authenticated
   using (
     exists (
