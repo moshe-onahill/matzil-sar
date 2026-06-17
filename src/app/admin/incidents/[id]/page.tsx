@@ -91,7 +91,36 @@ async function taskApi(body: object) {
 }
 
 
-type ActiveTab = "coordination" | "edit" | "updates";
+type ActiveTab = "coordination" | "edit" | "updates" | "subject";
+
+type Subject = {
+  id: string;
+  full_name: string | null;
+  also_known_as: string | null;
+  date_of_birth: string | null;
+  age_estimate: string | null;
+  gender: string | null;
+  nationality: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  hair_color: string | null;
+  hair_length: string | null;
+  eye_color: string | null;
+  skin_tone: string | null;
+  build: string | null;
+  distinguishing_features: string | null;
+  last_seen_wearing: string | null;
+  last_seen_location: string | null;
+  last_seen_at: string | null;
+  last_contact_at: string | null;
+  medical_conditions: string | null;
+  medications: string | null;
+  mental_health_notes: string | null;
+  mobility: string | null;
+  languages_spoken: string | null;
+  photo_url: string | null;
+  notes: string | null;
+};
 
 export default function IncidentCoordinationPage() {
   const { id } = useParams<{ id: string }>();
@@ -141,6 +170,13 @@ export default function IncidentCoordinationPage() {
   const [newAreaNotes, setNewAreaNotes] = useState("");
   const [addingArea, setAddingArea] = useState(false);
 
+  // Subject / missing person
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectForm, setSubjectForm] = useState<Partial<Subject>>({});
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [savingSubject, setSavingSubject] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
   // Post update form state
   const [updateType, setUpdateType] = useState("General Update");
   const [updateTitle, setUpdateTitle] = useState("");
@@ -168,7 +204,7 @@ export default function IncidentCoordinationPage() {
   }
 
   async function loadAll() {
-    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes] = await Promise.all([
+    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes, subjectsRes] = await Promise.all([
       supabase.from("incidents").select(
         "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng,coordinator_id"
       ).eq("id", id).single(),
@@ -187,6 +223,7 @@ export default function IncidentCoordinationPage() {
         .order("created_at", { ascending: false }),
       supabase.from("users").select("id,full_name,call_sign").order("call_sign"),
       supabase.from("incident_staging_areas").select("id,name,address,lat,lng,notes").eq("incident_id", id).order("created_at"),
+      supabase.from("incident_subjects").select("*").eq("incident_id", id).order("created_at"),
     ]);
 
     const inc = incRes.data as Incident;
@@ -226,6 +263,7 @@ export default function IncidentCoordinationPage() {
     setOnScene(units);
     setUpdates((updatesRes.data ?? []) as IncidentUpdate[]);
     setStagingAreas((areasRes.data ?? []) as StagingArea[]);
+    setSubjects((subjectsRes.data ?? []) as Subject[]);
     setLoading(false);
   }
 
@@ -249,6 +287,80 @@ export default function IncidentCoordinationPage() {
 
   async function deleteStagingArea(areaId: string) {
     const { error } = await supabase.from("incident_staging_areas").delete().eq("id", areaId);
+    if (error) { toast(error.message, "error"); return; }
+    await loadAll();
+  }
+
+  function startNewSubject() {
+    setEditingSubjectId("new");
+    setSubjectForm({});
+  }
+
+  function startEditSubject(s: Subject) {
+    setEditingSubjectId(s.id);
+    setSubjectForm({ ...s });
+  }
+
+  async function uploadSubjectPhoto(file: File): Promise<string | null> {
+    setUploadingPhoto(true);
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${id}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("subject-photos").upload(path, file, { upsert: true });
+    setUploadingPhoto(false);
+    if (error) { toast(`Photo upload failed: ${error.message}`, "error"); return null; }
+    const { data: urlData } = supabase.storage.from("subject-photos").getPublicUrl(path);
+    return urlData.publicUrl;
+  }
+
+  async function saveSubject() {
+    if (!id) return;
+    setSavingSubject(true);
+    const payload = {
+      incident_id: id,
+      full_name: subjectForm.full_name?.trim() || null,
+      also_known_as: subjectForm.also_known_as?.trim() || null,
+      date_of_birth: subjectForm.date_of_birth || null,
+      age_estimate: subjectForm.age_estimate?.trim() || null,
+      gender: subjectForm.gender?.trim() || null,
+      nationality: subjectForm.nationality?.trim() || null,
+      height_cm: subjectForm.height_cm ?? null,
+      weight_kg: subjectForm.weight_kg ?? null,
+      hair_color: subjectForm.hair_color?.trim() || null,
+      hair_length: subjectForm.hair_length?.trim() || null,
+      eye_color: subjectForm.eye_color?.trim() || null,
+      skin_tone: subjectForm.skin_tone?.trim() || null,
+      build: subjectForm.build?.trim() || null,
+      distinguishing_features: subjectForm.distinguishing_features?.trim() || null,
+      last_seen_wearing: subjectForm.last_seen_wearing?.trim() || null,
+      last_seen_location: subjectForm.last_seen_location?.trim() || null,
+      last_seen_at: subjectForm.last_seen_at || null,
+      last_contact_at: subjectForm.last_contact_at || null,
+      medical_conditions: subjectForm.medical_conditions?.trim() || null,
+      medications: subjectForm.medications?.trim() || null,
+      mental_health_notes: subjectForm.mental_health_notes?.trim() || null,
+      mobility: subjectForm.mobility?.trim() || null,
+      languages_spoken: subjectForm.languages_spoken?.trim() || null,
+      photo_url: subjectForm.photo_url || null,
+      notes: subjectForm.notes?.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    let error;
+    if (editingSubjectId === "new") {
+      ({ error } = await supabase.from("incident_subjects").insert(payload));
+    } else {
+      ({ error } = await supabase.from("incident_subjects").update(payload).eq("id", editingSubjectId!));
+    }
+    setSavingSubject(false);
+    if (error) { toast(error.message, "error"); return; }
+    toast("Subject saved.", "success");
+    setEditingSubjectId(null);
+    setSubjectForm({});
+    await loadAll();
+  }
+
+  async function deleteSubject(subjectId: string) {
+    if (!window.confirm("Remove this subject?")) return;
+    const { error } = await supabase.from("incident_subjects").delete().eq("id", subjectId);
     if (error) { toast(error.message, "error"); return; }
     await loadAll();
   }
@@ -424,8 +536,9 @@ export default function IncidentCoordinationPage() {
 
   const TABS: { id: ActiveTab; label: string }[] = [
     { id: "coordination", label: "Coordination" },
-    { id: "edit", label: "Edit Incident" },
-    { id: "updates", label: "Post Update" },
+    { id: "subject", label: "Subject" },
+    { id: "edit", label: "Edit" },
+    { id: "updates", label: "Updates" },
   ];
 
   return (
@@ -577,6 +690,289 @@ export default function IncidentCoordinationPage() {
                   );
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SUBJECT / MISSING PERSON TAB ── */}
+        {activeTab === "subject" && (
+          <div className="space-y-4">
+            {/* Subject cards */}
+            {subjects.map((s) => (
+              <div key={s.id} className="rounded-xl border border-zinc-700 bg-zinc-900 overflow-hidden">
+                {/* Photo + name header */}
+                <div className="flex items-start gap-4 p-4 border-b border-zinc-800">
+                  {s.photo_url ? (
+                    <img src={s.photo_url} alt={s.full_name ?? "Subject"}
+                      className="h-24 w-24 rounded-lg object-cover shrink-0 border border-zinc-700" />
+                  ) : (
+                    <div className="h-24 w-24 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+                      <span className="text-zinc-600 text-3xl">👤</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-lg font-bold text-zinc-50">{s.full_name ?? "Unknown"}</div>
+                        {s.also_known_as && <div className="text-sm text-zinc-400">AKA: {s.also_known_as}</div>}
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
+                          {s.gender && <span>{s.gender}</span>}
+                          {(s.date_of_birth || s.age_estimate) && <span>·</span>}
+                          {s.date_of_birth && <span>DOB: {s.date_of_birth}</span>}
+                          {s.age_estimate && <span>~{s.age_estimate}</span>}
+                          {s.nationality && <><span>·</span><span>{s.nationality}</span></>}
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
+                        <button onClick={() => startEditSubject(s)}
+                          className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700 transition">
+                          Edit
+                        </button>
+                        <button onClick={() => void deleteSubject(s.id)}
+                          className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/60 transition">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-400">
+                      {s.hair_color && <span>Hair: {s.hair_color}{s.hair_length ? ` (${s.hair_length})` : ""}</span>}
+                      {s.eye_color && <span>Eyes: {s.eye_color}</span>}
+                      {s.height_cm && <span>Height: {s.height_cm} cm</span>}
+                      {s.weight_kg && <span>Weight: {s.weight_kg} kg</span>}
+                      {s.build && <span>Build: {s.build}</span>}
+                      {s.skin_tone && <span>Skin: {s.skin_tone}</span>}
+                    </div>
+                  </div>
+                </div>
+                {/* Details grid */}
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  {s.last_seen_wearing && (
+                    <div className="col-span-full">
+                      <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Last Seen Wearing</span>
+                      <p className="mt-0.5 text-zinc-200">{s.last_seen_wearing}</p>
+                    </div>
+                  )}
+                  {s.last_seen_location && (
+                    <div>
+                      <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Last Seen Location</span>
+                      <p className="mt-0.5 text-zinc-200">{s.last_seen_location}</p>
+                    </div>
+                  )}
+                  {s.last_seen_at && (
+                    <div>
+                      <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Last Seen</span>
+                      <p className="mt-0.5 text-zinc-200">{new Date(s.last_seen_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                  )}
+                  {s.distinguishing_features && (
+                    <div className="col-span-full">
+                      <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Distinguishing Features</span>
+                      <p className="mt-0.5 text-zinc-200">{s.distinguishing_features}</p>
+                    </div>
+                  )}
+                  {s.medical_conditions && (
+                    <div className="col-span-full rounded-lg bg-yellow-950/40 border border-yellow-800/50 px-3 py-2">
+                      <span className="text-xs font-medium text-yellow-500 uppercase tracking-wide">Medical Conditions</span>
+                      <p className="mt-0.5 text-yellow-200">{s.medical_conditions}</p>
+                    </div>
+                  )}
+                  {s.notes && (
+                    <div className="col-span-full text-zinc-500 italic text-xs">{s.notes}</div>
+                  )}
+                </div>
+                <div className="px-4 pb-3">
+                  <a href={`/incidents/${id}/flyer`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 transition">
+                    🖨 View Flyer ↗
+                  </a>
+                </div>
+              </div>
+            ))}
+
+            {/* Add / Edit form */}
+            {editingSubjectId ? (
+              <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-5 space-y-5">
+                <div className="font-semibold text-zinc-50">
+                  {editingSubjectId === "new" ? "Add Missing Person" : "Edit Subject"}
+                </div>
+
+                {/* Photo upload */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">Photo</label>
+                  <div className="flex items-center gap-4">
+                    {subjectForm.photo_url ? (
+                      <img src={subjectForm.photo_url} alt="Preview"
+                        className="h-20 w-20 rounded-lg object-cover border border-zinc-700" />
+                    ) : (
+                      <div className="h-20 w-20 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                        <span className="text-zinc-600 text-2xl">👤</span>
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <label className={`cursor-pointer rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition inline-block ${uploadingPhoto ? "opacity-50 pointer-events-none" : ""}`}>
+                        {uploadingPhoto ? "Uploading…" : "Upload Photo"}
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const url = await uploadSubjectPhoto(file);
+                            if (url) setSubjectForm((f) => ({ ...f, photo_url: url }));
+                          }} />
+                      </label>
+                      {subjectForm.photo_url && (
+                        <button onClick={() => setSubjectForm((f) => ({ ...f, photo_url: "" }))}
+                          className="block text-xs text-zinc-600 hover:text-red-400 transition">
+                          Remove photo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Identity */}
+                <div>
+                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Identity</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      { key: "full_name", label: "Full Name" },
+                      { key: "also_known_as", label: "Also Known As / Nickname" },
+                      { key: "age_estimate", label: "Age / Estimate" },
+                      { key: "gender", label: "Gender" },
+                      { key: "nationality", label: "Nationality" },
+                      { key: "languages_spoken", label: "Languages Spoken" },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="space-y-0.5">
+                        <label className="text-xs text-zinc-500">{label}</label>
+                        <input value={(subjectForm as any)[key] ?? ""}
+                          onChange={(e) => setSubjectForm((f) => ({ ...f, [key]: e.target.value }))}
+                          className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                      </div>
+                    ))}
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-zinc-500">Date of Birth</label>
+                      <input type="date" value={subjectForm.date_of_birth ?? ""}
+                        onChange={(e) => setSubjectForm((f) => ({ ...f, date_of_birth: e.target.value }))}
+                        className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Physical */}
+                <div>
+                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Physical Description</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { key: "hair_color", label: "Hair Color" },
+                      { key: "hair_length", label: "Hair Length" },
+                      { key: "eye_color", label: "Eye Color" },
+                      { key: "skin_tone", label: "Skin Tone" },
+                      { key: "build", label: "Build" },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="space-y-0.5">
+                        <label className="text-xs text-zinc-500">{label}</label>
+                        <input value={(subjectForm as any)[key] ?? ""}
+                          onChange={(e) => setSubjectForm((f) => ({ ...f, [key]: e.target.value }))}
+                          className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                      </div>
+                    ))}
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-zinc-500">Height (cm)</label>
+                      <input type="number" value={subjectForm.height_cm ?? ""}
+                        onChange={(e) => setSubjectForm((f) => ({ ...f, height_cm: e.target.value ? parseInt(e.target.value) : undefined }))}
+                        className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-zinc-500">Weight (kg)</label>
+                      <input type="number" value={subjectForm.weight_kg ?? ""}
+                        onChange={(e) => setSubjectForm((f) => ({ ...f, weight_kg: e.target.value ? parseInt(e.target.value) : undefined }))}
+                        className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-0.5">
+                    <label className="text-xs text-zinc-500">Distinguishing Features / Tattoos / Marks</label>
+                    <textarea value={subjectForm.distinguishing_features ?? ""} rows={2}
+                      onChange={(e) => setSubjectForm((f) => ({ ...f, distinguishing_features: e.target.value }))}
+                      className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600 resize-none" />
+                  </div>
+                </div>
+
+                {/* Last seen */}
+                <div>
+                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Last Known</div>
+                  <div className="space-y-2">
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-zinc-500">Last Seen Wearing</label>
+                      <textarea value={subjectForm.last_seen_wearing ?? ""} rows={2}
+                        onChange={(e) => setSubjectForm((f) => ({ ...f, last_seen_wearing: e.target.value }))}
+                        className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600 resize-none" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <label className="text-xs text-zinc-500">Last Seen Location</label>
+                      <input value={subjectForm.last_seen_location ?? ""}
+                        onChange={(e) => setSubjectForm((f) => ({ ...f, last_seen_location: e.target.value }))}
+                        className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-zinc-500">Last Seen (date/time)</label>
+                        <input type="datetime-local" value={subjectForm.last_seen_at ? subjectForm.last_seen_at.slice(0, 16) : ""}
+                          onChange={(e) => setSubjectForm((f) => ({ ...f, last_seen_at: e.target.value ? new Date(e.target.value).toISOString() : "" }))}
+                          className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-xs text-zinc-500">Last Contact</label>
+                        <input type="datetime-local" value={subjectForm.last_contact_at ? subjectForm.last_contact_at.slice(0, 16) : ""}
+                          onChange={(e) => setSubjectForm((f) => ({ ...f, last_contact_at: e.target.value ? new Date(e.target.value).toISOString() : "" }))}
+                          className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Medical */}
+                <div>
+                  <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Medical / Behavioral</div>
+                  <div className="space-y-2">
+                    {[
+                      { key: "medical_conditions", label: "Medical Conditions", rows: 2 },
+                      { key: "medications", label: "Medications", rows: 1 },
+                      { key: "mental_health_notes", label: "Mental Health / Behavioral Notes", rows: 2 },
+                      { key: "mobility", label: "Mobility / Physical Limitations", rows: 1 },
+                    ].map(({ key, label, rows }) => (
+                      <div key={key} className="space-y-0.5">
+                        <label className="text-xs text-zinc-500">{label}</label>
+                        <textarea value={(subjectForm as any)[key] ?? ""} rows={rows}
+                          onChange={(e) => setSubjectForm((f) => ({ ...f, [key]: e.target.value }))}
+                          className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600 resize-none" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-0.5">
+                  <label className="text-xs text-zinc-500">Additional Notes</label>
+                  <textarea value={subjectForm.notes ?? ""} rows={2}
+                    onChange={(e) => setSubjectForm((f) => ({ ...f, notes: e.target.value }))}
+                    className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600 resize-none" />
+                </div>
+
+                <div className="flex gap-2">
+                  <button onClick={() => void saveSubject()} disabled={savingSubject}
+                    className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-semibold disabled:opacity-60 hover:bg-red-500 transition">
+                    {savingSubject ? "Saving…" : "Save Subject"}
+                  </button>
+                  <button onClick={() => { setEditingSubjectId(null); setSubjectForm({}); }}
+                    className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm hover:bg-zinc-700 transition">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={startNewSubject}
+                className="w-full rounded-xl border-2 border-dashed border-zinc-700 py-4 text-sm text-zinc-500 hover:border-red-600 hover:text-zinc-300 transition">
+                + Add Missing Person
+              </button>
             )}
           </div>
         )}
