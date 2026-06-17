@@ -567,7 +567,7 @@ export default function IncidentCoordinationPage() {
                 className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">
                 Command Dashboard ↗
               </Link>
-              <Link href={`/incidents/${incident.id}/flyer`} target="_blank"
+              <Link href={`/flyer/${incident.id}`} target="_blank"
                 className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">
                 Flyer ↗
               </Link>
@@ -781,7 +781,7 @@ export default function IncidentCoordinationPage() {
                   )}
                 </div>
                 <div className="px-4 pb-3">
-                  <a href={`/incidents/${id}/flyer`} target="_blank" rel="noopener noreferrer"
+                  <a href={`/flyer/${id}`} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 transition">
                     🖨 View Flyer ↗
                   </a>
