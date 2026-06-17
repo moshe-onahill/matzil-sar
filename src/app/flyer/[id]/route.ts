@@ -38,7 +38,8 @@ function esc(s: string | null | undefined): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -48,12 +49,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     supabase
       .from("incidents")
       .select("id,incident_number,title,type,status,short_description,staging_name,staging_address,staging_lat,staging_lng,created_at")
-      .eq("id", params.id)
+      .eq("id", id)
       .single(),
     supabase
       .from("incident_subjects")
       .select("*")
-      .eq("incident_id", params.id)
+      .eq("incident_id", id)
       .order("created_at"),
   ]);
 
