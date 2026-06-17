@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
@@ -30,6 +31,7 @@ export default function CreateIncidentPage() {
 
   const [geocoding, setGeocoding] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [waMessage, setWaMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void loadUser();
@@ -83,7 +85,7 @@ export default function CreateIncidentPage() {
 
     try {
       const encoded = encodeURIComponent(stagingAddress.trim());
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encoded}`;
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&q=${encoded}`;
 
       const response = await fetch(url, { headers: { Accept: "application/json" } });
       const data = await response.json();
@@ -105,12 +107,14 @@ export default function CreateIncidentPage() {
 
       applyCoordinateValues(lat, lng);
 
-      // Auto-suggest location name from geocode result
-      const placeName = (data[0].display_name as string)?.split(",")[0]?.trim();
-      if (placeName) {
-        if (!stagingName.trim()) setStagingName(placeName);
-        if (!title.trim()) setTitle(placeName);
-      }
+      // Build "City, ST" from structured address
+      const addr = data[0].address as Record<string, string> | undefined;
+      const city = addr?.city || addr?.town || addr?.village || addr?.county || data[0].display_name?.split(",")[0] || "";
+      const stateAbbr = addr?.["ISO3166-2-lvl4"]?.split("-")[1] || addr?.state || "";
+      const locationLabel = [city, stateAbbr].filter(Boolean).join(", ");
+
+      if (!stagingName.trim() && city) setStagingName(city);
+      if (!title.trim() && locationLabel) setTitle(`${type} - ${locationLabel}`);
 
       toast("Coordinates updated.", "success");
     } catch {
@@ -188,7 +192,23 @@ export default function CreateIncidentPage() {
       return;
     }
 
-    window.location.href = "/incidents";
+    const needs = buildTeamNeeds();
+    const needsParts = Object.entries(needs)
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `${k}: ${n}`)
+      .join(" | ");
+
+    const msg = [
+      `🚨 *MATZIL SAR ALERT* 🚨`,
+      ``,
+      `*${title.trim()}*`,
+      `📍 Staging: ${stagingName.trim()}${stagingAddress.trim() ? ` — ${stagingAddress.trim()}` : ""}`,
+      needsParts ? `👥 Units needed: ${needsParts}` : "",
+      ``,
+      `If you can respond, open the Matzil app now.`,
+    ].filter((l) => l !== undefined).join("\n");
+
+    setWaMessage(msg);
   }
 
   if (
@@ -231,7 +251,7 @@ export default function CreateIncidentPage() {
 
         <div className="rounded-xl bg-gray-900 p-5 sm:p-6 space-y-4">
           <div>
-            <h1 className="text-3xl font-bold">Send Alert</h1>
+            <h1 className="text-3xl font-bold">Create Incident</h1>
             <div className="mt-2 text-sm text-gray-400">
               Current Role: {currentUserRole}
             </div>
@@ -369,10 +389,38 @@ export default function CreateIncidentPage() {
             disabled={loading}
             className="w-full rounded bg-red-600 px-4 py-3 font-medium disabled:opacity-60"
           >
-            {loading ? "Sending..." : "Send Alert"}
+            {loading ? "Creating..." : "Create Incident"}
           </button>
         </div>
       </div>
+
+      {/* WhatsApp copy modal */}
+      {waMessage && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-4">
+            <div>
+              <div className="text-lg font-bold text-zinc-50">Incident Created</div>
+              <div className="text-sm text-zinc-400 mt-0.5">Copy this message and paste into the Matzil WhatsApp announcement group.</div>
+            </div>
+            <pre className="whitespace-pre-wrap rounded-xl bg-black/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-200 font-sans leading-relaxed">{waMessage}</pre>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { void navigator.clipboard.writeText(waMessage); toast("Copied!", "success"); }}
+                className="flex-1 rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white hover:bg-green-600 transition"
+              >
+                Copy Message
+              </button>
+              <button
+                onClick={() => { setWaMessage(null); window.location.href = "/incidents"; }}
+                className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-300 hover:bg-zinc-700 transition"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </main>
   );
 }

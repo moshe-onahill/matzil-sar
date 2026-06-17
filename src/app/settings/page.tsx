@@ -78,6 +78,9 @@ export default function SettingsPage() {
   const [requestValue, setRequestValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Theme
+  const [lightMode, setLightMode] = useState(false);
+
   // Hidden dev panel
   const [devOpen, setDevOpen] = useState(false);
   const [devRole, setDevRole] = useState<UserRole>("Member");
@@ -87,7 +90,15 @@ export default function SettingsPage() {
   useEffect(() => {
     void loadAll();
     setDevRole(getStoredRole());
+    setLightMode(localStorage.getItem("theme") === "light");
   }, []);
+
+  function toggleTheme() {
+    const next = !lightMode;
+    setLightMode(next);
+    localStorage.setItem("theme", next ? "light" : "dark");
+    document.documentElement.classList.toggle("light-mode", next);
+  }
 
   async function loadAll() {
     const { data, error } = await supabase
@@ -430,6 +441,22 @@ export default function SettingsPage() {
         >
           Test Notification
         </button>
+
+        {/* Theme toggle */}
+        <section className="rounded-xl bg-gray-900 p-5 flex items-center justify-between">
+          <div>
+            <div className="text-xl font-semibold">Appearance</div>
+            <div className="text-sm text-gray-400">{lightMode ? "Light mode" : "Dark mode"}</div>
+          </div>
+          <button
+            onClick={toggleTheme}
+            className={`relative h-7 w-13 rounded-full transition-colors duration-200 ${lightMode ? "bg-red-600" : "bg-zinc-700"}`}
+            style={{ width: 52 }}
+            aria-label="Toggle light/dark mode"
+          >
+            <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 ${lightMode ? "translate-x-6" : "translate-x-0.5"}`} />
+          </button>
+        </section>
 
         <button
           onClick={async () => {
