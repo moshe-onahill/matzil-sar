@@ -49,13 +49,9 @@ function heightFt(inches: number) {
   return `${Math.floor(inches / 12)}'${inches % 12}"`;
 }
 
-function row(label: string, value: string | null): string {
+function drow(label: string, value: string | null): string {
   if (!value) return "";
-  return `
-    <tr>
-      <td class="rl">${label}:</td>
-      <td class="rv">${esc(value)}</td>
-    </tr>`;
+  return `<div class="drow"><span class="dl">${label}</span><span class="dv">${esc(value)}</span></div>`;
 }
 
 function subjectFlyer(s: Subject, origin: string): string {
@@ -75,83 +71,80 @@ function subjectFlyer(s: Subject, origin: string): string {
   const features = val(s.distinguishing_features);
   const medical  = val(s.medical_conditions);
 
+  const detailRows = [
+    drow("GENDER", gender),
+    drow("AGE", age),
+    drow("HEIGHT", height),
+    drow("WEIGHT", weight),
+    drow("BUILD", build),
+    drow("HAIR", hair),
+    drow("EYES", eyes),
+    drow("SKIN TONE", skin),
+    drow("LAST SEEN", lastSeen),
+    drow("LOCATION", location),
+    drow("WEARING", wearing),
+    drow("FEATURES", features),
+    medical ? drow("⚠ MEDICAL", medical) : "",
+  ].filter(Boolean).join("");
+
   return `
 <div class="poster">
 
   <!-- ORG HEADER -->
   <div class="org-header">
-    <img src="${origin}/matzil-logo.avif" class="org-logo" alt="" />
+    <img src="${origin}/matzil-logo.avif" class="org-logo" alt="" onerror="this.style.display='none'" />
     <div class="org-text">
       <div class="org-name">MATZIL SAR</div>
       <div class="org-sub">Search &amp; Rescue</div>
     </div>
-    <img src="${origin}/matzil-words.avif" class="org-words" alt="Matzil SAR" />
+    <img src="${origin}/matzil-words.avif" class="org-words" alt="" onerror="this.style.display='none'" />
   </div>
 
   <!-- MISSING PERSON BANNER -->
   <div class="banner">MISSING PERSON</div>
 
-  <!-- BODY: photo + details -->
-  <div class="body">
+  <!-- SUBJECT NAME BLOCK -->
+  <div class="name-block">
+    <div class="name-main">${esc(name)}</div>
+    ${aka ? `<div class="name-aka">Also known as: ${esc(aka)}</div>` : ""}
+  </div>
 
-    <!-- Photo -->
+  <!-- BODY: photo left + details right -->
+  <div class="body">
     <div class="photo-col">
       ${s.photo_url
         ? `<img src="${esc(s.photo_url)}" class="photo" alt="${esc(name)}" />`
         : `<div class="no-photo">
-             <img src="${origin}/matzil-logo.avif" class="no-photo-logo" alt="" />
-             <span>NO PHOTO<br>AVAILABLE</span>
+             <img src="${origin}/matzil-logo.avif" class="np-logo" alt="" onerror="this.style.display='none'" />
+             <div class="np-text">NO PHOTO<br>AVAILABLE</div>
            </div>`
       }
     </div>
-
-    <!-- Details -->
     <div class="details-col">
-      <table class="details-table">
-        <tbody>
-          ${row("NAME", name + (aka ? ` (${aka})` : ""))}
-          ${row("GENDER", gender)}
-          ${row("AGE", age)}
-          ${row("LAST SEEN", lastSeen)}
-          ${row("LOCATION", location)}
-          <tr><td colspan="2" class="spacer"></td></tr>
-          ${row("HEIGHT", height)}
-          ${row("WEIGHT", weight)}
-          ${row("BUILD", build)}
-          ${row("HAIR", hair)}
-          ${row("EYES", eyes)}
-          ${row("SKIN", skin)}
-          <tr><td colspan="2" class="spacer"></td></tr>
-          ${row("WEARING", wearing)}
-          ${row("FEATURES", features)}
-          ${medical ? row("MEDICAL", medical) : ""}
-        </tbody>
-      </table>
+      ${detailRows}
     </div>
   </div>
 
-  <!-- IF YOU HAVE SEEN bar -->
+  <!-- SEEN BAR -->
   <div class="seen-bar">
-    IF YOU HAVE SEEN THIS PERSON OR HAVE ANY INFORMATION REGARDING THEIR WHEREABOUTS, PLEASE CONTACT MATZIL IMMEDIATELY.
+    IF YOU HAVE SEEN THIS PERSON OR HAVE ANY INFORMATION REGARDING THEIR WHEREABOUTS — CONTACT MATZIL IMMEDIATELY
   </div>
 
-  <!-- CONTACT FOOTER -->
-  <div class="contact-footer">
-    <div class="contact-left">
-      <div class="hotline-label">MATZIL<br>HOTLINE</div>
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="hotline-wrap">
+      <div class="hotline-label">MATZIL HOTLINE</div>
       <div class="hotline-num">647-557-6735</div>
-      <div class="hotline-sub">24 HOURS A DAY</div>
+      <div class="hotline-sub">24 HOURS A DAY · 7 DAYS A WEEK</div>
     </div>
-    <div class="contact-right">
+    <div class="emergency-wrap">
       <div class="emergency-label">EMERGENCY</div>
       <div class="emergency-num">911</div>
     </div>
   </div>
 
-  <!-- BOTTOM TAG -->
-  <div class="bottom-tag">
-    By The Community, For The Community
-  </div>
+  <!-- TAGLINE -->
+  <div class="tagline">So Others May Live</div>
 
 </div>`;
 }
@@ -177,9 +170,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const postersHtml = subjects.length > 0
     ? subjects.map((s) => subjectFlyer(s, origin)).join("")
-    : `<div class="poster" style="align-items:center;justify-content:center;gap:20px">
-        <img src="${origin}/matzil-logo.avif" style="height:90px;opacity:0.2" alt="" />
-        <p style="color:#999;font-size:16px;text-align:center;line-height:1.6">No subject info yet.<br>Add a subject in the <strong>Subject</strong> tab.</p>
+    : `<div class="poster empty-poster">
+        <img src="${origin}/matzil-logo.avif" style="height:80px;opacity:0.15;filter:brightness(0) invert(1)" alt="" />
+        <p>No subject info yet.<br>Add a subject in the <strong>Subject</strong> tab.</p>
       </div>`;
 
   const html = `<!DOCTYPE html>
@@ -191,243 +184,225 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      background: #333;
+      background: #2a2a2a;
       font-family: Arial, Helvetica, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     @media print {
-      html, body { background: #fff; height: 100%; }
-      .print-bar { display: none !important; }
-      .poster {
-        width: 100% !important;
-        height: 100vh !important;
-        margin: 0 !important;
-        box-shadow: none !important;
-        border-radius: 0 !important;
-        page-break-after: always;
-      }
+      html, body { background: #fff; }
+      .toolbar { display: none !important; }
+      .poster { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; page-break-after: always; }
     }
 
-    /* Print bar */
-    .print-bar {
+    /* Toolbar */
+    .toolbar {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      background: #111; padding: 10px 24px;
+      background: #111; padding: 9px 20px;
       display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 2px solid #333;
     }
-    .print-bar span { font-size: 13px; color: #666; }
-    .print-btn {
-      background: #E94E1B; color: #fff; border: none; border-radius: 6px;
-      padding: 8px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+    .toolbar-title { font-size: 13px; color: #666; }
+    .toolbar-btns { display: flex; gap: 8px; }
+    .btn-print {
+      background: #E94E1B; color: #fff; border: none; border-radius: 5px;
+      padding: 7px 18px; font-size: 13px; font-weight: 700; cursor: pointer;
     }
-    .print-btn:hover { background: #c73e12; }
+    .btn-print:hover { background: #c73e12; }
+    .btn-img {
+      background: transparent; color: #E94E1B; border: 2px solid #E94E1B; border-radius: 5px;
+      padding: 5px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .btn-img:hover { background: #2a1208; }
+    .btn-img:disabled { opacity: 0.4; cursor: wait; }
 
-    /* Poster */
+    /* ── POSTER ── */
     .poster {
       width: 816px;
       height: 1056px;
-      margin: 52px auto 32px;
+      margin: 50px auto 40px;
       background: #fff;
       border-radius: 4px;
-      box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.7);
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
+    .empty-poster {
+      align-items: center; justify-content: center; gap: 16px;
+      background: #111; color: #555; font-size: 16px; text-align: center; line-height: 1.7;
+    }
 
-    /* Org header */
+    /* Header */
     .org-header {
       background: #E94E1B;
-      padding: 10px 20px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
+      padding: 12px 22px;
+      display: flex; align-items: center; gap: 16px;
+      flex-shrink: 0;
     }
-    .org-logo {
-      height: 52px; width: auto;
-      filter: brightness(0) invert(1);
-    }
+    .org-logo { height: 68px; width: auto; filter: brightness(0) invert(1); flex-shrink: 0; }
     .org-text { flex: 1; }
-    .org-name {
-      font-size: 22px; font-weight: 900; color: #fff;
-      letter-spacing: 2px; line-height: 1;
-    }
-    .org-sub {
-      font-size: 11px; color: rgba(255,255,255,0.75);
-      letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px;
-    }
-    .org-words {
-      height: 36px; width: auto;
-      filter: brightness(0) invert(1); opacity: 0.9;
-    }
+    .org-name { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 3px; line-height: 1; }
+    .org-sub  { font-size: 12px; color: rgba(255,255,255,0.8); letter-spacing: 2px; margin-top: 3px; }
+    .org-words { height: 44px; width: auto; filter: brightness(0) invert(1); flex-shrink: 0; }
 
-    /* MISSING PERSON banner */
+    /* MISSING PERSON */
     .banner {
       background: #fff;
       color: #E94E1B;
       text-align: center;
-      font-size: 72px;
+      font-size: 82px;
       font-weight: 900;
-      letter-spacing: 4px;
-      padding: 8px 0 4px;
+      letter-spacing: 2px;
+      padding: 4px 0 0;
       line-height: 1;
-      text-transform: uppercase;
-      border-bottom: 5px solid #E94E1B;
+      border-bottom: 6px solid #E94E1B;
       flex-shrink: 0;
     }
+
+    /* Name block */
+    .name-block {
+      background: #111;
+      padding: 12px 24px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .name-main { font-size: 46px; font-weight: 900; color: #fff; letter-spacing: 2px; line-height: 1; text-transform: uppercase; }
+    .name-aka  { font-size: 13px; color: #888; letter-spacing: 1px; margin-top: 4px; text-transform: uppercase; }
 
     /* Body */
     .body {
       display: flex;
-      flex: 1;
-      gap: 0;
-      border-bottom: 3px solid #E94E1B;
+      height: 470px;
+      flex-shrink: 0;
+      border-bottom: 4px solid #E94E1B;
     }
 
-    /* Photo col */
+    /* Photo */
     .photo-col {
-      width: 310px;
+      width: 295px;
       flex-shrink: 0;
-      border-right: 3px solid #E94E1B;
-      background: #111;
+      border-right: 4px solid #E94E1B;
       overflow: hidden;
+      background: #111;
     }
-    .photo {
-      width: 100%; height: 100%;
-      object-fit: cover;
-      object-position: center top;
-      display: block;
-    }
+    .photo { width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block; }
     .no-photo {
       width: 100%; height: 100%;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 14px;
-      background: #1a1a1a;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
     }
-    .no-photo-logo { height: 64px; opacity: 0.15; filter: brightness(0) invert(1); }
-    .no-photo span { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #555; text-align: center; }
+    .np-logo { height: 70px; opacity: 0.12; filter: brightness(0) invert(1); }
+    .np-text { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #444; text-align: center; line-height: 1.6; }
 
-    /* Details col */
+    /* Details — flex column, space-between so rows fill the height */
     .details-col {
       flex: 1;
-      padding: 20px 24px;
+      padding: 8px 0;
       display: flex;
-      align-items: flex-start;
+      flex-direction: column;
+      justify-content: space-between;
     }
-    .details-table { width: 100%; border-collapse: collapse; }
-    .rl {
-      font-size: 13px;
+    .drow {
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      flex: 1;
+      border-bottom: 1px solid #efefef;
+    }
+    .drow:last-child { border-bottom: none; }
+    .dl {
+      font-size: 10.5px;
       font-weight: 900;
       color: #E94E1B;
-      letter-spacing: 0.5px;
-      padding: 7px 14px 7px 0;
-      vertical-align: top;
-      white-space: nowrap;
-      width: 100px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      width: 88px;
+      flex-shrink: 0;
     }
-    .rv {
-      font-size: 17px;
+    .dv {
+      font-size: 18px;
       font-weight: 700;
       color: #111;
-      padding: 7px 0;
-      vertical-align: top;
-      line-height: 1.3;
+      line-height: 1.25;
     }
-    .spacer { height: 12px; }
 
-    /* If you have seen bar */
+    /* Seen bar */
     .seen-bar {
       background: #f5f5f5;
       border-top: 2px solid #ddd;
       padding: 10px 20px;
       font-size: 11px;
-      font-weight: 700;
-      color: #333;
+      font-weight: 800;
+      color: #222;
       text-align: center;
-      letter-spacing: 0.3px;
-      line-height: 1.5;
+      letter-spacing: 0.4px;
       flex-shrink: 0;
     }
 
-    /* Contact footer */
-    .contact-footer {
-      background: #E94E1B;
+    /* Footer */
+    .footer {
+      background: #111;
       display: flex;
       align-items: stretch;
-      flex-shrink: 0;
-    }
-    .contact-left {
       flex: 1;
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
     }
-    .hotline-label {
-      font-size: 13px;
-      font-weight: 900;
-      color: rgba(255,255,255,0.85);
-      letter-spacing: 1px;
-      line-height: 1.2;
-      text-align: center;
+    .hotline-wrap {
+      flex: 1;
+      padding: 0 28px;
+      display: flex; flex-direction: column; justify-content: center; gap: 4px;
     }
-    .hotline-num {
-      font-size: 38px;
-      font-weight: 900;
-      color: #fff;
-      letter-spacing: 1px;
-      line-height: 1;
-    }
-    .hotline-sub {
-      font-size: 10px;
-      font-weight: 700;
-      color: rgba(255,255,255,0.7);
-      letter-spacing: 1.5px;
-      margin-top: 2px;
-    }
-    .contact-right {
-      background: #111;
-      padding: 16px 28px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+    .hotline-label { font-size: 11px; font-weight: 900; color: #888; letter-spacing: 2px; text-transform: uppercase; }
+    .hotline-num   { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: 1px; line-height: 1; }
+    .hotline-sub   { font-size: 10px; font-weight: 700; color: #555; letter-spacing: 1.5px; text-transform: uppercase; }
+    .emergency-wrap {
+      background: #E94E1B;
+      padding: 0 32px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
       flex-shrink: 0;
     }
-    .emergency-label {
-      font-size: 10px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      color: #888;
-      text-transform: uppercase;
-    }
-    .emergency-num {
-      font-size: 52px;
-      font-weight: 900;
-      color: #E94E1B;
-      line-height: 1;
-    }
+    .emergency-label { font-size: 10px; font-weight: 900; color: rgba(255,255,255,0.7); letter-spacing: 2px; text-transform: uppercase; }
+    .emergency-num   { font-size: 72px; font-weight: 900; color: #fff; line-height: 1; }
 
-    /* Bottom tag */
-    .bottom-tag {
-      background: #111;
-      padding: 7px 20px;
+    /* Tagline */
+    .tagline {
+      background: #E94E1B;
+      padding: 8px 20px;
       text-align: center;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 700;
-      letter-spacing: 2px;
-      color: #555;
+      letter-spacing: 3px;
+      color: rgba(255,255,255,0.9);
       text-transform: uppercase;
       flex-shrink: 0;
     }
   </style>
 </head>
 <body>
-  <div class="print-bar">
-    <span>${esc(incident?.title)}</span>
-    <button class="print-btn" onclick="window.print()">🖨&nbsp; Print / Save PDF</button>
+  <div class="toolbar">
+    <span class="toolbar-title">${esc(incident?.title)}</span>
+    <div class="toolbar-btns">
+      <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+      <button class="btn-img" id="dl-btn" onclick="downloadImage()">⬇ Download Image</button>
+    </div>
   </div>
   ${postersHtml}
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    async function downloadImage() {
+      const btn = document.getElementById('dl-btn');
+      btn.disabled = true; btn.textContent = 'Rendering…';
+      try {
+        const posters = document.querySelectorAll('.poster');
+        for (let i = 0; i < posters.length; i++) {
+          const canvas = await html2canvas(posters[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: 816, height: 1056 });
+          const a = document.createElement('a');
+          a.download = 'missing-person' + (posters.length > 1 ? '-' + (i+1) : '') + '.png';
+          a.href = canvas.toDataURL('image/png');
+          a.click();
+        }
+      } finally { btn.disabled = false; btn.innerHTML = '⬇ Download Image'; }
+    }
+  </script>
 </body>
 </html>`;
 
