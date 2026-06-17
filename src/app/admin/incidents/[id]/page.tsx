@@ -471,7 +471,8 @@ export default function IncidentCoordinationPage() {
   async function uploadAttachment(file: File) {
     if (!id || !currentUserId) return;
     setUploadingFile(true);
-    const path = `${id}/${Date.now()}-${file.name}`;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${id}/${Date.now()}-${safeName}`;
     const { error: upErr } = await supabase.storage.from("incident-attachments").upload(path, file);
     if (upErr) { toast(upErr.message, "error"); setUploadingFile(false); return; }
     const { error: dbErr } = await supabase.from("incident_attachments").insert({
