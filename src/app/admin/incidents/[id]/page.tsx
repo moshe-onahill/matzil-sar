@@ -180,7 +180,7 @@ export default function IncidentCoordinationPage() {
   const [weightLbsInput, setWeightLbsInput] = useState("");
 
   // Attachments
-  type Attachment = { id: string; file_name: string; storage_path: string; mime_type: string | null; file_size: number | null; created_at: string };
+  type Attachment = { id: string; file_name: string; file_url: string; mime_type: string | null; file_size: number | null; created_at: string };
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
 
@@ -231,7 +231,7 @@ export default function IncidentCoordinationPage() {
       supabase.from("users").select("id,full_name,call_sign").order("call_sign"),
       supabase.from("incident_staging_areas").select("id,name,address,lat,lng,notes").eq("incident_id", id).order("created_at"),
       supabase.from("incident_subjects").select("*").eq("incident_id", id).order("created_at"),
-      supabase.from("incident_attachments").select("id,file_name,storage_path,mime_type,file_size,created_at").eq("incident_id", id).order("created_at", { ascending: false }),
+      supabase.from("incident_attachments").select("id,file_name,file_url,mime_type,file_size,created_at").eq("incident_id", id).order("created_at", { ascending: false }),
     ]);
 
     const inc = incRes.data as Incident;
@@ -475,8 +475,9 @@ export default function IncidentCoordinationPage() {
     const path = `${id}/${Date.now()}-${safeName}`;
     const { error: upErr } = await supabase.storage.from("incident-attachments").upload(path, file);
     if (upErr) { toast(upErr.message, "error"); setUploadingFile(false); return; }
+    const { data: urlData } = supabase.storage.from("incident-attachments").getPublicUrl(path);
     const { error: dbErr } = await supabase.from("incident_attachments").insert({
-      incident_id: id, storage_path: path, file_name: file.name,
+      incident_id: id, file_url: urlData.publicUrl, file_name: file.name,
       file_size: file.size, mime_type: file.type, uploaded_by: currentUserId,
     });
     setUploadingFile(false);
@@ -487,7 +488,9 @@ export default function IncidentCoordinationPage() {
 
   async function deleteAttachment(att: Attachment) {
     if (!window.confirm(`Delete "${att.file_name}"?`)) return;
-    await supabase.storage.from("incident-attachments").remove([att.storage_path]);
+    // Extract storage path from URL
+    const storagePath = att.file_url.split("/incident-attachments/")[1];
+    if (storagePath) await supabase.storage.from("incident-attachments").remove([storagePath]);
     await supabase.from("incident_attachments").delete().eq("id", att.id);
     toast("File deleted.", "success");
     await loadAll();
@@ -1333,7 +1336,6 @@ export default function IncidentCoordinationPage() {
                 <div className="space-y-2">
                   {attachments.map((att) => {
                     const isPdf = att.mime_type === "application/pdf";
-                    const { data: urlData } = supabase.storage.from("incident-attachments").getPublicUrl(att.storage_path);
                     return (
                       <div key={att.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3">
                         <div className="min-w-0">
@@ -1344,7 +1346,7 @@ export default function IncidentCoordinationPage() {
                           </div>
                         </div>
                         <div className="flex shrink-0 gap-2">
-                          <a href={urlData.publicUrl} target="_blank" rel="noopener noreferrer"
+                          <a href={att.file_url} target="_blank" rel="noopener noreferrer"
                             className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
                             {isPdf ? "Open PDF" : "View"}
                           </a>
