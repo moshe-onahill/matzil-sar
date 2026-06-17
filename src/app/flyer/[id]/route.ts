@@ -132,15 +132,9 @@ function subjectFlyer(s: Subject, origin: string): string {
 
   <!-- FOOTER -->
   <div class="footer">
-    <div class="hotline-wrap">
-      <div class="hotline-label">MATZIL HOTLINE</div>
-      <div class="hotline-num">647-557-6735</div>
-      <div class="hotline-sub">24 HOURS A DAY · 7 DAYS A WEEK</div>
-    </div>
-    <div class="emergency-wrap">
-      <div class="emergency-label">EMERGENCY</div>
-      <div class="emergency-num">911</div>
-    </div>
+    <div class="hotline-label">MATZIL HOTLINE</div>
+    <div class="hotline-num">647-557-6735</div>
+    <div class="hotline-sub">24 Hours a Day · 7 Days a Week</div>
   </div>
 
   <!-- TAGLINE -->
@@ -251,11 +245,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       background: #fff;
       color: #E94E1B;
       text-align: center;
-      font-size: 82px;
+      font-size: 86px;
       font-weight: 900;
       letter-spacing: 2px;
       padding: 4px 0 0;
       line-height: 1;
+      white-space: nowrap;
       border-bottom: 6px solid #E94E1B;
       flex-shrink: 0;
     }
@@ -330,12 +325,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .seen-bar {
       background: #f5f5f5;
       border-top: 2px solid #ddd;
-      padding: 10px 20px;
-      font-size: 11px;
-      font-weight: 800;
-      color: #222;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 900;
+      color: #111;
       text-align: center;
-      letter-spacing: 0.4px;
+      letter-spacing: 0.3px;
       flex-shrink: 0;
     }
 
@@ -343,25 +338,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .footer {
       background: #111;
       display: flex;
-      align-items: stretch;
-      flex: 1;
-    }
-    .hotline-wrap {
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
       flex: 1;
       padding: 0 28px;
-      display: flex; flex-direction: column; justify-content: center; gap: 4px;
+      gap: 4px;
     }
-    .hotline-label { font-size: 11px; font-weight: 900; color: #888; letter-spacing: 2px; text-transform: uppercase; }
-    .hotline-num   { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: 1px; line-height: 1; }
-    .hotline-sub   { font-size: 10px; font-weight: 700; color: #555; letter-spacing: 1.5px; text-transform: uppercase; }
-    .emergency-wrap {
-      background: #E94E1B;
-      padding: 0 32px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .emergency-label { font-size: 10px; font-weight: 900; color: rgba(255,255,255,0.7); letter-spacing: 2px; text-transform: uppercase; }
-    .emergency-num   { font-size: 72px; font-weight: 900; color: #fff; line-height: 1; }
+    .hotline-label { font-size: 12px; font-weight: 900; color: #888; letter-spacing: 2px; text-transform: uppercase; text-align: center; }
+    .hotline-num   { font-size: 64px; font-weight: 900; color: #fff; letter-spacing: 2px; line-height: 1; text-align: center; }
+    .hotline-sub   { font-size: 11px; font-weight: 700; color: #555; letter-spacing: 2px; text-transform: uppercase; text-align: center; }
 
     /* Tagline */
     .tagline {
