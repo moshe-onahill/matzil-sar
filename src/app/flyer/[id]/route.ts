@@ -40,103 +40,117 @@ function val(s: string | null | undefined): string | null {
 function fmtDate(dt: string | null) {
   if (!dt) return "";
   return new Date(dt).toLocaleString("en-US", {
-    weekday: "long", month: "long", day: "numeric", year: "numeric",
+    month: "short", day: "numeric", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
 }
 
 function heightFt(inches: number) {
-  return `${Math.floor(inches / 12)}′${inches % 12}″`;
+  return `${Math.floor(inches / 12)}'${inches % 12}"`;
+}
+
+function row(label: string, value: string | null): string {
+  if (!value) return "";
+  return `
+    <tr>
+      <td class="rl">${label}:</td>
+      <td class="rv">${esc(value)}</td>
+    </tr>`;
 }
 
 function subjectFlyer(s: Subject, origin: string): string {
-  const name    = val(s.full_name) ?? "UNKNOWN";
-  const aka     = val(s.also_known_as);
-  const age     = val(s.age_estimate);
-  const gender  = val(s.gender);
-  const height  = s.height_cm ? heightFt(s.height_cm) : null;
-  const weight  = s.weight_kg ? `${s.weight_kg} lbs` : null;
-  const hair    = val(s.hair_color) ? `${val(s.hair_color)}${val(s.hair_length) ? ` ${val(s.hair_length)}` : ""}` : null;
-  const eyes    = val(s.eye_color);
-  const build   = val(s.build);
-  const skin    = val(s.skin_tone);
-  const wearing = val(s.last_seen_wearing);
+  const name     = val(s.full_name) ?? "UNKNOWN";
+  const aka      = val(s.also_known_as);
+  const age      = val(s.age_estimate);
+  const gender   = val(s.gender);
+  const height   = s.height_cm ? heightFt(s.height_cm) : null;
+  const weight   = s.weight_kg ? `${s.weight_kg} lbs` : null;
+  const hair     = [val(s.hair_color), val(s.hair_length)].filter(Boolean).join(", ") || null;
+  const eyes     = val(s.eye_color);
+  const build    = val(s.build);
+  const skin     = val(s.skin_tone);
+  const wearing  = val(s.last_seen_wearing);
   const location = val(s.last_seen_location);
   const lastSeen = s.last_seen_at ? fmtDate(s.last_seen_at) : null;
   const features = val(s.distinguishing_features);
   const medical  = val(s.medical_conditions);
 
-  const descItems = [
-    gender  ? `<div class="desc-item"><span class="desc-k">Gender</span><span class="desc-v">${esc(gender)}</span></div>` : "",
-    age     ? `<div class="desc-item"><span class="desc-k">Age</span><span class="desc-v">${esc(age)}</span></div>` : "",
-    height  ? `<div class="desc-item"><span class="desc-k">Height</span><span class="desc-v">${esc(height)}</span></div>` : "",
-    weight  ? `<div class="desc-item"><span class="desc-k">Weight</span><span class="desc-v">${esc(weight)}</span></div>` : "",
-    hair    ? `<div class="desc-item"><span class="desc-k">Hair</span><span class="desc-v">${esc(hair)}</span></div>` : "",
-    eyes    ? `<div class="desc-item"><span class="desc-k">Eyes</span><span class="desc-v">${esc(eyes)}</span></div>` : "",
-    build   ? `<div class="desc-item"><span class="desc-k">Build</span><span class="desc-v">${esc(build)}</span></div>` : "",
-    skin    ? `<div class="desc-item"><span class="desc-k">Skin</span><span class="desc-v">${esc(skin)}</span></div>` : "",
-  ].filter(Boolean).join("");
-
   return `
 <div class="poster">
 
-  <!-- TOP HEADER -->
-  <div class="header">
-    <img src="${origin}/matzil-words.avif" class="wordmark" alt="Matzil SAR" />
-    <div class="header-right">
-      <div class="missing-text">MISSING</div>
+  <!-- ORG HEADER -->
+  <div class="org-header">
+    <img src="${origin}/matzil-logo.avif" class="org-logo" alt="" />
+    <div class="org-text">
+      <div class="org-name">MATZIL SAR</div>
+      <div class="org-sub">Search &amp; Rescue</div>
+    </div>
+    <img src="${origin}/matzil-words.avif" class="org-words" alt="Matzil SAR" />
+  </div>
+
+  <!-- MISSING PERSON BANNER -->
+  <div class="banner">MISSING PERSON</div>
+
+  <!-- BODY: photo + details -->
+  <div class="body">
+
+    <!-- Photo -->
+    <div class="photo-col">
+      ${s.photo_url
+        ? `<img src="${esc(s.photo_url)}" class="photo" alt="${esc(name)}" />`
+        : `<div class="no-photo">
+             <img src="${origin}/matzil-logo.avif" class="no-photo-logo" alt="" />
+             <span>NO PHOTO<br>AVAILABLE</span>
+           </div>`
+      }
+    </div>
+
+    <!-- Details -->
+    <div class="details-col">
+      <table class="details-table">
+        <tbody>
+          ${row("NAME", name + (aka ? ` (${aka})` : ""))}
+          ${row("GENDER", gender)}
+          ${row("AGE", age)}
+          ${row("LAST SEEN", lastSeen)}
+          ${row("LOCATION", location)}
+          <tr><td colspan="2" class="spacer"></td></tr>
+          ${row("HEIGHT", height)}
+          ${row("WEIGHT", weight)}
+          ${row("BUILD", build)}
+          ${row("HAIR", hair)}
+          ${row("EYES", eyes)}
+          ${row("SKIN", skin)}
+          <tr><td colspan="2" class="spacer"></td></tr>
+          ${row("WEARING", wearing)}
+          ${row("FEATURES", features)}
+          ${medical ? row("MEDICAL", medical) : ""}
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <!-- PHOTO -->
-  <div class="photo-wrap">
-    ${s.photo_url
-      ? `<img src="${esc(s.photo_url)}" class="photo" alt="${esc(name)}" />`
-      : `<div class="photo no-photo">
-           <img src="${origin}/matzil-logo.avif" class="no-photo-logo" alt="" />
-           <div class="no-photo-text">NO PHOTO AVAILABLE</div>
-         </div>`
-    }
-    ${lastSeen ? `<div class="last-seen-stamp">LAST SEEN &nbsp;·&nbsp; ${esc(lastSeen)}</div>` : ""}
+  <!-- IF YOU HAVE SEEN bar -->
+  <div class="seen-bar">
+    IF YOU HAVE SEEN THIS PERSON OR HAVE ANY INFORMATION REGARDING THEIR WHEREABOUTS, PLEASE CONTACT MATZIL IMMEDIATELY.
   </div>
 
-  <!-- NAME BLOCK -->
-  <div class="name-block">
-    <div class="name">${esc(name)}</div>
-    ${aka ? `<div class="aka">Known as &ldquo;${esc(aka)}&rdquo;</div>` : ""}
+  <!-- CONTACT FOOTER -->
+  <div class="contact-footer">
+    <div class="contact-left">
+      <div class="hotline-label">MATZIL<br>HOTLINE</div>
+      <div class="hotline-num">647-557-6735</div>
+      <div class="hotline-sub">24 HOURS A DAY</div>
+    </div>
+    <div class="contact-right">
+      <div class="emergency-label">EMERGENCY</div>
+      <div class="emergency-num">911</div>
+    </div>
   </div>
 
-  <!-- DETAILS STRIP -->
-  ${descItems ? `<div class="desc-strip">${descItems}</div>` : ""}
-
-  <!-- LAST SEEN / WEARING -->
-  ${(location || wearing || features) ? `
-  <div class="info-section">
-    ${location ? `<div class="info-row"><span class="info-k">Last seen at</span><span class="info-v">${esc(location)}</span></div>` : ""}
-    ${wearing  ? `<div class="info-row"><span class="info-k">Last seen wearing</span><span class="info-v">${esc(wearing)}</span></div>` : ""}
-    ${features ? `<div class="info-row"><span class="info-k">Distinguishing features</span><span class="info-v">${esc(features)}</span></div>` : ""}
-  </div>` : ""}
-
-  ${medical ? `
-  <div class="medical-row">
-    <span class="med-icon">⚕</span>
-    <span><strong>Medical:</strong> ${esc(medical)}</span>
-  </div>` : ""}
-
-  <!-- SPACER -->
-  <div style="flex:1"></div>
-
-  <!-- FOOTER / CONTACT -->
-  <div class="footer">
-    <div class="footer-top">
-      <div class="contact-label">IF YOU HAVE ANY INFORMATION — CONTACT US IMMEDIATELY</div>
-      <div class="contact-number">1-833-628-9457</div>
-      <div class="contact-sub">or call 911 in an emergency</div>
-    </div>
-    <div class="footer-bottom">
-      <img src="${origin}/matzil-logo.avif" class="footer-emblem" alt="" />
-      <div class="footer-brand">MATZIL SEARCH &amp; RESCUE</div>
-    </div>
+  <!-- BOTTOM TAG -->
+  <div class="bottom-tag">
+    By The Community, For The Community
   </div>
 
 </div>`;
@@ -177,7 +191,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      background: #222;
+      background: #333;
       font-family: Arial, Helvetica, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -188,11 +202,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .poster { width: 100%; height: 100vh; margin: 0; box-shadow: none; page-break-after: always; }
     }
 
-    /* ── Print bar ── */
+    /* Print bar */
     .print-bar {
       position: fixed; top: 0; left: 0; right: 0; z-index: 100;
       background: #111; padding: 10px 24px;
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      display: flex; align-items: center; justify-content: space-between;
     }
     .print-bar span { font-size: 13px; color: #666; }
     .print-btn {
@@ -201,10 +215,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     .print-btn:hover { background: #c73e12; }
 
-    /* ── Poster ── */
+    /* Poster */
     .poster {
       width: 816px;
-      height: 1056px;
+      min-height: 1056px;
       margin: 52px auto 32px;
       background: #fff;
       border-radius: 4px;
@@ -214,35 +228,61 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       overflow: hidden;
     }
 
-    /* ── Header ── */
-    .header {
+    /* Org header */
+    .org-header {
       background: #E94E1B;
-      padding: 12px 24px;
+      padding: 10px 20px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      flex-shrink: 0;
+      gap: 14px;
     }
-    .wordmark {
-      height: 28px; width: auto;
+    .org-logo {
+      height: 52px; width: auto;
       filter: brightness(0) invert(1);
     }
-    .missing-text {
-      font-size: 36px;
-      font-weight: 900;
-      color: #fff;
-      letter-spacing: 12px;
-      line-height: 1;
-      text-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    .org-text { flex: 1; }
+    .org-name {
+      font-size: 22px; font-weight: 900; color: #fff;
+      letter-spacing: 2px; line-height: 1;
+    }
+    .org-sub {
+      font-size: 11px; color: rgba(255,255,255,0.75);
+      letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px;
+    }
+    .org-words {
+      height: 36px; width: auto;
+      filter: brightness(0) invert(1); opacity: 0.9;
     }
 
-    /* ── Photo ── */
-    .photo-wrap {
-      position: relative;
+    /* MISSING PERSON banner */
+    .banner {
+      background: #fff;
+      color: #E94E1B;
+      text-align: center;
+      font-size: 72px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      padding: 8px 0 4px;
+      line-height: 1;
+      text-transform: uppercase;
+      border-bottom: 5px solid #E94E1B;
       flex-shrink: 0;
-      height: 420px;
+    }
+
+    /* Body */
+    .body {
+      display: flex;
+      flex: 1;
+      gap: 0;
+      border-bottom: 3px solid #E94E1B;
+    }
+
+    /* Photo col */
+    .photo-col {
+      width: 300px;
+      flex-shrink: 0;
+      border-right: 3px solid #E94E1B;
       background: #111;
-      overflow: hidden;
     }
     .photo {
       width: 100%; height: 100%;
@@ -251,126 +291,124 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       display: block;
     }
     .no-photo {
-      width: 100%; height: 100%;
+      width: 100%; height: 100%; min-height: 340px;
       display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 16px;
+      align-items: center; justify-content: center; gap: 14px;
+      background: #1a1a1a;
     }
-    .no-photo-logo { height: 80px; width: auto; opacity: 0.15; filter: brightness(0) invert(1); }
-    .no-photo-text { font-size: 14px; font-weight: 700; letter-spacing: 3px; color: #555; }
-    .last-seen-stamp {
-      position: absolute; bottom: 0; left: 0; right: 0;
-      background: rgba(0,0,0,0.78);
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      padding: 10px 20px;
-      text-align: center;
-    }
-    .last-seen-stamp strong { color: #E94E1B; }
+    .no-photo-logo { height: 64px; opacity: 0.15; filter: brightness(0) invert(1); }
+    .no-photo span { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #555; text-align: center; }
 
-    /* ── Name block ── */
-    .name-block {
-      background: #111;
-      padding: 16px 24px 14px;
+    /* Details col */
+    .details-col {
+      flex: 1;
+      padding: 18px 20px;
+    }
+    .details-table { width: 100%; border-collapse: collapse; }
+    .rl {
+      font-size: 12px;
+      font-weight: 900;
+      color: #E94E1B;
+      letter-spacing: 0.5px;
+      padding: 5px 12px 5px 0;
+      vertical-align: top;
+      white-space: nowrap;
+      width: 90px;
+    }
+    .rv {
+      font-size: 15px;
+      font-weight: 700;
+      color: #111;
+      padding: 5px 0;
+      vertical-align: top;
+      line-height: 1.3;
+    }
+    .spacer { height: 8px; }
+
+    /* If you have seen bar */
+    .seen-bar {
+      background: #f5f5f5;
+      border-top: 2px solid #ddd;
+      padding: 10px 20px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #333;
+      text-align: center;
+      letter-spacing: 0.3px;
+      line-height: 1.5;
       flex-shrink: 0;
     }
-    .name {
-      font-size: 52px;
+
+    /* Contact footer */
+    .contact-footer {
+      background: #E94E1B;
+      display: flex;
+      align-items: stretch;
+      flex-shrink: 0;
+    }
+    .contact-left {
+      flex: 1;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .hotline-label {
+      font-size: 13px;
+      font-weight: 900;
+      color: rgba(255,255,255,0.85);
+      letter-spacing: 1px;
+      line-height: 1.2;
+      text-align: center;
+    }
+    .hotline-num {
+      font-size: 38px;
       font-weight: 900;
       color: #fff;
-      letter-spacing: -1px;
+      letter-spacing: 1px;
       line-height: 1;
+    }
+    .hotline-sub {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.7);
+      letter-spacing: 1.5px;
+      margin-top: 2px;
+    }
+    .contact-right {
+      background: #111;
+      padding: 16px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .emergency-label {
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #888;
       text-transform: uppercase;
     }
-    .aka { font-size: 15px; color: #aaa; margin-top: 4px; }
-
-    /* ── Description strip ── */
-    .desc-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0;
-      background: #f9f9f9;
-      border-bottom: 2px solid #eee;
-      flex-shrink: 0;
-    }
-    .desc-item {
-      display: flex;
-      flex-direction: column;
-      padding: 8px 18px;
-      border-right: 1px solid #eee;
-      gap: 1px;
-    }
-    .desc-k {
-      font-size: 8px; font-weight: 800; letter-spacing: 1.5px;
-      color: #E94E1B; text-transform: uppercase;
-    }
-    .desc-v {
-      font-size: 14px; font-weight: 700; color: #111;
+    .emergency-num {
+      font-size: 52px;
+      font-weight: 900;
+      color: #E94E1B;
+      line-height: 1;
     }
 
-    /* ── Info section ── */
-    .info-section {
-      padding: 14px 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .info-row { display: flex; gap: 12px; align-items: baseline; }
-    .info-k {
-      font-size: 9px; font-weight: 800; letter-spacing: 1.5px;
-      color: #999; text-transform: uppercase;
-      flex-shrink: 0; width: 160px;
-    }
-    .info-v { font-size: 14px; color: #222; line-height: 1.4; }
-
-    /* ── Medical ── */
-    .medical-row {
-      margin: 0 24px 8px;
-      background: #fff8f0;
-      border: 2px solid #E94E1B;
-      border-radius: 6px;
-      padding: 8px 14px;
-      font-size: 13px; color: #333;
-      display: flex; gap: 8px; align-items: flex-start;
-      flex-shrink: 0;
-    }
-    .med-icon { font-size: 15px; flex-shrink: 0; }
-
-    /* ── Footer ── */
-    .footer {
+    /* Bottom tag */
+    .bottom-tag {
       background: #111;
-      flex-shrink: 0;
-    }
-    .footer-top {
-      padding: 18px 24px 16px;
+      padding: 7px 20px;
       text-align: center;
-      border-bottom: 1px solid #222;
-    }
-    .contact-label {
-      font-size: 9px; font-weight: 800; letter-spacing: 2.5px;
-      color: #666; text-transform: uppercase; margin-bottom: 4px;
-    }
-    .contact-number {
-      font-size: 40px; font-weight: 900;
-      color: #E94E1B; letter-spacing: 2px; line-height: 1;
-    }
-    .contact-sub {
-      font-size: 11px; color: #555; margin-top: 4px; letter-spacing: 0.5px;
-    }
-    .footer-bottom {
-      padding: 10px 24px;
-      display: flex; align-items: center; gap: 12px;
-      justify-content: center;
-    }
-    .footer-emblem {
-      height: 28px; width: auto;
-      filter: brightness(0) invert(1); opacity: 0.6;
-    }
-    .footer-brand {
-      font-size: 11px; font-weight: 800; letter-spacing: 3px;
-      color: #444; text-transform: uppercase;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #555;
+      text-transform: uppercase;
+      flex-shrink: 0;
     }
   </style>
 </head>
