@@ -153,12 +153,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new NextResponse("Incident not found", { status: 404 });
   }
 
-  if (subjectsError) {
-    return new NextResponse(
-      `Database error: ${subjectsError.message}\n\nRun the migration supabase/migrations/20260617_incident_subjects.sql in your Supabase SQL editor.`,
-      { status: 500, headers: { "Content-Type": "text/plain" } }
-    );
-  }
+  // DEBUG — remove after fix
+  return new NextResponse(
+    JSON.stringify({ incidentId: id, subjectsError, rawSubjects }, null, 2),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
 
   const subjects = (rawSubjects ?? []) as Subject[];
 
