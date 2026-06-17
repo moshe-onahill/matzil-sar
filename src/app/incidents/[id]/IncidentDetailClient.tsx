@@ -74,6 +74,7 @@ export default function IncidentDetailClient() {
 
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<{ id: string; file_name: string; file_url: string; mime_type: string | null; file_size: number | null; created_at: string }[]>([]);
 
   // Location tracking while responding
   const watchIdRef = useRef<number | null>(null);
@@ -186,6 +187,14 @@ export default function IncidentDetailClient() {
     }
 
     setIncident(data as unknown as Incident);
+
+    const { data: attData } = await supabase
+      .from("incident_attachments")
+      .select("id,file_name,file_url,mime_type,file_size,created_at")
+      .eq("incident_id", incidentId)
+      .order("created_at", { ascending: false });
+    setAttachments((attData ?? []) as any[]);
+
     setLoading(false);
   }
 
@@ -676,10 +685,11 @@ export default function IncidentDetailClient() {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 <button onClick={() => setActiveTab("overview")} className={tabButtonClass("overview")}>Overview</button>
                 <button onClick={() => setActiveTab("updates")} className={tabButtonClass("updates")}>Updates</button>
                 <button onClick={() => setActiveTab("responders")} className={tabButtonClass("responders")}>Responders</button>
+                <button onClick={() => setActiveTab("attachments")} className={tabButtonClass("attachments")}>Files</button>
               </div>
             </div>
           </div>
@@ -848,10 +858,27 @@ export default function IncidentDetailClient() {
           )}
 
           {activeTab === "attachments" && (
-            <div className="rounded-xl bg-gray-900 p-10 flex flex-col items-center justify-center gap-3 text-center">
-              <div className="text-4xl">📎</div>
-              <div className="font-semibold text-gray-300">No attachments</div>
-              <div className="text-sm text-gray-500">Photos and documents shared during this incident will appear here.</div>
+            <div className="rounded-xl bg-gray-900 p-5 space-y-3">
+              <div className="text-lg font-semibold">Files</div>
+              {attachments.length === 0 ? (
+                <div className="rounded-lg bg-black/30 p-6 text-center text-sm text-gray-500">No files attached to this incident yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {attachments.map((att) => (
+                    <a key={att.id} href={att.file_url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center justify-between gap-3 rounded-lg bg-black/30 px-4 py-3 hover:bg-black/50 transition">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-zinc-200">{att.file_name}</div>
+                        <div className="text-xs text-zinc-500 mt-0.5">
+                          {att.file_size ? `${(att.file_size / 1024).toFixed(0)} KB · ` : ""}
+                          {new Date(att.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-xs text-blue-400">Open →</span>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
