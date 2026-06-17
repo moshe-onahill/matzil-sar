@@ -244,7 +244,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       background: #fff;
       color: #E94E1B;
       text-align: center;
-      font-size: 86px;
+      font-size: 68px;
       font-weight: 900;
       letter-spacing: 2px;
       padding: 4px 0 0;
