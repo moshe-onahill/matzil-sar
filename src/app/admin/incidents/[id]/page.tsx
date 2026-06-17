@@ -478,7 +478,7 @@ export default function IncidentCoordinationPage() {
     const { data: urlData } = supabase.storage.from("incident-attachments").getPublicUrl(path);
     const { error: dbErr } = await supabase.from("incident_attachments").insert({
       incident_id: id, file_url: urlData.publicUrl, file_name: file.name,
-      file_size: file.size, mime_type: file.type, uploaded_by: currentUserId,
+      file_size: file.size, mime_type: file.type, uploaded_by: currentUserId, category: "attachment",
     });
     setUploadingFile(false);
     if (dbErr) { toast(dbErr.message, "error"); return; }
