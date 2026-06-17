@@ -1058,20 +1058,6 @@ export default function MapPage() {
                     >
                       Copy Coords
                     </button>
-                    {focus.kind === "responder" && (
-                      <button
-                        onClick={() => {
-                          void fetch("/api/send-push", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ user_id: focus.id, title: "Location Requested", body: "An admin is requesting your current location. Open the app to update.", url: "/" }),
-                          }).then(() => toast("Location request sent", "success"));
-                        }}
-                        className="rounded bg-orange-600 px-3 py-2 text-sm hover:bg-orange-700 transition"
-                      >
-                        Request Location
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : (
