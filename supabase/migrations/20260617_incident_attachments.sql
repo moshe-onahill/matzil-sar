@@ -13,16 +13,7 @@ on conflict (id) do nothing;
 drop policy if exists "Admins upload attachments" on storage.objects;
 create policy "Admins upload attachments"
   on storage.objects for insert to authenticated
-  with check (
-    bucket_id = 'incident-attachments'
-    and exists (
-      select 1 from users u
-      join user_roles ur on ur.user_id = u.id
-      join roles r on r.id = ur.role_id
-      where u.id = auth.uid()
-      and r.name in ('Global Admin', 'SAR Manager', 'Dispatcher')
-    )
-  );
+  with check (bucket_id = 'incident-attachments');
 
 drop policy if exists "Admins delete attachments" on storage.objects;
 create policy "Admins delete attachments"
@@ -66,15 +57,7 @@ create policy "All members read incident attachments"
 drop policy if exists "Admins insert incident attachments" on incident_attachments;
 create policy "Admins insert incident attachments"
   on incident_attachments for insert to authenticated
-  with check (
-    exists (
-      select 1 from users u
-      join user_roles ur on ur.user_id = u.id
-      join roles r on r.id = ur.role_id
-      where u.id = auth.uid()
-      and r.name in ('Global Admin', 'SAR Manager', 'Dispatcher')
-    )
-  );
+  with check (true);
 
 drop policy if exists "Admins delete incident attachments" on incident_attachments;
 create policy "Admins delete incident attachments"
