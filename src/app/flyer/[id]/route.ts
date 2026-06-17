@@ -173,7 +173,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Missing — ${esc(incident.title)}</title>
+  <title>Missing — ${esc(incident?.title)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #d1d5db; font-family: Arial, Helvetica, sans-serif; }
@@ -345,7 +345,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 </head>
 <body>
   <div class="no-print print-bar">
-    <span>${esc(incident.title)}</span>
+    <span>${esc(incident?.title)}</span>
     <button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
   </div>
   ${body}
