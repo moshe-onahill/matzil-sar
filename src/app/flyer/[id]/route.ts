@@ -97,7 +97,6 @@ function subjectFlyer(s: Subject, origin: string): string {
       <div class="org-name">MATZIL SAR</div>
       <div class="org-sub">Search &amp; Rescue</div>
     </div>
-    <img src="${origin}/matzil-words.avif" class="org-words" alt="" onerror="this.style.display='none'" />
   </div>
 
   <!-- MISSING PERSON BANNER -->
