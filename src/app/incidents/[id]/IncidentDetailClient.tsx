@@ -789,6 +789,15 @@ export default function IncidentDetailClient() {
                 </button>
               )}
 
+              {myResponse?.response_type === "On Location" && incident.status === "Active" && (
+                <button
+                  onClick={() => void respondToIncident("Cancelled")}
+                  className="mt-2 w-full rounded-xl bg-orange-700 py-3 font-semibold hover:bg-orange-600"
+                >
+                  Clear Scene
+                </button>
+              )}
+
             </div>
           )}
 

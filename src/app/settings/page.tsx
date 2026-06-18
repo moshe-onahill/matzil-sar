@@ -453,17 +453,33 @@ export default function SettingsPage() {
         <button
           onClick={async () => {
             if (!profile) return;
+            // Play alert tone via Web Audio API
+            try {
+              const ctx = new AudioContext();
+              const gain = ctx.createGain();
+              gain.connect(ctx.destination);
+              [0, 0.3, 0.6].forEach((offset) => {
+                const osc = ctx.createOscillator();
+                osc.connect(gain);
+                osc.type = "square";
+                osc.frequency.value = 880;
+                gain.gain.setValueAtTime(0.25, ctx.currentTime + offset);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.25);
+                osc.start(ctx.currentTime + offset);
+                osc.stop(ctx.currentTime + offset + 0.25);
+              });
+            } catch {}
             const res = await fetch("/api/send-push", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ user_id: profile.id, title: "Test Notification", body: "Notifications are working correctly.", url: "/settings" }),
+              body: JSON.stringify({ user_id: profile.id, title: "🚨 Matzil SAR Alert", body: "This is a test alert — notifications are working correctly.", url: "/settings" }),
             });
-            if (res.ok) toast("Test notification sent!", "success");
+            if (res.ok) toast("Test alert sent!", "success");
             else toast("Failed — make sure notifications are enabled.", "error");
           }}
           className="w-full rounded-xl bg-gray-900 px-4 py-3 font-medium text-gray-300 hover:bg-gray-800 transition"
         >
-          Test Notification
+          Test Alert
         </button>
 
         {/* Theme toggle */}

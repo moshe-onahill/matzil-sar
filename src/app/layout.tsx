@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import AppBottomNav from "@/components/AppBottomNav";
+import NavContentWrapper from "@/components/NavContentWrapper";
 import AuthGate from "@/components/AuthGate";
 import PushPermission from "@/components/PushPermission";
 import NotificationListener from "@/components/NotificationListener";
@@ -30,9 +31,9 @@ export default function RootLayout({
             <PushPermission />
             <NotificationListener />
             <SwipeNav>
-              <div className="min-h-screen w-full overflow-x-hidden pb-20 lg:pb-0 lg:pl-56">
+              <NavContentWrapper>
                 {children}
-              </div>
+              </NavContentWrapper>
             </SwipeNav>
             <AppBottomNav />
             <PrivacyGate />

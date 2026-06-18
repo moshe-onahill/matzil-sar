@@ -121,6 +121,7 @@ export default function AppBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     function checkRole() {
@@ -129,8 +130,16 @@ export default function AppBottomNav() {
     }
     checkRole();
     window.addEventListener("storage", checkRole);
+    setCollapsed(localStorage.getItem("nav-collapsed") === "1");
     return () => window.removeEventListener("storage", checkRole);
   }, []);
+
+  function toggleCollapse() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("nav-collapsed", next ? "1" : "0");
+    window.dispatchEvent(new CustomEvent("nav-toggle", { detail: next ? "1" : "0" }));
+  }
 
   if (pathname === "/login") return null;
 
@@ -151,9 +160,9 @@ export default function AppBottomNav() {
   return (
     <>
       {/* ── SIDEBAR (desktop / landscape) ── */}
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 z-[100] w-56 flex-col border-r border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl">
-        <div className="flex items-center gap-2 px-5 py-5 border-b border-zinc-800/60">
-          <span className="text-lg font-bold tracking-tight text-zinc-50">Matzil SAR</span>
+      <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-[100] flex-col border-r border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl transition-[width] duration-200 overflow-hidden ${collapsed ? "w-14" : "w-56"}`}>
+        <div className={`flex items-center border-b border-zinc-800/60 ${collapsed ? "justify-center px-0 py-5" : "gap-2 px-5 py-5"}`}>
+          {!collapsed && <span className="text-lg font-bold tracking-tight text-zinc-50">Matzil SAR</span>}
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {allSidebarItems.map(({ href, label, Icon }) => {
@@ -162,16 +171,31 @@ export default function AppBottomNav() {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                title={collapsed ? label : undefined}
+                className={`flex items-center rounded-xl px-2.5 py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center" : "gap-3"} ${
                   active ? "bg-red-600/15 text-red-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                 }`}
               >
                 <Icon />
-                <span>{label}</span>
+                {!collapsed && <span>{label}</span>}
               </Link>
             );
           })}
         </nav>
+        <div className="border-t border-zinc-800/60 px-2 py-3">
+          <button
+            onClick={toggleCollapse}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex w-full items-center justify-center rounded-xl px-2.5 py-2 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400 transition-colors"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              {collapsed
+                ? <><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></>
+                : <><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></>
+              }
+            </svg>
+          </button>
+        </div>
       </aside>
 
       {/* ── BOTTOM NAV (mobile / portrait) ── */}

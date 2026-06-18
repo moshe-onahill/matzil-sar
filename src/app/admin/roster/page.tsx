@@ -62,7 +62,9 @@ export default function AdminRosterPage() {
   const [saving, setSaving] = useState(false);
   const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("active");
   const [certsForMember, setCertsForMember] = useState<Member | null>(null);
-  const [tab, setTab] = useState<"roster" | "requests">("roster");
+  const [tab, setTab] = useState<"roster" | "requests" | "bulk">("roster");
+  const [bulkEdits, setBulkEdits] = useState<Record<string, EditState>>({});
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
@@ -239,6 +241,82 @@ export default function AdminRosterPage() {
     }
   }
 
+  function enterBulkEdit() {
+    const initial: Record<string, EditState> = {};
+    members.forEach((m) => {
+      initial[m.id] = {
+        full_name: m.full_name ?? "",
+        call_sign: m.call_sign ?? "",
+        phone: m.phone ?? "",
+        is_active: m.is_active !== false,
+        is_on_duty: m.is_on_duty !== false,
+        roles: [...m.roles],
+        units: [...m.units],
+      };
+    });
+    setBulkEdits(initial);
+    setTab("bulk");
+  }
+
+  function bulkSet(id: string, patch: Partial<EditState>) {
+    setBulkEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
+
+  function bulkToggleRole(id: string, name: string) {
+    const current = bulkEdits[id];
+    if (!current) return;
+    const has = current.roles.includes(name);
+    bulkSet(id, { roles: has ? current.roles.filter((r) => r !== name) : [...current.roles, name] });
+  }
+
+  function bulkToggleUnit(id: string, name: string) {
+    const current = bulkEdits[id];
+    if (!current) return;
+    const has = current.units.includes(name);
+    bulkSet(id, { units: has ? current.units.filter((u) => u !== name) : [...current.units, name] });
+  }
+
+  function isBulkDirty(m: Member): boolean {
+    const e = bulkEdits[m.id];
+    if (!e) return false;
+    return e.full_name !== (m.full_name ?? "") ||
+      e.call_sign !== (m.call_sign ?? "") ||
+      e.phone !== (m.phone ?? "") ||
+      e.is_active !== (m.is_active !== false) ||
+      e.is_on_duty !== (m.is_on_duty !== false) ||
+      JSON.stringify([...e.roles].sort()) !== JSON.stringify([...m.roles].sort()) ||
+      JSON.stringify([...e.units].sort()) !== JSON.stringify([...m.units].sort());
+  }
+
+  async function saveBulkEdits() {
+    const dirty = members.filter(isBulkDirty);
+    if (!dirty.length) { toast("No changes to save.", "error"); return; }
+    setBulkSaving(true);
+    for (const m of dirty) {
+      const e = bulkEdits[m.id];
+      if (!e) continue;
+      const { error } = await supabase.from("users").update({
+        full_name: e.full_name.trim() || null,
+        call_sign: e.call_sign.trim() || null,
+        phone: e.phone.trim() || null,
+        is_active: e.is_active,
+        is_on_duty: e.is_on_duty,
+      }).eq("id", m.id);
+      if (error) { toast(`Error saving ${m.full_name ?? m.email}: ${error.message}`, "error"); continue; }
+      await supabase.from("user_roles").delete().eq("user_id", m.id);
+      const roleIds = allRoles.filter((r) => e.roles.includes(r.name)).map((r) => r.id);
+      if (roleIds.length) await supabase.from("user_roles").insert(roleIds.map((id) => ({ user_id: m.id, role_id: id })));
+      await supabase.from("user_units").delete().eq("user_id", m.id);
+      const unitIds = allUnits.filter((u) => e.units.includes(u.name)).map((u) => u.id);
+      if (unitIds.length) await supabase.from("user_units").insert(unitIds.map((id) => ({ user_id: m.id, unit_id: id })));
+    }
+    setBulkSaving(false);
+    toast(`Saved ${dirty.length} member${dirty.length !== 1 ? "s" : ""}.`, "success");
+    void logAudit({ action: "bulk_edit_roster", entity_type: "roster", entity_id: "bulk", details: { count: dirty.length } });
+    await loadAll();
+    enterBulkEdit();
+  }
+
   function exportCsv() {
     const cols = ["Name", "Call Sign", "Email", "Phone", "Roles", "Units", "Active", "On Duty", "Invited", "Joined"];
     const rows = filtered.map((m) => [
@@ -328,10 +406,11 @@ export default function AdminRosterPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-zinc-800 pb-0">
-          {(["roster", "requests"] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`relative px-4 py-2 text-sm font-medium capitalize transition ${tab === t ? "text-zinc-50 border-b-2 border-red-500 -mb-px" : "text-zinc-500 hover:text-zinc-300"}`}>
-              {t === "requests" ? "Change Requests" : "Members"}
+          {(["roster", "requests", "bulk"] as const).map((t) => (
+            <button key={t}
+              onClick={() => t === "bulk" ? enterBulkEdit() : setTab(t)}
+              className={`relative px-4 py-2 text-sm font-medium transition ${tab === t ? "text-zinc-50 border-b-2 border-red-500 -mb-px" : "text-zinc-500 hover:text-zinc-300"}`}>
+              {t === "requests" ? "Change Requests" : t === "bulk" ? "Bulk Edit" : "Members"}
               {t === "requests" && changeRequests.length > 0 && (
                 <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{changeRequests.length}</span>
               )}
@@ -402,6 +481,99 @@ export default function AdminRosterPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Bulk Edit panel */}
+        {tab === "bulk" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-zinc-500">Edit all rows inline. Changed rows are highlighted. Click Save All when done.</p>
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => setTab("roster")} className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition">
+                  Cancel
+                </button>
+                <button onClick={() => void saveBulkEdits()} disabled={bulkSaving}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition">
+                  {bulkSaving ? "Saving…" : `Save All (${members.filter(isBulkDirty).length} changed)`}
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-zinc-800">
+              <table className="w-full min-w-[860px] text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <th className="px-3 py-2.5">Name</th>
+                    <th className="px-3 py-2.5">Call Sign</th>
+                    <th className="px-3 py-2.5">Phone</th>
+                    <th className="px-3 py-2.5">Roles</th>
+                    <th className="px-3 py-2.5">Units</th>
+                    <th className="px-3 py-2.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {members.map((m) => {
+                    const e = bulkEdits[m.id];
+                    if (!e) return null;
+                    const dirty = isBulkDirty(m);
+                    return (
+                      <tr key={m.id} className={dirty ? "bg-amber-950/20" : "hover:bg-zinc-800/20"}>
+                        <td className="px-2 py-1.5">
+                          <input value={e.full_name}
+                            onChange={(ev) => bulkSet(m.id, { full_name: ev.target.value })}
+                            className="w-36 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-red-600"
+                            placeholder="Full name" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input value={e.call_sign}
+                            onChange={(ev) => bulkSet(m.id, { call_sign: ev.target.value })}
+                            className="w-24 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm font-mono text-zinc-100 outline-none focus:border-red-600"
+                            placeholder="Call sign" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input value={e.phone}
+                            onChange={(ev) => bulkSet(m.id, { phone: ev.target.value })}
+                            className="w-32 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-100 outline-none focus:border-red-600"
+                            placeholder="Phone" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <div className="flex flex-wrap gap-1">
+                            {allRoles.map((r) => (
+                              <button key={r.id} onClick={() => bulkToggleRole(m.id, r.name)}
+                                className={`rounded px-1.5 py-0.5 text-xs transition ${e.roles.includes(r.name) ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-500 hover:bg-zinc-700"}`}>
+                                {r.name}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <div className="flex flex-wrap gap-1">
+                            {allUnits.map((u) => (
+                              <button key={u.id} onClick={() => bulkToggleUnit(m.id, u.name)}
+                                className={`rounded px-1.5 py-0.5 text-xs transition ${e.units.includes(u.name) ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-500 hover:bg-zinc-700"}`}>
+                                {u.name}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <div className="flex flex-col gap-1">
+                            <button onClick={() => bulkSet(m.id, { is_active: !e.is_active })}
+                              className={`rounded px-2 py-0.5 text-xs transition ${e.is_active ? "bg-green-700 text-green-100" : "bg-zinc-700 text-zinc-500"}`}>
+                              {e.is_active ? "Active" : "Inactive"}
+                            </button>
+                            <button onClick={() => bulkSet(m.id, { is_on_duty: !e.is_on_duty })}
+                              className={`rounded px-2 py-0.5 text-xs transition ${e.is_on_duty ? "bg-blue-700 text-blue-100" : "bg-zinc-700 text-zinc-500"}`}>
+                              {e.is_on_duty ? "On Duty" : "Off Duty"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

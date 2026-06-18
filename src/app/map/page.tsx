@@ -182,9 +182,11 @@ export default function MapPage() {
 
   const mapRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [mapLight, setMapLight] = useState(false);
   const leafletReadyRef = useRef(false);
 
   useEffect(() => {
@@ -225,6 +227,7 @@ export default function MapPage() {
   }, []);
 
   useEffect(() => {
+    setMapLight(localStorage.getItem("map-light") === "1");
     void ensureLeafletAndInit();
 
     return () => {
@@ -244,6 +247,21 @@ export default function MapPage() {
     if (!focus || !mapRef.current) return;
     mapRef.current.setView([focus.lat, focus.lng], 14);
   }, [focus]);
+
+  useEffect(() => {
+    if (!leafletReadyRef.current || !window.L || !mapRef.current) return;
+    const L = window.L;
+    if (tileLayerRef.current) {
+      mapRef.current.removeLayer(tileLayerRef.current);
+    }
+    const url = mapLight
+      ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    tileLayerRef.current = L.tileLayer(url, {
+      attribution: "&copy; OpenStreetMap &copy; CARTO",
+      maxZoom: 19,
+    }).addTo(mapRef.current);
+  }, [mapLight]);
 
   // ResizeObserver fires exactly when the container's pixel size changes — no timing guesswork
   useEffect(() => {
@@ -282,6 +300,12 @@ export default function MapPage() {
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
+
+  function toggleMapLight() {
+    const next = !mapLight;
+    setMapLight(next);
+    localStorage.setItem("map-light", next ? "1" : "0");
+  }
 
   async function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -337,8 +361,12 @@ export default function MapPage() {
       zoomControl: true,
     }).setView([40.0979, -74.2176], 10);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors",
+    const isLight = localStorage.getItem("map-light") === "1";
+    const tileUrl = isLight
+      ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    tileLayerRef.current = L.tileLayer(tileUrl, {
+      attribution: "&copy; OpenStreetMap &copy; CARTO",
       maxZoom: 19,
     }).addTo(mapRef.current);
 
@@ -915,10 +943,17 @@ export default function MapPage() {
             <div ref={mapWrapperRef} className="flex flex-col overflow-hidden rounded-xl bg-gray-900 [&:fullscreen]:rounded-none [&:fullscreen]:bg-black">
               <div className="shrink-0 flex items-center justify-between border-b border-gray-800 px-4 py-3">
                 <span className="text-lg font-semibold">Operations Map</span>
-                <button onClick={() => void toggleFullscreen()}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
-                  {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={toggleMapLight}
+                    title={mapLight ? "Switch to dark map" : "Switch to light map"}
+                    className="rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+                    {mapLight ? "🌙 Dark" : "☀️ Light"}
+                  </button>
+                  <button onClick={() => void toggleFullscreen()}
+                    className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+                    {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                  </button>
+                </div>
               </div>
               <div ref={mapContainerRef} className="h-[520px] w-full" />
             </div>
