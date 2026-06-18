@@ -117,11 +117,32 @@ const moreItems = [
   { href: "/settings", label: "Settings", Icon: IconSettings },
 ];
 
+function IconChevron({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+const adminSubItems = [
+  { href: "/admin", label: "Overview" },
+  { href: "/admin/incidents", label: "Incidents" },
+  { href: "/admin/events", label: "Events" },
+  { href: "/admin/roster", label: "Roster" },
+  { href: "/admin/alerts", label: "Alerts" },
+  { href: "/admin/vehicles", label: "Vehicles" },
+  { href: "/admin/units", label: "Units" },
+  { href: "/admin/audit", label: "Audit Log" },
+];
+
 export default function AppBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   useEffect(() => {
     function checkRole() {
@@ -133,6 +154,11 @@ export default function AppBottomNav() {
     setCollapsed(localStorage.getItem("nav-collapsed") === "1");
     return () => window.removeEventListener("storage", checkRole);
   }, []);
+
+  // Auto-open admin section when on an admin page
+  useEffect(() => {
+    if (pathname.startsWith("/admin")) setAdminOpen(true);
+  }, [pathname]);
 
   function toggleCollapse() {
     const next = !collapsed;
@@ -150,12 +176,8 @@ export default function AppBottomNav() {
   }
 
   const moreActive = moreItems.some((item) => isActive(item.href));
-
-  const allSidebarItems = [
-    ...mainItems,
-    ...moreItems,
-    ...(isAdmin ? [{ href: "/admin", label: "Admin Console", Icon: IconAdmin }] : []),
-  ];
+  const adminActive = pathname.startsWith("/admin");
+  const allSidebarItems = [...mainItems, ...moreItems];
 
   return (
     <>
@@ -181,6 +203,48 @@ export default function AppBottomNav() {
               </Link>
             );
           })}
+
+          {/* Admin dropdown */}
+          {isAdmin && (
+            <div>
+              {collapsed ? (
+                <Link href="/admin" title="Admin Console"
+                  className={`flex items-center justify-center rounded-xl px-2.5 py-2.5 text-sm font-medium transition-colors ${
+                    adminActive ? "bg-red-600/15 text-red-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                  }`}>
+                  <IconAdmin />
+                </Link>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setAdminOpen((v) => !v)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-colors ${
+                      adminActive && !adminOpen ? "bg-red-600/15 text-red-400" : adminActive ? "text-red-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                    }`}
+                  >
+                    <IconAdmin />
+                    <span className="flex-1 text-left">Admin Console</span>
+                    <IconChevron open={adminOpen} />
+                  </button>
+                  {adminOpen && (
+                    <div className="ml-3 mt-0.5 space-y-0.5 border-l border-zinc-800 pl-3">
+                      {adminSubItems.map(({ href, label }) => {
+                        const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+                        return (
+                          <Link key={href} href={href}
+                            className={`flex items-center rounded-lg px-2.5 py-2 text-sm transition-colors ${
+                              active ? "text-red-400 font-medium" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60"
+                            }`}>
+                            {label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </nav>
         <div className="border-t border-zinc-800/60 px-2 py-3">
           <button
