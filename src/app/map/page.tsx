@@ -149,6 +149,8 @@ export default function MapPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [pins, setPins] = useState<CustomPin[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  // user_id → task_number for active task assignments
+  const [taskMap, setTaskMap] = useState<Record<string, string>>({});
 
   const [focus, setFocus] = useState<FocusItem | null>(null);
 
@@ -219,6 +221,11 @@ export default function MapPage() {
         { event: "*", schema: "public", table: "events" },
         () => void loadAll()
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "incident_tasks" },
+        () => void loadAll()
+      )
       .subscribe();
 
     return () => {
@@ -241,7 +248,7 @@ export default function MapPage() {
   useEffect(() => {
     if (!leafletReadyRef.current || !window.L || !mapRef.current) return;
     renderMarkers();
-  }, [incidents, responders, vehicles, pins, events, layers]);
+  }, [incidents, responders, vehicles, pins, events, layers, taskMap]);
 
   useEffect(() => {
     if (!focus || !mapRef.current) return;
@@ -394,7 +401,7 @@ export default function MapPage() {
     const minus24 = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const plus24 = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const [incidentRes, liveLocData, vehicleRes, pinRes, eventRes] = await Promise.all([
+    const [incidentRes, liveLocData, vehicleRes, pinRes, eventRes, taskRes] = await Promise.all([
       supabase
         .from("incidents")
         .select(
@@ -424,6 +431,12 @@ export default function MapPage() {
         .gte("event_date", minus24)
         .lte("event_date", plus24)
         .order("event_date", { ascending: true }),
+
+      supabase
+        .from("incident_tasks")
+        .select("task_number, assignee_id, incidents!inner(status)")
+        .not("assignee_id", "is", null)
+        .not("status", "in", '("Cancelled","Completed")'),
     ]);
 
     const incidentData = (incidentRes.data as ActiveIncident[]) ?? [];
@@ -455,6 +468,15 @@ export default function MapPage() {
     setVehicles(vehicleData);
     setPins(pinData);
     setEvents(geocodedEvents.filter((e) => e.lat != null && e.lng != null));
+
+    const tm: Record<string, string> = {};
+    for (const row of (taskRes.data ?? []) as any[]) {
+      const inc = Array.isArray(row.incidents) ? row.incidents[0] : row.incidents;
+      if (inc?.status === "Active" && row.assignee_id) {
+        tm[row.assignee_id] = row.task_number;
+      }
+    }
+    setTaskMap(tm);
 
     if (!focus) {
       const firstIncident = incidentData.find(
@@ -581,17 +603,21 @@ export default function MapPage() {
     if (layers.responders) {
       responders.forEach((responder) => {
         if (responder.lat == null || responder.lng == null) return;
+        const task = responder.user_id ? taskMap[responder.user_id] : undefined;
+        const markerLabel = task ? `${responderName(responder)} [${task}]` : responderName(responder);
         const item: FocusItem = {
           kind: "responder",
           id: responder.id,
           title: responderName(responder),
-          subtitle: responder.is_moving ? `Moving • ${responder.speed_mph ?? 0} mph` : "Stationary",
+          subtitle: task
+            ? `Task ${task} • ${responder.is_moving ? `Moving • ${responder.speed_mph ?? 0} mph` : "Stationary"}`
+            : responder.is_moving ? `Moving • ${responder.speed_mph ?? 0} mph` : "Stationary",
           lat: responder.lat,
           lng: responder.lng,
           color: "blue",
           navigable: false,
         };
-        const icon = L.divIcon({ className: "", html: markerHtml("blue", responderName(responder)), iconSize: [140, 36], iconAnchor: [70, 18] });
+        const icon = L.divIcon({ className: "", html: markerHtml("blue", markerLabel), iconSize: [160, 36], iconAnchor: [80, 18] });
         const marker = L.marker([item.lat, item.lng], { icon });
         marker.on("click", () => setFocus(item));
         marker.addTo(markersLayerRef.current);
