@@ -453,6 +453,9 @@ export default function SettingsPage() {
         <button
           onClick={async () => {
             if (!profile) return;
+            const alertTitle = "🚨 Matzil SAR Alert";
+            const alertBody = "This is a test alert — notifications are working correctly.";
+
             // Play alert tone via Web Audio API
             try {
               const ctx = new AudioContext();
@@ -469,13 +472,34 @@ export default function SettingsPage() {
                 osc.stop(ctx.currentTime + offset + 0.25);
               });
             } catch {}
-            const res = await fetch("/api/send-push", {
+
+            // Show browser Notification popup
+            try {
+              let perm = Notification.permission;
+              if (perm === "default") perm = await Notification.requestPermission();
+              if (perm === "granted") {
+                new Notification(alertTitle, { body: alertBody, icon: "/icon-192.png" });
+              }
+            } catch {}
+
+            // Log to notification_logs so it appears in the Alerts page
+            await supabase.from("notification_logs").insert({
+              user_id: profile.id,
+              channel: "app",
+              notification_type: "test",
+              title: alertTitle,
+              body: alertBody,
+              status: "sent",
+            });
+
+            // Also send FCM/VAPID push for devices that support it
+            void fetch("/api/send-push", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ user_id: profile.id, title: "🚨 Matzil SAR Alert", body: "This is a test alert — notifications are working correctly.", url: "/settings" }),
+              body: JSON.stringify({ user_id: profile.id, title: alertTitle, body: alertBody, url: "/notifications" }),
             });
-            if (res.ok) toast("Test alert sent!", "success");
-            else toast("Failed — make sure notifications are enabled.", "error");
+
+            toast("Test alert sent!", "success");
           }}
           className="w-full rounded-xl bg-gray-900 px-4 py-3 font-medium text-gray-300 hover:bg-gray-800 transition"
         >

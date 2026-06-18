@@ -143,6 +143,7 @@ export default function AppBottomNav() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [landscapeMobile, setLandscapeMobile] = useState(false);
 
   useEffect(() => {
     function checkRole() {
@@ -152,7 +153,16 @@ export default function AppBottomNav() {
     checkRole();
     window.addEventListener("storage", checkRole);
     setCollapsed(localStorage.getItem("nav-collapsed") === "1");
-    return () => window.removeEventListener("storage", checkRole);
+
+    const mq = window.matchMedia("(orientation: landscape) and (max-width: 1023px)");
+    setLandscapeMobile(mq.matches);
+    const mqHandler = (e: MediaQueryListEvent) => setLandscapeMobile(e.matches);
+    mq.addEventListener("change", mqHandler);
+
+    return () => {
+      window.removeEventListener("storage", checkRole);
+      mq.removeEventListener("change", mqHandler);
+    };
   }, []);
 
   // Auto-open admin section when on an admin page
@@ -182,7 +192,7 @@ export default function AppBottomNav() {
   return (
     <>
       {/* ── SIDEBAR (desktop / landscape) ── */}
-      <aside className={`hidden lg:flex fixed inset-y-0 left-0 z-[100] flex-col border-r border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl transition-[width] duration-200 overflow-hidden ${collapsed ? "w-14" : "w-56"}`}>
+      <aside className={`fixed inset-y-0 left-0 z-[100] flex-col border-r border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl transition-[width] duration-200 overflow-hidden ${collapsed ? "w-14" : "w-56"} ${landscapeMobile ? "flex" : "hidden lg:flex"}`}>
         <div className={`flex items-center border-b border-zinc-800/60 ${collapsed ? "justify-center px-0 py-5" : "gap-2 px-5 py-5"}`}>
           {!collapsed && <span className="text-lg font-bold tracking-tight text-zinc-50">Matzil SAR</span>}
         </div>
@@ -263,7 +273,7 @@ export default function AppBottomNav() {
       </aside>
 
       {/* ── BOTTOM NAV (mobile / portrait) ── */}
-      <>
+      {!landscapeMobile && <>
         {moreOpen && (
           <div className="lg:hidden fixed inset-0 z-[105]" onClick={() => setMoreOpen(false)} />
         )}
@@ -333,7 +343,7 @@ export default function AppBottomNav() {
             </div>
           </div>
         </nav>
-      </>
+      </>}
     </>
   );
 }
