@@ -433,9 +433,8 @@ export default function MapPage() {
         .order("event_date", { ascending: true }),
 
       supabase
-        .from("incident_tasks")
-        .select("task_number, assignee_id, status, incidents(status)")
-        .not("assignee_id", "is", null),
+        .from("task_assignments")
+        .select("user_id, task:incident_tasks(task_number, status, incidents(status))"),
     ]);
 
     const incidentData = (incidentRes.data as ActiveIncident[]) ?? [];
@@ -470,11 +469,13 @@ export default function MapPage() {
 
     const tm: Record<string, string> = {};
     for (const row of (taskRes.data ?? []) as any[]) {
-      if (!row.assignee_id) continue;
-      if (row.status === "Cancelled" || row.status === "Completed") continue;
-      const inc = Array.isArray(row.incidents) ? row.incidents[0] : row.incidents;
+      if (!row.user_id) continue;
+      const t = Array.isArray(row.task) ? row.task[0] : row.task;
+      if (!t) continue;
+      if (t.status === "Cancelled" || t.status === "Completed") continue;
+      const inc = Array.isArray(t.incidents) ? t.incidents[0] : t.incidents;
       if (inc?.status === "Active") {
-        tm[row.assignee_id] = row.task_number;
+        tm[row.user_id] = t.task_number;
       }
     }
     setTaskMap(tm);
