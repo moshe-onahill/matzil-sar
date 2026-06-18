@@ -5,10 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getStoredRole } from "@/lib/dev-user";
 
-// SVG icon components
 function IconDashboard() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <rect x="3" y="3" width="7" height="7" rx="1" />
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -19,7 +18,7 @@ function IconDashboard() {
 
 function IconIncidents() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -29,7 +28,7 @@ function IconIncidents() {
 
 function IconUnits() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 00-3-3.87" />
@@ -40,7 +39,7 @@ function IconUnits() {
 
 function IconMap() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
       <line x1="9" y1="3" x2="9" y2="18" />
       <line x1="15" y1="6" x2="15" y2="21" />
@@ -143,82 +142,110 @@ export default function AppBottomNav() {
 
   const moreActive = moreItems.some((item) => isActive(item.href));
 
+  const allSidebarItems = [
+    ...mainItems,
+    ...moreItems,
+    ...(isAdmin ? [{ href: "/admin", label: "Admin Console", Icon: IconAdmin }] : []),
+  ];
+
   return (
     <>
-      {moreOpen && (
-        <div
-          className="fixed inset-0 z-[105]"
-          onClick={() => setMoreOpen(false)}
-        />
-      )}
-
-      {moreOpen && (
-        <div className="fixed bottom-[72px] right-3 z-[110] w-52 rounded-2xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-2xl shadow-black/60">
-          {isAdmin && (
-            <Link
-              href="/admin"
-              onClick={() => setMoreOpen(false)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
-                isActive("/admin") ? "bg-red-600/15 text-red-400" : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-            >
-              <IconAdmin />
-              <span>Admin Console</span>
-            </Link>
-          )}
-          {moreItems.map(({ href, label, Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setMoreOpen(false)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
-                isActive(href)
-                  ? "bg-red-600/15 text-red-400"
-                  : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-            >
-              <Icon />
-              <span>{label}</span>
-            </Link>
-          ))}
+      {/* ── SIDEBAR (desktop / landscape) ── */}
+      <aside className="hidden lg:flex fixed inset-y-0 left-0 z-[100] w-56 flex-col border-r border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl">
+        <div className="flex items-center gap-2 px-5 py-5 border-b border-zinc-800/60">
+          <span className="text-lg font-bold tracking-tight text-zinc-50">Matzil SAR</span>
         </div>
-      )}
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+          {allSidebarItems.map(({ href, label, Icon }) => {
+            const active = isActive(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                  active ? "bg-red-600/15 text-red-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                }`}
+              >
+                <Icon />
+                <span>{label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-[100] border-t border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl supports-[padding:max(0px)]:pb-[max(env(safe-area-inset-bottom),0px)]">
-        <div className="mx-auto w-full max-w-5xl">
-          <div className="grid grid-cols-5">
-            {mainItems.map(({ href, label, Icon }) => {
-              const active = isActive(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors"
-                >
-                  <div className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${active ? "bg-red-600/15" : ""}`}>
-                    <span className={`transition-colors ${active ? "text-red-400" : "text-zinc-500"}`}>
-                      <Icon />
-                    </span>
-                  </div>
-                  <span className={`text-[10px] font-medium transition-colors ${active ? "text-red-400" : "text-zinc-500"}`}>{label}</span>
-                </Link>
-              );
-            })}
+      {/* ── BOTTOM NAV (mobile / portrait) ── */}
+      <>
+        {moreOpen && (
+          <div className="lg:hidden fixed inset-0 z-[105]" onClick={() => setMoreOpen(false)} />
+        )}
 
-            <button
-              onClick={() => setMoreOpen((v) => !v)}
-              className="flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors"
-            >
-              <div className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${moreActive || moreOpen ? "bg-red-600/15" : ""}`}>
-                <span className={`transition-colors ${moreActive || moreOpen ? "text-red-400" : "text-zinc-500"}`}>
-                  <IconMore />
-                </span>
-              </div>
-              <span className={`text-[10px] font-medium transition-colors ${moreActive || moreOpen ? "text-red-400" : "text-zinc-500"}`}>More</span>
-            </button>
+        {moreOpen && (
+          <div className="lg:hidden fixed bottom-[72px] right-3 z-[110] w-52 rounded-2xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-2xl shadow-black/60">
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={() => setMoreOpen(false)}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                  isActive("/admin") ? "bg-red-600/15 text-red-400" : "text-zinc-300 hover:bg-zinc-800"
+                }`}
+              >
+                <IconAdmin />
+                <span>Admin Console</span>
+              </Link>
+            )}
+            {moreItems.map(({ href, label, Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setMoreOpen(false)}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                  isActive(href) ? "bg-red-600/15 text-red-400" : "text-zinc-300 hover:bg-zinc-800"
+                }`}
+              >
+                <Icon />
+                <span>{label}</span>
+              </Link>
+            ))}
           </div>
-        </div>
-      </nav>
+        )}
+
+        <nav className="lg:hidden fixed inset-x-0 bottom-0 z-[100] border-t border-zinc-800/60 bg-zinc-950/95 backdrop-blur-xl supports-[padding:max(0px)]:pb-[max(env(safe-area-inset-bottom),0px)]">
+          <div className="mx-auto w-full max-w-5xl">
+            <div className="grid grid-cols-5">
+              {mainItems.map(({ href, label, Icon }) => {
+                const active = isActive(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors"
+                  >
+                    <div className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${active ? "bg-red-600/15" : ""}`}>
+                      <span className={`transition-colors ${active ? "text-red-400" : "text-zinc-500"}`}>
+                        <Icon />
+                      </span>
+                    </div>
+                    <span className={`text-[10px] font-medium transition-colors ${active ? "text-red-400" : "text-zinc-500"}`}>{label}</span>
+                  </Link>
+                );
+              })}
+
+              <button
+                onClick={() => setMoreOpen((v) => !v)}
+                className="flex min-h-[60px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors"
+              >
+                <div className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${moreActive || moreOpen ? "bg-red-600/15" : ""}`}>
+                  <span className={`transition-colors ${moreActive || moreOpen ? "text-red-400" : "text-zinc-500"}`}>
+                    <IconMore />
+                  </span>
+                </div>
+                <span className={`text-[10px] font-medium transition-colors ${moreActive || moreOpen ? "text-red-400" : "text-zinc-500"}`}>More</span>
+              </button>
+            </div>
+          </div>
+        </nav>
+      </>
     </>
   );
 }

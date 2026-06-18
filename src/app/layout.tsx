@@ -30,7 +30,7 @@ export default function RootLayout({
             <PushPermission />
             <NotificationListener />
             <SwipeNav>
-              <div className="min-h-screen w-full overflow-x-hidden pb-20">
+              <div className="min-h-screen w-full overflow-x-hidden pb-20 lg:pb-0 lg:pl-56">
                 {children}
               </div>
             </SwipeNav>
