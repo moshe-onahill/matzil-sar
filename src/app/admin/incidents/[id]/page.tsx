@@ -306,13 +306,15 @@ export default function IncidentCoordinationPage() {
   }
 
   async function assignTaskToJob(taskId: string, jobId: string | null) {
-    // Optimistic update so UI reflects immediately
-    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, job_id: jobId } : t));
-    const { error } = await supabase.from("incident_tasks").update({ job_id: jobId }).eq("id", taskId);
-    if (error) {
-      toast(error.message, "error");
-      await loadAll(); // revert on error
+    const job = jobId ? jobs.find((j) => j.id === jobId) : null;
+    const updates: Record<string, any> = { job_id: jobId };
+    if (job) {
+      updates.job_type = job.name;
+      if (job.description) updates.description = job.description;
     }
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, job_id: jobId, ...(job ? { job_type: job.name, description: job.description } : {}) } : t));
+    const { error } = await supabase.from("incident_tasks").update(updates).eq("id", taskId);
+    if (error) { toast(error.message, "error"); await loadAll(); }
   }
 
   async function addStagingArea() {
