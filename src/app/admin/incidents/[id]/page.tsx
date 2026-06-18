@@ -196,6 +196,7 @@ export default function IncidentCoordinationPage() {
   type Job = { id: string; name: string; description: string | null; created_at: string };
   const [jobs, setJobs] = useState<Job[]>([]);
   const [addingJob, setAddingJob] = useState(false);
+  const [jobSelectValues, setJobSelectValues] = useState<Record<string, string>>({});
 
   // Post update form state
   const [updateType, setUpdateType] = useState("General Update");
@@ -305,8 +306,13 @@ export default function IncidentCoordinationPage() {
   }
 
   async function assignTaskToJob(taskId: string, jobId: string | null) {
-    await supabase.from("incident_tasks").update({ job_id: jobId }).eq("id", taskId);
-    await loadAll();
+    // Optimistic update so UI reflects immediately
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, job_id: jobId } : t));
+    const { error } = await supabase.from("incident_tasks").update({ job_id: jobId }).eq("id", taskId);
+    if (error) {
+      toast(error.message, "error");
+      await loadAll(); // revert on error
+    }
   }
 
   async function addStagingArea() {
@@ -866,7 +872,14 @@ export default function IncidentCoordinationPage() {
                           </div>
                         )}
                         {freeTasks.length > 0 && (
-                          <select defaultValue="" onChange={(e) => { if (e.target.value) void assignTaskToJob(e.target.value, job.id); e.target.value = ""; }}
+                          <select
+                            value={jobSelectValues[job.id] ?? ""}
+                            onChange={(e) => {
+                              const taskId = e.target.value;
+                              if (!taskId) return;
+                              setJobSelectValues((prev) => ({ ...prev, [job.id]: "" }));
+                              void assignTaskToJob(taskId, job.id);
+                            }}
                             className="w-full rounded-lg bg-black px-3 py-2 text-xs text-zinc-400 outline-none focus:ring-1 focus:ring-red-600">
                             <option value="">+ Assign existing task…</option>
                             {freeTasks.map((t) => (
