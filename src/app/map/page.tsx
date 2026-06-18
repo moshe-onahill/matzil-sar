@@ -434,9 +434,8 @@ export default function MapPage() {
 
       supabase
         .from("incident_tasks")
-        .select("task_number, assignee_id, incidents!inner(status)")
-        .not("assignee_id", "is", null)
-        .not("status", "in", '("Cancelled","Completed")'),
+        .select("task_number, assignee_id, status, incidents(status)")
+        .not("assignee_id", "is", null),
     ]);
 
     const incidentData = (incidentRes.data as ActiveIncident[]) ?? [];
@@ -471,8 +470,10 @@ export default function MapPage() {
 
     const tm: Record<string, string> = {};
     for (const row of (taskRes.data ?? []) as any[]) {
+      if (!row.assignee_id) continue;
+      if (row.status === "Cancelled" || row.status === "Completed") continue;
       const inc = Array.isArray(row.incidents) ? row.incidents[0] : row.incidents;
-      if (inc?.status === "Active" && row.assignee_id) {
+      if (inc?.status === "Active") {
         tm[row.assignee_id] = row.task_number;
       }
     }
