@@ -222,12 +222,12 @@ export default function IncidentCoordinationPage() {
   }
 
   async function loadAll() {
-    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes, subjectsRes, attachmentsRes, jobsRes] = await Promise.all([
+    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes, subjectsRes, attachmentsRes] = await Promise.all([
       supabase.from("incidents").select(
         "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng,coordinator_id"
       ).eq("id", id).single(),
       supabase.from("incident_tasks").select(`
-        id, task_number, description, job_type, color, status, task_lead_id, job_id,
+        id, task_number, description, job_type, color, status, task_lead_id,
         task_lead:users!incident_tasks_task_lead_id_fkey ( id, full_name, call_sign ),
         assignments:task_assignments ( user_id, user:users ( id, full_name, call_sign ) )
       `).eq("incident_id", id).order("task_number"),
@@ -243,7 +243,6 @@ export default function IncidentCoordinationPage() {
       supabase.from("incident_staging_areas").select("id,name,address,lat,lng,notes").eq("incident_id", id).order("created_at"),
       supabase.from("incident_subjects").select("*").eq("incident_id", id).order("created_at"),
       supabase.from("incident_attachments").select("id,file_name,file_url,mime_type,file_size,created_at").eq("incident_id", id).order("created_at", { ascending: false }),
-      supabase.from("incident_jobs").select("id,name,description,created_at").eq("incident_id", id).order("created_at"),
     ]);
 
     const inc = incRes.data as Incident;
@@ -285,8 +284,15 @@ export default function IncidentCoordinationPage() {
     setStagingAreas((areasRes.data ?? []) as StagingArea[]);
     setSubjects((subjectsRes.data ?? []) as Subject[]);
     setAttachments((attachmentsRes.data ?? []) as Attachment[]);
-    setJobs((jobsRes.data ?? []) as Job[]);
     setLoading(false);
+    // Run separately so missing columns/tables don't crash the page pre-migration
+    void supabase.from("incident_jobs").select("id,name,description,created_at").eq("incident_id", id).order("created_at")
+      .then(({ data }) => { setJobs((data ?? []) as Job[]); });
+    void supabase.from("incident_tasks").select("id,job_id").eq("incident_id", id)
+      .then(({ data }) => {
+        if (!data) return;
+        setTasks((prev) => prev.map((t) => ({ ...t, job_id: (data.find((d: any) => d.id === t.id) as any)?.job_id ?? null })));
+      });
   }
 
   async function addJob() {
