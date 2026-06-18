@@ -143,9 +143,13 @@ export default function IncidentCoordinationPage() {
   // Current user id for posting updates
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // New task form
+  // New task / job form
+  const [newCreateMode, setNewCreateMode] = useState<"task" | "job">("task");
   const [newDesc, setNewDesc] = useState("");
   const [newJobType, setNewJobType] = useState("");
+  const [newCustomDesc, setNewCustomDesc] = useState("");
+  const [newJobName, setNewJobName] = useState("");
+  const [newJobDesc, setNewJobDesc] = useState("");
   const [creating, setCreating] = useState(false);
 
   // Edit form state
@@ -191,8 +195,6 @@ export default function IncidentCoordinationPage() {
   // Jobs
   type Job = { id: string; name: string; description: string | null; created_at: string };
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [newJobName, setNewJobName] = useState("");
-  const [newJobDesc, setNewJobDesc] = useState("");
   const [addingJob, setAddingJob] = useState(false);
 
   // Post update form state
@@ -295,15 +297,6 @@ export default function IncidentCoordinationPage() {
       });
   }
 
-  async function addJob() {
-    if (!newJobName.trim()) return;
-    setAddingJob(true);
-    const { error } = await supabase.from("incident_jobs").insert({ incident_id: id, name: newJobName.trim(), description: newJobDesc.trim() || null });
-    setAddingJob(false);
-    if (error) { toast(error.message, "error"); return; }
-    setNewJobName(""); setNewJobDesc("");
-    await loadAll();
-  }
 
   async function deleteJob(jobId: string) {
     if (!window.confirm("Delete this job?")) return;
@@ -620,19 +613,47 @@ export default function IncidentCoordinationPage() {
     return `T-${nums.length ? Math.max(...nums) + 1 : 1}`;
   }
 
-  async function createTask() {
+  async function createTask(overrideJobType?: string, overrideDesc?: string) {
     if (!id) return;
+    setCreating(true);
+    try {
+      const jobType = overrideJobType ?? newJobType;
+      const desc = overrideDesc ?? (newJobType === "Custom" ? newCustomDesc.trim() : newDesc.trim());
+      await taskApi({
+        action: "create_task", incident_id: id,
+        task_number: nextTaskNumber(),
+        description: desc || null,
+        job_type: jobType || null,
+      });
+      setNewDesc(""); setNewJobType(""); setNewCustomDesc("");
+      toast("Task created.", "success");
+      await loadAll();
+    } catch (e: any) { toast(e.message, "error"); }
+    setCreating(false);
+  }
+
+  async function createJobEntry() {
+    if (!newJobName.trim()) return;
+    setAddingJob(true);
+    const { error } = await supabase.from("incident_jobs").insert({ incident_id: id, name: newJobName.trim(), description: newJobDesc.trim() || null });
+    setAddingJob(false);
+    if (error) { toast(error.message, "error"); return; }
+    setNewJobName(""); setNewJobDesc("");
+    toast("Job added.", "success");
+    await loadAll();
+  }
+
+  async function convertJobToTask(job: { id: string; name: string; description: string | null }) {
     setCreating(true);
     try {
       await taskApi({
         action: "create_task", incident_id: id,
         task_number: nextTaskNumber(),
-        description: newDesc.trim() || null,
-        job_type: newJobType || null,
+        description: job.description || null,
+        job_type: job.name,
       });
-      setNewDesc("");
-      setNewJobType("");
-      toast("Task created.", "success");
+      await supabase.from("incident_jobs").delete().eq("id", job.id);
+      toast("Job converted to task.", "success");
       await loadAll();
     } catch (e: any) { toast(e.message, "error"); }
     setCreating(false);
@@ -752,31 +773,113 @@ export default function IncidentCoordinationPage() {
               )}
             </section>
 
-            {/* Create task */}
+            {/* Create task / job */}
             <section className="rounded-xl bg-gray-900 p-4 space-y-3">
-              <div className="font-semibold">Create Task</div>
-              <div className="flex flex-wrap gap-1.5">
-                {JOB_TYPES.map((j) => (
-                  <button key={j} onClick={() => setNewJobType(newJobType === j ? "" : j)}
-                    className={`rounded-lg px-3 py-1 text-sm transition ${newJobType === j ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-                    {j}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <div className="flex items-center rounded-lg bg-black px-3 py-2 text-sm font-mono text-gray-400 shrink-0">
-                  {nextTaskNumber()}
-                </div>
-                <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && void createTask()}
-                  placeholder={newJobType ? `${newJobType} — additional details` : "Task description (optional)"}
-                  className="flex-1 rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
-                <button onClick={() => void createTask()} disabled={creating}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-60 hover:bg-red-500 shrink-0">
-                  {creating ? "…" : "Add"}
+              {/* Mode toggle */}
+              <div className="flex gap-1 rounded-lg bg-zinc-800 p-1 w-fit">
+                <button onClick={() => setNewCreateMode("task")}
+                  className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${newCreateMode === "task" ? "bg-red-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
+                  Task
+                </button>
+                <button onClick={() => setNewCreateMode("job")}
+                  className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${newCreateMode === "job" ? "bg-zinc-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
+                  Job
                 </button>
               </div>
+
+              {newCreateMode === "task" ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="flex items-center rounded-lg bg-black px-3 py-2 text-sm font-mono text-gray-400 shrink-0">
+                      {nextTaskNumber()}
+                    </div>
+                    <select value={newJobType} onChange={(e) => { setNewJobType(e.target.value); setNewCustomDesc(""); }}
+                      className="flex-1 rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600 text-zinc-200">
+                      <option value="">— Select type —</option>
+                      {JOB_TYPES.map((j) => <option key={j} value={j}>{j}</option>)}
+                      <option value="Custom">Custom…</option>
+                    </select>
+                  </div>
+                  {newJobType === "Custom" ? (
+                    <input value={newCustomDesc} onChange={(e) => setNewCustomDesc(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && void createTask()}
+                      placeholder="Custom task description"
+                      className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                  ) : newJobType ? (
+                    <input value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && void createTask()}
+                      placeholder="Additional details (optional)"
+                      className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                  ) : null}
+                  <button onClick={() => void createTask()} disabled={creating || (!newJobType)}
+                    className="w-full rounded-lg bg-red-600 py-2 text-sm font-semibold disabled:opacity-60 hover:bg-red-500 transition">
+                    {creating ? "Creating…" : "Create Task"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <input value={newJobName} onChange={(e) => setNewJobName(e.target.value)}
+                    placeholder="Job name (e.g. Sector A Search)"
+                    className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                  <input value={newJobDesc} onChange={(e) => setNewJobDesc(e.target.value)}
+                    placeholder="Description (optional)"
+                    className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                  <button onClick={() => void createJobEntry()} disabled={addingJob || !newJobName.trim()}
+                    className="w-full rounded-lg bg-zinc-600 py-2 text-sm font-semibold disabled:opacity-60 hover:bg-zinc-500 transition">
+                    {addingJob ? "Adding…" : "Add Job"}
+                  </button>
+                </div>
+              )}
             </section>
+
+            {/* Jobs list */}
+            {jobs.length > 0 && (
+              <section className="rounded-xl bg-zinc-900 p-4 space-y-3">
+                <div className="font-semibold text-zinc-100">Jobs</div>
+                <div className="space-y-2">
+                  {jobs.map((job) => {
+                    const assignedTasks = tasks.filter((t) => t.job_id === job.id);
+                    const freeTasks = tasks.filter((t) => !t.job_id);
+                    return (
+                      <div key={job.id} className="rounded-lg border border-zinc-700 bg-zinc-950 p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-medium text-zinc-100">{job.name}</div>
+                            {job.description && <div className="text-xs text-zinc-500 mt-0.5">{job.description}</div>}
+                          </div>
+                          <div className="flex gap-1.5 shrink-0">
+                            <button onClick={() => void convertJobToTask(job)} disabled={creating}
+                              className="rounded-lg bg-red-950/50 px-3 py-1 text-xs text-red-300 hover:bg-red-950 transition">
+                              → New Task
+                            </button>
+                            <button onClick={() => void deleteJob(job.id)} className="text-zinc-600 hover:text-red-400 px-1 text-sm">×</button>
+                          </div>
+                        </div>
+                        {assignedTasks.length > 0 && (
+                          <div className="space-y-1">
+                            {assignedTasks.map((t) => (
+                              <div key={t.id} className="flex items-center justify-between gap-2 rounded bg-zinc-800 px-3 py-1.5 text-xs">
+                                <span className="font-mono text-zinc-200">{t.task_number}{t.job_type ? ` — ${t.job_type}` : ""}</span>
+                                <button onClick={() => void assignTaskToJob(t.id, null)} className="text-zinc-600 hover:text-red-400">Remove</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {freeTasks.length > 0 && (
+                          <select defaultValue="" onChange={(e) => { if (e.target.value) void assignTaskToJob(e.target.value, job.id); e.target.value = ""; }}
+                            className="w-full rounded-lg bg-black px-3 py-2 text-xs text-zinc-400 outline-none focus:ring-1 focus:ring-red-600">
+                            <option value="">+ Assign existing task…</option>
+                            {freeTasks.map((t) => (
+                              <option key={t.id} value={t.id}>{t.task_number}{t.job_type ? ` — ${t.job_type}` : t.description ? ` — ${t.description}` : ""}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* Task board — compact cards */}
             {tasks.length === 0 ? (
@@ -1255,61 +1358,6 @@ export default function IncidentCoordinationPage() {
               </div>
             </section>
 
-            {/* Jobs */}
-            <section className="rounded-xl bg-zinc-900 p-5 space-y-4">
-              <div className="font-semibold text-zinc-50">Jobs</div>
-              <p className="text-xs text-zinc-500">Define objectives and assign tasks to each job.</p>
-
-              {jobs.length > 0 && (
-                <div className="space-y-3">
-                  {jobs.map((job) => {
-                    const jobTasks = tasks.filter((t) => t.job_id === job.id);
-                    const unassignedTasks = tasks.filter((t) => !t.job_id);
-                    return (
-                      <div key={job.id} className="rounded-lg border border-zinc-700 bg-zinc-950 p-4 space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-medium text-zinc-100">{job.name}</div>
-                            {job.description && <div className="text-xs text-zinc-500 mt-0.5">{job.description}</div>}
-                          </div>
-                          <button onClick={() => void deleteJob(job.id)} className="text-zinc-600 hover:text-red-400 text-sm shrink-0">×</button>
-                        </div>
-                        <div className="space-y-1.5">
-                          {jobTasks.map((t) => (
-                            <div key={t.id} className="flex items-center justify-between gap-2 rounded bg-zinc-800 px-3 py-1.5">
-                              <span className="font-mono text-xs text-zinc-200">{t.task_number} {t.job_type ? `— ${t.job_type}` : t.description ? `— ${t.description}` : ""}</span>
-                              <button onClick={() => void assignTaskToJob(t.id, null)} className="text-xs text-zinc-600 hover:text-red-400">Remove</button>
-                            </div>
-                          ))}
-                          {unassignedTasks.length > 0 && (
-                            <select defaultValue="" onChange={(e) => { if (e.target.value) void assignTaskToJob(e.target.value, job.id); e.target.value = ""; }}
-                              className="w-full rounded-lg bg-black px-3 py-2 text-xs text-zinc-400 outline-none focus:ring-1 focus:ring-red-600">
-                              <option value="">+ Assign task…</option>
-                              {unassignedTasks.map((t) => (
-                                <option key={t.id} value={t.id}>{t.task_number}{t.job_type ? ` — ${t.job_type}` : t.description ? ` — ${t.description}` : ""}</option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                <input value={newJobName} onChange={(e) => setNewJobName(e.target.value)}
-                  placeholder="Job name (e.g. Sector A Search)"
-                  className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
-                <input value={newJobDesc} onChange={(e) => setNewJobDesc(e.target.value)}
-                  placeholder="Description (optional)"
-                  className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
-                <button onClick={() => void addJob()} disabled={addingJob || !newJobName.trim()}
-                  className="w-full rounded-lg bg-zinc-700 py-2 text-sm font-medium hover:bg-zinc-600 disabled:opacity-60 transition">
-                  {addingJob ? "Adding…" : "+ Add Job"}
-                </button>
-              </div>
-            </section>
           </div>
         )}
 
