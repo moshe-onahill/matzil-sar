@@ -21,6 +21,7 @@ type Task = {
   task_lead_id: string | null;
   task_lead?: User | null;
   assignments: Assignment[];
+  job_id: string | null;
 };
 type StagingArea = {
   id: string;
@@ -37,6 +38,7 @@ type IncidentUpdate = {
   title: string;
   body: string | null;
   created_at: string;
+  audience: string | null;
 };
 
 type Incident = {
@@ -133,6 +135,7 @@ export default function IncidentCoordinationPage() {
   const [editingUpdateId, setEditingUpdateId] = useState<string | null>(null);
   const [editUpdateTitle, setEditUpdateTitle] = useState("");
   const [editUpdateBody, setEditUpdateBody] = useState("");
+  const [editUpdateAudience, setEditUpdateAudience] = useState<"all" | "on_scene" | "tasks">("all");
   const [savingUpdate, setSavingUpdate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>("coordination");
@@ -185,6 +188,13 @@ export default function IncidentCoordinationPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
 
+  // Jobs
+  type Job = { id: string; name: string; description: string | null; created_at: string };
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [newJobName, setNewJobName] = useState("");
+  const [newJobDesc, setNewJobDesc] = useState("");
+  const [addingJob, setAddingJob] = useState(false);
+
   // Post update form state
   const [updateType, setUpdateType] = useState("General Update");
   const [updateTitle, setUpdateTitle] = useState("");
@@ -212,12 +222,12 @@ export default function IncidentCoordinationPage() {
   }
 
   async function loadAll() {
-    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes, subjectsRes, attachmentsRes] = await Promise.all([
+    const [incRes, tasksRes, responsesRes, updatesRes, usersRes, areasRes, subjectsRes, attachmentsRes, jobsRes] = await Promise.all([
       supabase.from("incidents").select(
         "id,title,incident_number,type,status,short_description,accepting_units,staging_name,staging_address,staging_lat,staging_lng,coordinator_id"
       ).eq("id", id).single(),
       supabase.from("incident_tasks").select(`
-        id, task_number, description, job_type, color, status, task_lead_id,
+        id, task_number, description, job_type, color, status, task_lead_id, job_id,
         task_lead:users!incident_tasks_task_lead_id_fkey ( id, full_name, call_sign ),
         assignments:task_assignments ( user_id, user:users ( id, full_name, call_sign ) )
       `).eq("incident_id", id).order("task_number"),
@@ -226,13 +236,14 @@ export default function IncidentCoordinationPage() {
         .eq("incident_id", id)
         .in("response_type", ["On Location", "Responding"]),
       supabase.from("incident_updates")
-        .select("id,update_type,title,body,created_at")
+        .select("id,update_type,title,body,created_at,audience")
         .eq("incident_id", id)
         .order("created_at", { ascending: false }),
       supabase.from("users").select("id,full_name,call_sign").order("call_sign"),
       supabase.from("incident_staging_areas").select("id,name,address,lat,lng,notes").eq("incident_id", id).order("created_at"),
       supabase.from("incident_subjects").select("*").eq("incident_id", id).order("created_at"),
       supabase.from("incident_attachments").select("id,file_name,file_url,mime_type,file_size,created_at").eq("incident_id", id).order("created_at", { ascending: false }),
+      supabase.from("incident_jobs").select("id,name,description,created_at").eq("incident_id", id).order("created_at"),
     ]);
 
     const inc = incRes.data as Incident;
@@ -274,7 +285,29 @@ export default function IncidentCoordinationPage() {
     setStagingAreas((areasRes.data ?? []) as StagingArea[]);
     setSubjects((subjectsRes.data ?? []) as Subject[]);
     setAttachments((attachmentsRes.data ?? []) as Attachment[]);
+    setJobs((jobsRes.data ?? []) as Job[]);
     setLoading(false);
+  }
+
+  async function addJob() {
+    if (!newJobName.trim()) return;
+    setAddingJob(true);
+    const { error } = await supabase.from("incident_jobs").insert({ incident_id: id, name: newJobName.trim(), description: newJobDesc.trim() || null });
+    setAddingJob(false);
+    if (error) { toast(error.message, "error"); return; }
+    setNewJobName(""); setNewJobDesc("");
+    await loadAll();
+  }
+
+  async function deleteJob(jobId: string) {
+    if (!window.confirm("Delete this job?")) return;
+    await supabase.from("incident_jobs").delete().eq("id", jobId);
+    await loadAll();
+  }
+
+  async function assignTaskToJob(taskId: string, jobId: string | null) {
+    await supabase.from("incident_tasks").update({ job_id: jobId }).eq("id", taskId);
+    await loadAll();
   }
 
   async function addStagingArea() {
@@ -402,16 +435,37 @@ export default function IncidentCoordinationPage() {
     setEditingUpdateId(u.id);
     setEditUpdateTitle(u.title);
     setEditUpdateBody(u.body ?? "");
+    setEditUpdateAudience((u.audience as "all" | "on_scene" | "tasks") || "all");
   }
 
   async function saveEditUpdate() {
     if (!editingUpdateId || !editUpdateTitle.trim()) return;
     setSavingUpdate(true);
     const { error } = await supabase.from("incident_updates")
-      .update({ title: editUpdateTitle.trim(), body: editUpdateBody.trim() || null })
+      .update({ title: editUpdateTitle.trim(), body: editUpdateBody.trim() || null, audience: editUpdateAudience })
       .eq("id", editingUpdateId);
+    if (error) { setSavingUpdate(false); toast(error.message, "error"); return; }
+
+    // Re-send notifications to new audience
+    let recipientIds: string[] = [];
+    if (editUpdateAudience === "all") {
+      const { data } = await supabase.from("incident_responses").select("user_id").eq("incident_id", id).in("response_type", ["Responding", "On Location"]);
+      recipientIds = (data ?? []).map((r: any) => r.user_id);
+    } else if (editUpdateAudience === "on_scene") {
+      const { data } = await supabase.from("incident_responses").select("user_id").eq("incident_id", id).eq("response_type", "On Location");
+      recipientIds = (data ?? []).map((r: any) => r.user_id);
+    }
+    if (recipientIds.length > 0) {
+      await supabase.from("notification_logs").insert(
+        recipientIds.map((uid) => ({
+          user_id: uid, channel: "app", notification_type: "incident_update",
+          title: `Update: ${editUpdateTitle.trim()}`, body: editUpdateBody.trim() || "Incident update",
+          related_incident_id: id, status: "pending",
+        }))
+      );
+    }
+
     setSavingUpdate(false);
-    if (error) { toast(error.message, "error"); return; }
     toast("Update saved.", "success");
     setEditingUpdateId(null);
     await loadAll();
@@ -511,6 +565,7 @@ export default function IncidentCoordinationPage() {
       title: updateTitle.trim(),
       body: updateBody.trim() || null,
       created_by: currentUserId,
+      audience: updateAudience,
     });
 
     if (error) {
@@ -1193,6 +1248,62 @@ export default function IncidentCoordinationPage() {
                 </button>
               </div>
             </section>
+
+            {/* Jobs */}
+            <section className="rounded-xl bg-zinc-900 p-5 space-y-4">
+              <div className="font-semibold text-zinc-50">Jobs</div>
+              <p className="text-xs text-zinc-500">Define objectives and assign tasks to each job.</p>
+
+              {jobs.length > 0 && (
+                <div className="space-y-3">
+                  {jobs.map((job) => {
+                    const jobTasks = tasks.filter((t) => t.job_id === job.id);
+                    const unassignedTasks = tasks.filter((t) => !t.job_id);
+                    return (
+                      <div key={job.id} className="rounded-lg border border-zinc-700 bg-zinc-950 p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-medium text-zinc-100">{job.name}</div>
+                            {job.description && <div className="text-xs text-zinc-500 mt-0.5">{job.description}</div>}
+                          </div>
+                          <button onClick={() => void deleteJob(job.id)} className="text-zinc-600 hover:text-red-400 text-sm shrink-0">×</button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {jobTasks.map((t) => (
+                            <div key={t.id} className="flex items-center justify-between gap-2 rounded bg-zinc-800 px-3 py-1.5">
+                              <span className="font-mono text-xs text-zinc-200">{t.task_number} {t.job_type ? `— ${t.job_type}` : t.description ? `— ${t.description}` : ""}</span>
+                              <button onClick={() => void assignTaskToJob(t.id, null)} className="text-xs text-zinc-600 hover:text-red-400">Remove</button>
+                            </div>
+                          ))}
+                          {unassignedTasks.length > 0 && (
+                            <select defaultValue="" onChange={(e) => { if (e.target.value) void assignTaskToJob(e.target.value, job.id); e.target.value = ""; }}
+                              className="w-full rounded-lg bg-black px-3 py-2 text-xs text-zinc-400 outline-none focus:ring-1 focus:ring-red-600">
+                              <option value="">+ Assign task…</option>
+                              {unassignedTasks.map((t) => (
+                                <option key={t.id} value={t.id}>{t.task_number}{t.job_type ? ` — ${t.job_type}` : t.description ? ` — ${t.description}` : ""}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                <input value={newJobName} onChange={(e) => setNewJobName(e.target.value)}
+                  placeholder="Job name (e.g. Sector A Search)"
+                  className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                <input value={newJobDesc} onChange={(e) => setNewJobDesc(e.target.value)}
+                  placeholder="Description (optional)"
+                  className="w-full rounded-lg bg-black px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-600" />
+                <button onClick={() => void addJob()} disabled={addingJob || !newJobName.trim()}
+                  className="w-full rounded-lg bg-zinc-700 py-2 text-sm font-medium hover:bg-zinc-600 disabled:opacity-60 transition">
+                  {addingJob ? "Adding…" : "+ Add Job"}
+                </button>
+              </div>
+            </section>
           </div>
         )}
 
@@ -1281,6 +1392,17 @@ export default function IncidentCoordinationPage() {
                           <textarea value={editUpdateBody} onChange={(e) => setEditUpdateBody(e.target.value)} rows={3}
                             placeholder="Body (optional)"
                             className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500 resize-none" />
+                          <div>
+                            <div className="text-xs text-zinc-500 mb-1">Re-send to</div>
+                            <div className="flex gap-1.5">
+                              {(["all", "on_scene"] as const).map((a) => (
+                                <button key={a} type="button" onClick={() => setEditUpdateAudience(a)}
+                                  className={`rounded-lg px-3 py-1 text-xs transition ${editUpdateAudience === a ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+                                  {a === "all" ? "All Units" : "On Scene"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <div className="flex gap-2">
                             <button onClick={() => void saveEditUpdate()} disabled={savingUpdate}
                               className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 hover:bg-green-500">
@@ -1303,6 +1425,9 @@ export default function IncidentCoordinationPage() {
                             </div>
                             <div className="mt-0.5 text-sm font-medium text-zinc-200">{u.title}</div>
                             {u.body && <div className="mt-1 text-xs text-zinc-500">{u.body}</div>}
+                            {u.audience && u.audience !== "all" && (
+                              <div className="mt-1 text-xs text-zinc-600">Sent to: {u.audience === "on_scene" ? "On Scene" : u.audience}</div>
+                            )}
                           </div>
                           <div className="flex shrink-0 gap-1">
                             <button onClick={() => startEditUpdate(u)}
