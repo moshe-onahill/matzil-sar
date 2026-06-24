@@ -174,6 +174,7 @@ export default function V1Shell() {
           onClose={() => setComposeOpen(false)}
           onSent={(n) => setNotifications((prev) => [n, ...prev])}
           senderId={profile?.id ?? null}
+          onRefresh={() => profile && void loadNotifications(profile.id)}
         />
       )}
     </div>
@@ -389,7 +390,7 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
-function ComposeModal({ onClose, onSent, senderId }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null }) {
+function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; onRefresh: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
@@ -397,19 +398,27 @@ function ComposeModal({ onClose, onSent, senderId }: { onClose: () => void; onSe
   const [target, setTarget] = useState<"all" | "duty">("all");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function send() {
     if (!title.trim()) return;
     setSending(true);
+    setErrorMsg(null);
 
     const query = target === "all"
-      ? supabase.from("users").select("id").eq("is_active", true)
+      ? supabase.from("users").select("id")
       : supabase.from("users").select("id").eq("is_on_duty", true);
     const { data: recipients } = await query;
     const targetIds = (recipients ?? []).map((r: any) => r.id);
 
+    if (targetIds.length === 0) {
+      setErrorMsg("No recipients found.");
+      setSending(false);
+      return;
+    }
+
     const broadcast_id = crypto.randomUUID();
-    const rows = targetIds.map((uid) => ({
+    const rows = targetIds.map((uid: string) => ({
       user_id: uid,
       sender_id: senderId,
       broadcast_id,
@@ -422,22 +431,29 @@ function ComposeModal({ onClose, onSent, senderId }: { onClose: () => void; onSe
       status: "sent",
     }));
 
-    const { data: inserted } = await supabase.from("notification_logs").insert(rows).select("id,broadcast_id,title,body,location,priority,created_at,sender_id").limit(1);
+    const { error: insertError } = await supabase.from("notification_logs").insert(rows);
+
+    if (insertError) {
+      console.error("Notification insert error:", insertError.message);
+      setErrorMsg(`Send failed: ${insertError.message}`);
+      setSending(false);
+      return;
+    }
 
     await Promise.all(
-      targetIds.map((user_id) =>
+      targetIds.map((user_id: string) =>
         fetch("/api/send-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical" }),
-        })
+        }).catch(() => null)
       )
     );
 
-    if (inserted?.[0]) onSent(inserted[0] as Notif);
     setSending(false);
     setSent(true);
-    setTimeout(onClose, 1200);
+    onRefresh();
+    setTimeout(onClose, 1000);
   }
 
   return (
@@ -470,6 +486,9 @@ function ComposeModal({ onClose, onSent, senderId }: { onClose: () => void; onSe
             </button>
           ))}
         </div>
+        {errorMsg && (
+          <p className="rounded-lg bg-red-900/40 border border-red-700/50 px-3 py-2 text-sm text-red-300">{errorMsg}</p>
+        )}
         <button onClick={() => void send()} disabled={sending || !title.trim() || sent}
           className="w-full rounded-xl bg-[#E94E1B] py-3 font-semibold text-white disabled:opacity-50 transition hover:bg-orange-600">
           {sent ? "Sent ✓" : sending ? "Sending…" : "Send"}
