@@ -102,16 +102,14 @@ export default function V1Shell() {
   }
 
   async function deleteNotif(n: Notif) {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token ?? "";
     const res = await fetch("/api/delete-notification", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(n.broadcast_id ? { broadcast_id: n.broadcast_id } : { id: n.id }),
     });
     if (!res.ok) {
-      const { error } = await res.json().catch(() => ({ error: res.statusText }));
-      console.error("Delete failed:", error);
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      console.error("Delete failed:", res.status, body);
       return;
     }
     setNotifications((prev) => prev.filter((x) => (n.broadcast_id ? x.broadcast_id !== n.broadcast_id : x.id !== n.id)));
