@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
 
@@ -10,16 +8,19 @@ export async function POST(req: Request) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) return NextResponse.json({ error: "Missing env" }, { status: 500 });
 
-  // Verify the caller is authenticated and has an admin role
-  const cookieStore = await cookies();
-  const supabaseUser = createServerClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} },
-  });
-  const { data: { user } } = await supabaseUser.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Verify caller via JWT passed in Authorization header
+  const authHeader = req.headers.get("authorization") ?? "";
+  const token = authHeader.replace("Bearer ", "").trim();
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Check role
-  const { data: roleData } = await supabaseUser
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+  // Verify the token and get the user
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Check the user has an admin role
+  const { data: roleData } = await supabaseAdmin
     .from("user_roles")
     .select("roles(name)")
     .eq("user_id", user.id);
@@ -33,7 +34,6 @@ export async function POST(req: Request) {
   }
 
   const body: { broadcast_id?: string; id?: string } = await req.json();
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
   if (body.broadcast_id) {
     const { error } = await supabaseAdmin

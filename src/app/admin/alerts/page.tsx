@@ -175,12 +175,14 @@ export default function AdminAlertsPage() {
   }
 
   async function deleteHistory(n: SentNotification) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? "";
     const body = (n.broadcast_id && !n.broadcast_id.includes("|"))
       ? { broadcast_id: n.broadcast_id }
       : { id: n.id };
     const res = await fetch("/api/delete-notification", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify(body),
     });
     if (!res.ok) return;
