@@ -31,10 +31,12 @@ export async function GET(request: NextRequest) {
       const isRecovery = data.session?.user?.recovery_sent_at != null &&
         searchParams.get("type") === "recovery";
       const isGoogle = data.session?.user?.app_metadata?.provider === "google";
+      const hasEmailIdentity = (data.session?.user?.identities ?? [])
+        .some((id: any) => id.provider === "email");
       let next: string;
       if (isRecovery) {
         next = "/reset-password";
-      } else if (isGoogle) {
+      } else if (isGoogle && !hasEmailIdentity) {
         next = "/reset-password?from=google";
       } else {
         next = searchParams.get("next") ?? "/";
