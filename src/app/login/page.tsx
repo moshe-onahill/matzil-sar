@@ -7,37 +7,34 @@ import MatzilLogo from "@/components/MatzilLogo";
 
 export default function LoginPage() {
   const toast = useToast();
-  const [identifier, setIdentifier] = useState("");
+  const [unitSuffix, setUnitSuffix] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "forgot">("login");
+  const [resetEmail, setResetEmail] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
 
   async function login() {
-    if (!identifier || !password) { toast("Enter your credentials.", "error"); return; }
+    const callSign = `M-${unitSuffix.trim()}`;
+    if (!unitSuffix.trim() || !password) { toast("Enter your unit number and password.", "error"); return; }
     setLoading(true);
 
-    let loginEmail = identifier.trim();
+    const { data: matched } = await supabase
+      .from("users")
+      .select("email")
+      .ilike("call_sign", callSign)
+      .maybeSingle();
 
-    // Accept call sign (no "@") — look up the email
-    if (!loginEmail.includes("@")) {
-      const { data: matched } = await supabase
-        .from("users")
-        .select("email")
-        .ilike("call_sign", loginEmail)
-        .maybeSingle();
-      if (!matched?.email) {
-        setLoading(false);
-        toast("Unit number not found.", "error");
-        return;
-      }
-      loginEmail = matched.email;
+    if (!matched?.email) {
+      setLoading(false);
+      toast("Unit number not found.", "error");
+      return;
     }
 
+    const loginEmail = matched.email;
     const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     if (error) { setLoading(false); toast(error.message, "error"); return; }
 
-    // Check if this email is a registered member
     const { data: userRow } = await supabase.from("users").select("id").eq("email", loginEmail.toLowerCase()).maybeSingle();
     if (!userRow) {
       await supabase.auth.signOut();
@@ -58,7 +55,6 @@ export default function LoginPage() {
     } else {
       localStorage.removeItem("session-temporary");
     }
-    // V1 mode: clear any stale v2 session so users land on V1
     sessionStorage.removeItem("v2-mode");
     window.location.replace("/");
   }
@@ -71,9 +67,9 @@ export default function LoginPage() {
   }
 
   async function sendReset() {
-    if (!identifier) { toast("Enter your email first.", "error"); return; }
+    if (!resetEmail.trim()) { toast("Enter your email address.", "error"); return; }
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(identifier.trim(), {
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
       redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
     });
     setLoading(false);
@@ -84,13 +80,12 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4">
-      {/* subtle grid background */}
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:48px_48px]" />
 
       <div className="relative w-full max-w-sm">
         {/* Logo */}
-        <div className="mb-8 flex flex-col items-center gap-4">
-          <MatzilLogo size={64} />
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <MatzilLogo size={72} />
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-zinc-50">Matzil SAR</h1>
             <p className="mt-1 text-sm text-zinc-500">
@@ -99,10 +94,10 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Card */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-2xl shadow-black/40 backdrop-blur-sm">
           {mode === "login" ? (
             <div className="space-y-3">
+              {/* Google */}
               <button
                 onClick={() => void loginWithGoogle()}
                 className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-700 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-white active:bg-zinc-100"
@@ -122,36 +117,52 @@ export default function LoginPage() {
                 <div className="h-px flex-1 bg-zinc-800" />
               </div>
 
-              <input
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void login()}
-                placeholder="Unit number or email"
-                type="text"
-                autoComplete="username"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
-              />
+              {/* Unit number with M- prefix */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-400">Unit Number</label>
+                <div className="flex items-center rounded-xl border border-zinc-800 bg-zinc-950 transition focus-within:border-zinc-600 focus-within:ring-1 focus-within:ring-zinc-600">
+                  <span className="pl-4 pr-1 text-sm font-semibold text-zinc-400 select-none">M-</span>
+                  <input
+                    value={unitSuffix}
+                    onChange={(e) => setUnitSuffix(e.target.value.replace(/\D/g, ""))}
+                    onKeyDown={(e) => e.key === "Enter" && void login()}
+                    placeholder="115"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="username"
+                    className="flex-1 bg-transparent py-3 pr-4 text-sm text-zinc-50 placeholder-zinc-600 outline-none"
+                  />
+                </div>
+              </div>
 
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void login()}
-                placeholder="Password"
-                autoComplete="current-password"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
-              />
+              {/* Password */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-400">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void login()}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
+                />
+              </div>
 
-              <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
-                <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-700 bg-zinc-950 accent-red-600 cursor-pointer" />
+              <label className="flex items-center gap-2.5 cursor-pointer select-none py-0.5">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-700 bg-zinc-950 cursor-pointer accent-[#E94E1B]"
+                />
                 <span className="text-sm text-zinc-400">Remember me</span>
               </label>
 
               <button
                 onClick={() => void login()}
                 disabled={loading}
-                className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-red-600/20 transition hover:bg-red-500 disabled:opacity-50"
+                className="w-full rounded-xl bg-[#E94E1B] px-4 py-3 text-sm font-semibold text-white shadow-md shadow-[#E94E1B]/20 transition hover:bg-orange-600 disabled:opacity-50"
               >
                 {loading ? "Signing in…" : "Sign In"}
               </button>
@@ -168,10 +179,10 @@ export default function LoginPage() {
               <p className="text-sm text-zinc-400">Enter your email and we'll send a reset link.</p>
 
               <input
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && void sendReset()}
-                placeholder="Email"
+                placeholder="Email address"
                 type="email"
                 autoComplete="email"
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
@@ -180,7 +191,7 @@ export default function LoginPage() {
               <button
                 onClick={() => void sendReset()}
                 disabled={loading}
-                className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-red-600/20 transition hover:bg-red-500 disabled:opacity-50"
+                className="w-full rounded-xl bg-[#E94E1B] px-4 py-3 text-sm font-semibold text-white shadow-md shadow-[#E94E1B]/20 transition hover:bg-orange-600 disabled:opacity-50"
               >
                 {loading ? "Sending…" : "Send Reset Link"}
               </button>
