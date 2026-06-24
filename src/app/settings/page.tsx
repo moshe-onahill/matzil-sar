@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole, UserRole } from "@/lib/dev-user";
+
+const ROLES: UserRole[] = ["Member", "Dispatcher", "SAR Manager", "Global Admin"];
 import { useToast } from "@/components/Toast";
 
 type NotificationKey =
@@ -86,6 +88,10 @@ export default function SettingsPage() {
   // Theme
   const [lightMode, setLightMode] = useState(false);
 
+  // Dev role switcher (V2 only)
+  const isV2 = typeof window !== "undefined" && sessionStorage.getItem("v2-mode") === "1";
+  const [devOpen, setDevOpen] = useState(false);
+  const [devRole, setDevRole] = useState<UserRole>(getStoredRole());
   const tapCount = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -161,9 +167,18 @@ export default function SettingsPage() {
   }
 
   function handleTitleTap() {
+    if (!isV2) return;
     tapCount.current += 1;
     if (tapTimer.current) clearTimeout(tapTimer.current);
     tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 1500);
+    if (tapCount.current >= 5) { tapCount.current = 0; setDevOpen(true); }
+  }
+
+  function applyDevRole(role: UserRole) {
+    window.localStorage.setItem("dev-role", role);
+    setDevRole(role);
+    setDevOpen(false);
+    window.location.reload();
   }
 
   function applyNotificationPreset(preset: "all" | "critical" | "none") {
@@ -592,6 +607,29 @@ export default function SettingsPage() {
                 {submittingCert ? "Submitting…" : "Submit"}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Dev role switcher — V2 only, open with 5 taps on page title */}
+      {isV2 && devOpen && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4" onClick={() => setDevOpen(false)}>
+          <div className="w-full max-w-xs rounded-2xl bg-zinc-900 border border-zinc-700 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-lg font-bold text-zinc-50">View As Role</div>
+            <div className="text-sm text-zinc-500">Current: <span className="text-zinc-300">{devRole}</span></div>
+            <div className="grid grid-cols-2 gap-2">
+              {ROLES.map((r) => (
+                <button key={r} onClick={() => applyDevRole(r)}
+                  className={`rounded-xl px-4 py-3 text-sm font-medium transition ${devRole === r ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setDevOpen(false)}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-700">
+              Close
+            </button>
           </div>
         </div>,
         document.body

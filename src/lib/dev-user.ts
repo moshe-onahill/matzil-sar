@@ -11,10 +11,24 @@ export function setRealRole(role: UserRole) {
 }
 
 /**
- * Returns the role set by AuthGate from the DB.
+ * Returns the effective role.
+ * In V2 mode a dev-role override is honoured; otherwise always uses the real DB role.
  */
 export function getStoredRole(): UserRole {
   if (typeof window === "undefined") return "Member";
+
+  const isV2 = sessionStorage.getItem("v2-mode") === "1";
+  if (isV2) {
+    const override = window.localStorage.getItem("dev-role");
+    if (
+      override === "Member" ||
+      override === "Dispatcher" ||
+      override === "SAR Manager" ||
+      override === "Global Admin"
+    ) {
+      return override;
+    }
+  }
 
   const real = window.localStorage.getItem("real-role");
   if (
