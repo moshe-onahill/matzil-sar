@@ -175,11 +175,15 @@ export default function AdminAlertsPage() {
   }
 
   async function deleteHistory(n: SentNotification) {
-    if (n.broadcast_id && !n.broadcast_id.includes("|")) {
-      await supabase.from("notification_logs").delete().eq("broadcast_id", n.broadcast_id);
-    } else {
-      await supabase.from("notification_logs").delete().eq("id", n.id);
-    }
+    const body = (n.broadcast_id && !n.broadcast_id.includes("|"))
+      ? { broadcast_id: n.broadcast_id }
+      : { id: n.id };
+    const res = await fetch("/api/delete-notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return;
     setSentHistory((prev) => prev.filter((x) => x.broadcast_id !== n.broadcast_id));
   }
 
