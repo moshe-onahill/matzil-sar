@@ -102,10 +102,12 @@ export default function V1Shell() {
   }
 
   async function deleteNotif(n: Notif) {
-    if (n.broadcast_id) {
-      await supabase.from("notification_logs").delete().eq("broadcast_id", n.broadcast_id);
-    } else {
-      await supabase.from("notification_logs").delete().eq("id", n.id);
+    const { error } = n.broadcast_id
+      ? await supabase.from("notification_logs").delete().eq("broadcast_id", n.broadcast_id)
+      : await supabase.from("notification_logs").delete().eq("id", n.id);
+    if (error) {
+      console.error("Delete failed:", error.message);
+      return;
     }
     setNotifications((prev) => prev.filter((x) => (n.broadcast_id ? x.broadcast_id !== n.broadcast_id : x.id !== n.id)));
   }
