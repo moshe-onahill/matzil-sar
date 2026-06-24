@@ -14,6 +14,12 @@ type Member = {
   full_name: string | null;
   call_sign: string | null;
   phone: string | null;
+  home_address: string | null;
+  car_make: string | null;
+  car_model: string | null;
+  car_color: string | null;
+  license_plate_state: string | null;
+  license_plate_number: string | null;
   is_active: boolean | null;
   is_on_duty: boolean | null;
   is_invited: boolean | null;
@@ -44,6 +50,12 @@ type EditState = {
   full_name: string;
   call_sign: string;
   phone: string;
+  home_address: string;
+  car_make: string;
+  car_model: string;
+  car_color: string;
+  license_plate_state: string;
+  license_plate_number: string;
   is_active: boolean;
   is_on_duty: boolean;
   roles: string[];
@@ -79,7 +91,9 @@ export default function AdminRosterPage() {
     setLoading(true);
     const [usersRes, rolesRes, unitsRes] = await Promise.all([
       supabase.from("users").select(`
-        id, email, full_name, call_sign, phone, is_active, is_on_duty, is_invited, created_at,
+        id, email, full_name, call_sign, phone,
+        home_address, car_make, car_model, car_color, license_plate_state, license_plate_number,
+        is_active, is_on_duty, is_invited, created_at,
         user_roles ( roles ( id, name ) ),
         user_units ( units ( id, name ) )
       `).order("full_name", { ascending: true }),
@@ -154,6 +168,12 @@ export default function AdminRosterPage() {
       full_name: m.full_name ?? "",
       call_sign: m.call_sign ?? "",
       phone: m.phone ?? "",
+      home_address: m.home_address ?? "",
+      car_make: m.car_make ?? "",
+      car_model: m.car_model ?? "",
+      car_color: m.car_color ?? "",
+      license_plate_state: m.license_plate_state ?? "",
+      license_plate_number: m.license_plate_number ?? "",
       is_active: m.is_active !== false,
       is_on_duty: m.is_on_duty !== false,
       roles: m.roles,
@@ -174,6 +194,12 @@ export default function AdminRosterPage() {
       full_name: editState.full_name.trim() || null,
       call_sign: editState.call_sign.trim() || null,
       phone: editState.phone.trim() || null,
+      home_address: editState.home_address.trim() || null,
+      car_make: editState.car_make.trim() || null,
+      car_model: editState.car_model.trim() || null,
+      car_color: editState.car_color.trim() || null,
+      license_plate_state: editState.license_plate_state.trim() || null,
+      license_plate_number: editState.license_plate_number.trim() || null,
       is_active: editState.is_active,
       is_on_duty: editState.is_on_duty,
     }).eq("id", m.id);
@@ -675,6 +701,49 @@ export default function AdminRosterPage() {
                             {saving ? "…" : "Save"}
                           </button>
                           <button onClick={cancelEdit} className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700">Cancel</button>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Extra personal info fields */}
+                    <tr key={`${m.id}-extra`} className="bg-zinc-800/40 border-b border-zinc-800">
+                      <td colSpan={8} className="px-4 py-3">
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                          <div className="lg:col-span-2">
+                            <label className="mb-1 block text-xs text-zinc-500">Home Address</label>
+                            <input value={editState.home_address} onChange={(e) => setEditState({ ...editState, home_address: e.target.value })}
+                              placeholder="123 Main St…"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-500">Car Make</label>
+                            <input value={editState.car_make} onChange={(e) => setEditState({ ...editState, car_make: e.target.value })}
+                              placeholder="Toyota"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-500">Car Model</label>
+                            <input value={editState.car_model} onChange={(e) => setEditState({ ...editState, car_model: e.target.value })}
+                              placeholder="Tacoma"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-500">Car Color</label>
+                            <input value={editState.car_color} onChange={(e) => setEditState({ ...editState, car_color: e.target.value })}
+                              placeholder="Silver"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-500">Plate State</label>
+                            <input value={editState.license_plate_state} onChange={(e) => setEditState({ ...editState, license_plate_state: e.target.value })}
+                              placeholder="NY"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs text-zinc-500">Plate Number</label>
+                            <input value={editState.license_plate_number} onChange={(e) => setEditState({ ...editState, license_plate_number: e.target.value })}
+                              placeholder="ABC1234"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 outline-none" />
+                          </div>
                         </div>
                       </td>
                     </tr>
