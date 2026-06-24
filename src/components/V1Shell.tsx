@@ -271,21 +271,13 @@ function NotifCard({
 
   return (
     <div className={`rounded-2xl p-4 space-y-1.5 ${bg} text-white`}>
-      {/* Title row */}
+      {/* Title + actions row */}
       <div className="flex items-start justify-between gap-2">
-        <span className="font-bold text-base leading-snug">{notif.title}</span>
-        <span className="text-xs opacity-70 mt-0.5 shrink-0">{fmt(notif.created_at)}</span>
-      </div>
-      {notif.body && <p className="text-sm opacity-90 leading-relaxed">{notif.body}</p>}
-      {notif.location && (
-        <p className="text-xs opacity-75 flex items-center gap-1">
-          <span>📍</span><span>{notif.location}</span>
-        </p>
-      )}
-      {/* Action buttons — always on their own row so they're never clipped */}
-      {(canEdit || canDelete) && (
-        <div className="flex items-center gap-1 pt-0.5">
-          {canEdit && (
+        <div className="flex-1 min-w-0">
+          <span className="font-bold text-base leading-snug">{notif.title}</span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {canEdit && !confirmDelete && (
             <button onClick={() => setEditing(true)}
               className="rounded-md p-1.5 hover:bg-white/20 transition" aria-label="Edit">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -297,17 +289,20 @@ function NotifCard({
           {canDelete && (
             confirmDelete ? (
               <>
-                <button onClick={onDelete}
-                  className="rounded-md px-3 py-1 text-xs font-semibold bg-white/30 hover:bg-white/40 transition">
-                  Confirm delete
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(); setConfirmDelete(false); }}
+                  className="rounded-md px-2.5 py-1 text-xs font-semibold bg-white/30 hover:bg-white/50 active:bg-white/60 transition">
+                  Confirm
                 </button>
-                <button onClick={() => setConfirmDelete(false)}
-                  className="rounded-md px-3 py-1 text-xs bg-white/10 hover:bg-white/20 transition">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                  className="rounded-md px-2.5 py-1 text-xs bg-white/10 hover:bg-white/20 transition">
                   Cancel
                 </button>
               </>
             ) : (
-              <button onClick={() => setConfirmDelete(true)}
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
                 className="rounded-md p-1.5 hover:bg-white/20 transition" aria-label="Delete">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                   <polyline points="3 6 5 6 21 6" />
@@ -318,7 +313,14 @@ function NotifCard({
               </button>
             )
           )}
+          <span className="text-xs opacity-70 ml-1">{fmt(notif.created_at)}</span>
         </div>
+      </div>
+      {notif.body && <p className="text-sm opacity-90 leading-relaxed">{notif.body}</p>}
+      {notif.location && (
+        <p className="text-xs opacity-75 flex items-center gap-1">
+          <span>📍</span><span>{notif.location}</span>
+        </p>
       )}
     </div>
   );
