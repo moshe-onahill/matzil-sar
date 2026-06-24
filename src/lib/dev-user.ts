@@ -10,30 +10,11 @@ export function setRealRole(role: UserRole) {
   window.localStorage.setItem("real-role", role);
 }
 
-/** Called by the 5-tap dev panel to temporarily override the role */
-export function setStoredRole(role: UserRole) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem("dev-role", role);
-}
-
 /**
- * Returns the effective role:
- * 1. dev-role override (set by 5-tap panel) if present
- * 2. real-role from DB (set by AuthGate)
- * 3. fallback: "Member"
+ * Returns the role set by AuthGate from the DB.
  */
 export function getStoredRole(): UserRole {
   if (typeof window === "undefined") return "Member";
-
-  const override = window.localStorage.getItem("dev-role");
-  if (
-    override === "Member" ||
-    override === "Dispatcher" ||
-    override === "SAR Manager" ||
-    override === "Global Admin"
-  ) {
-    return override;
-  }
 
   const real = window.localStorage.getItem("real-role");
   if (
