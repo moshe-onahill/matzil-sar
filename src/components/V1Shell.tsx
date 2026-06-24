@@ -266,54 +266,54 @@ function NotifCard({
 
   return (
     <div className={`rounded-2xl p-4 space-y-1.5 ${bg} text-white`}>
+      {/* Title row */}
       <div className="flex items-start justify-between gap-2">
         <span className="font-bold text-base leading-snug">{notif.title}</span>
-        <div className="flex items-center gap-1 shrink-0">
-          <span className="text-xs opacity-70 mt-0.5">{fmt(notif.created_at)}</span>
-          {(canEdit || canDelete) && (
-            <>
-              {canEdit && (
-                <button onClick={() => setEditing(true)}
-                  className="ml-1 rounded-md p-1 hover:bg-white/20 transition" aria-label="Edit">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                </button>
-              )}
-              {canDelete && (
-                confirmDelete ? (
-                  <>
-                    <button onClick={onDelete}
-                      className="rounded-md px-2 py-0.5 text-xs font-semibold bg-white/30 hover:bg-white/40 transition">
-                      Confirm
-                    </button>
-                    <button onClick={() => setConfirmDelete(false)}
-                      className="rounded-md px-2 py-0.5 text-xs bg-white/10 hover:bg-white/20 transition">
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => setConfirmDelete(true)}
-                    className="rounded-md p-1 hover:bg-white/20 transition" aria-label="Delete">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                      <path d="M10 11v6M14 11v6" />
-                      <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                    </svg>
-                  </button>
-                )
-              )}
-            </>
-          )}
-        </div>
+        <span className="text-xs opacity-70 mt-0.5 shrink-0">{fmt(notif.created_at)}</span>
       </div>
       {notif.body && <p className="text-sm opacity-90 leading-relaxed">{notif.body}</p>}
       {notif.location && (
         <p className="text-xs opacity-75 flex items-center gap-1">
           <span>📍</span><span>{notif.location}</span>
         </p>
+      )}
+      {/* Action buttons — always on their own row so they're never clipped */}
+      {(canEdit || canDelete) && (
+        <div className="flex items-center gap-1 pt-0.5">
+          {canEdit && (
+            <button onClick={() => setEditing(true)}
+              className="rounded-md p-1.5 hover:bg-white/20 transition" aria-label="Edit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+          )}
+          {canDelete && (
+            confirmDelete ? (
+              <>
+                <button onClick={onDelete}
+                  className="rounded-md px-3 py-1 text-xs font-semibold bg-white/30 hover:bg-white/40 transition">
+                  Confirm delete
+                </button>
+                <button onClick={() => setConfirmDelete(false)}
+                  className="rounded-md px-3 py-1 text-xs bg-white/10 hover:bg-white/20 transition">
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)}
+                className="rounded-md p-1.5 hover:bg-white/20 transition" aria-label="Delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                </svg>
+              </button>
+            )
+          )}
+        </div>
       )}
     </div>
   );
