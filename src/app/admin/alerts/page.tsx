@@ -9,6 +9,7 @@ import { getCurrentTestEmail } from "@/lib/dev-user";
 type Member = { id: string; full_name: string | null; call_sign: string | null };
 
 type SentNotification = {
+  broadcast_id: string;
   id: string;
   title: string;
   body: string | null;
@@ -53,25 +54,24 @@ export default function AdminAlertsPage() {
 
   async function loadHistory() {
     setHistoryLoading(true);
-    // Show distinct sends by grouping on sender_id + title + created_at minute
-    // We fetch recent logs where this sender sent, grouped by broadcast
     const { data } = await supabase
       .from("notification_logs")
-      .select("id,title,body,location,priority,created_at,sender_id")
+      .select("id,broadcast_id,title,body,location,priority,created_at,sender_id")
       .not("sender_id", "is", null)
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(500);
 
     if (!data) { setHistoryLoading(false); return; }
 
-    // Collapse rows into broadcasts: same sender + title within 5s = same send
+    // Collapse by broadcast_id (preferred) or fallback to sender+title+minute bucket
     const seen = new Map<string, SentNotification>();
     for (const row of data as any[]) {
-      const bucket = `${row.sender_id}|${row.title}|${row.created_at?.slice(0, 16)}`;
-      if (seen.has(bucket)) {
-        seen.get(bucket)!.recipient_count++;
+      const key = row.broadcast_id ?? `${row.sender_id}|${row.title}|${row.created_at?.slice(0, 16)}`;
+      if (seen.has(key)) {
+        seen.get(key)!.recipient_count++;
       } else {
-        seen.set(bucket, {
+        seen.set(key, {
+          broadcast_id: row.broadcast_id ?? key,
           id: row.id,
           title: row.title,
           body: row.body,
@@ -118,10 +118,11 @@ export default function AdminAlertsPage() {
 
     setSending(true);
 
-    // Write to notification_logs for each recipient
+    const broadcast_id = crypto.randomUUID();
     const logRows = targetIds.map((uid) => ({
       user_id: uid,
       sender_id: senderId,
+      broadcast_id,
       channel: "app",
       notification_type: "broadcast",
       title: title.trim(),
@@ -133,7 +134,6 @@ export default function AdminAlertsPage() {
 
     await supabase.from("notification_logs").insert(logRows);
 
-    // Push via FCM/VAPID
     let ok = 0;
     await Promise.all(
       targetIds.map(async (user_id) => {
@@ -174,6 +174,34 @@ export default function AdminAlertsPage() {
     return new Date(d).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
+  async function deleteHistory(n: SentNotification) {
+    if (n.broadcast_id && !n.broadcast_id.includes("|")) {
+      await supabase.from("notification_logs").delete().eq("broadcast_id", n.broadcast_id);
+    } else {
+      await supabase.from("notification_logs").delete().eq("id", n.id);
+    }
+    setSentHistory((prev) => prev.filter((x) => x.broadcast_id !== n.broadcast_id));
+  }
+
+  async function updateHistory(n: SentNotification, patch: Partial<SentNotification>) {
+    if (n.broadcast_id && !n.broadcast_id.includes("|")) {
+      await supabase.from("notification_logs").update({
+        title: patch.title,
+        body: patch.body,
+        location: patch.location,
+        priority: patch.priority,
+      }).eq("broadcast_id", n.broadcast_id);
+    } else {
+      await supabase.from("notification_logs").update({
+        title: patch.title,
+        body: patch.body,
+        location: patch.location,
+        priority: patch.priority,
+      }).eq("id", n.id);
+    }
+    setSentHistory((prev) => prev.map((x) => x.broadcast_id === n.broadcast_id ? { ...x, ...patch } : x));
+  }
+
   return (
     <main className="p-6 lg:p-8">
       <div className="mx-auto max-w-2xl space-y-6">
@@ -181,8 +209,6 @@ export default function AdminAlertsPage() {
 
         {/* Compose */}
         <div className="rounded-xl bg-zinc-900 p-5 space-y-4">
-
-          {/* Priority toggle */}
           <div className="flex gap-2">
             {(["routine", "critical"] as const).map((p) => (
               <button
@@ -190,9 +216,7 @@ export default function AdminAlertsPage() {
                 onClick={() => setPriority(p)}
                 className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
                   priority === p
-                    ? p === "critical"
-                      ? "bg-red-600 text-white"
-                      : "bg-[#E94E1B] text-white"
+                    ? p === "critical" ? "bg-red-600 text-white" : "bg-[#E94E1B] text-white"
                     : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                 }`}
               >
@@ -243,9 +267,7 @@ export default function AdminAlertsPage() {
                 key={opt}
                 onClick={() => setTarget(opt)}
                 className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  target === opt
-                    ? "bg-[#E94E1B] text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                  target === opt ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                 }`}
               >
                 {opt === "all" ? "All members" : opt === "duty" ? "On-duty only" : "Specific members"}
@@ -301,33 +323,136 @@ export default function AdminAlertsPage() {
           ) : (
             <div className="space-y-3">
               {sentHistory.map((n) => (
-                <div key={n.id} className="rounded-xl bg-zinc-900 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          n.priority === "critical" ? "bg-red-600/20 text-red-400" : "bg-zinc-700 text-zinc-400"
-                        }`}>
-                          {n.priority === "critical" ? "⚠ Critical" : "Routine"}
-                        </span>
-                        <span className="font-semibold text-zinc-100">{n.title}</span>
-                      </div>
-                      {n.body && <p className="text-sm text-zinc-400">{n.body}</p>}
-                      {n.location && (
-                        <p className="text-xs text-zinc-500">📍 {n.location}</p>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-xs text-zinc-500">{fmt(n.created_at)}</div>
-                      <div className="text-xs text-zinc-600">{n.recipient_count} recipient{n.recipient_count !== 1 ? "s" : ""}</div>
-                    </div>
-                  </div>
-                </div>
+                <HistoryCard
+                  key={n.broadcast_id}
+                  notif={n}
+                  fmt={fmt}
+                  onDelete={() => void deleteHistory(n)}
+                  onUpdate={(patch) => void updateHistory(n, patch)}
+                />
               ))}
             </div>
           )}
         </div>
       </div>
     </main>
+  );
+}
+
+function HistoryCard({
+  notif,
+  fmt,
+  onDelete,
+  onUpdate,
+}: {
+  notif: SentNotification;
+  fmt: (d: string) => string;
+  onDelete: () => void;
+  onUpdate: (patch: Partial<SentNotification>) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(notif.title);
+  const [body, setBody] = useState(notif.body ?? "");
+  const [location, setLocation] = useState(notif.location ?? "");
+  const [priority, setPriority] = useState(notif.priority ?? "routine");
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const patch = { title: title.trim(), body: body.trim() || null, location: location.trim() || null, priority };
+    onUpdate(patch);
+    setSaving(false);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="rounded-xl bg-zinc-900 p-4 space-y-3">
+        <div className="flex gap-2">
+          {(["routine", "critical"] as const).map((p) => (
+            <button key={p} onClick={() => setPriority(p)}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                priority === p ? p === "critical" ? "bg-red-600 text-white" : "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+              }`}>
+              {p === "routine" ? "Routine" : "⚠ Critical"}
+            </button>
+          ))}
+        </div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)}
+          className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600"
+          placeholder="Title" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2}
+          className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600 resize-none"
+          placeholder="Description (optional)" />
+        <input value={location} onChange={(e) => setLocation(e.target.value)}
+          className="w-full rounded-lg bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600"
+          placeholder="Location (optional)" />
+        <div className="flex gap-2">
+          <button onClick={() => void save()} disabled={saving || !title.trim()}
+            className="rounded-lg bg-[#E94E1B] px-4 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50 transition">
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button onClick={() => setEditing(false)}
+            className="rounded-lg bg-zinc-800 px-4 py-1.5 text-sm text-zinc-400 hover:bg-zinc-700 transition">
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl bg-zinc-900 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-0.5 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              notif.priority === "critical" ? "bg-red-600/20 text-red-400" : "bg-zinc-700 text-zinc-400"
+            }`}>
+              {notif.priority === "critical" ? "⚠ Critical" : "Routine"}
+            </span>
+            <span className="font-semibold text-zinc-100">{notif.title}</span>
+          </div>
+          {notif.body && <p className="text-sm text-zinc-400">{notif.body}</p>}
+          {notif.location && <p className="text-xs text-zinc-500">📍 {notif.location}</p>}
+        </div>
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          <div className="text-xs text-zinc-500">{fmt(notif.created_at)}</div>
+          <div className="text-xs text-zinc-600">{notif.recipient_count} recipient{notif.recipient_count !== 1 ? "s" : ""}</div>
+          <div className="flex items-center gap-1 mt-1">
+            <button onClick={() => setEditing(true)}
+              className="rounded-md p-1.5 bg-zinc-800 hover:bg-zinc-700 transition text-zinc-400" aria-label="Edit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+            {confirmDelete ? (
+              <>
+                <button onClick={onDelete}
+                  className="rounded-md px-2 py-1 text-xs font-semibold bg-red-600 text-white hover:bg-red-500 transition">
+                  Confirm
+                </button>
+                <button onClick={() => setConfirmDelete(false)}
+                  className="rounded-md px-2 py-1 text-xs bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition">
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)}
+                className="rounded-md p-1.5 bg-zinc-800 hover:bg-zinc-700 transition text-zinc-400" aria-label="Delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

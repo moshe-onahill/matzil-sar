@@ -21,11 +21,13 @@ type Profile = {
 
 type Notif = {
   id: string;
+  broadcast_id: string | null;
   title: string;
   body: string | null;
   location: string | null;
   priority: string | null;
   created_at: string;
+  sender_id: string | null;
 };
 
 const ADMIN_ROLES = ["Dispatcher", "SAR Manager", "Global Admin"];
@@ -39,9 +41,7 @@ export default function V1Shell() {
   const role = getStoredRole();
   const isAdmin = ADMIN_ROLES.includes(role);
 
-  useEffect(() => {
-    void init();
-  }, []);
+  useEffect(() => { void init(); }, []);
 
   async function init() {
     const email = getCurrentTestEmail();
@@ -63,24 +63,15 @@ export default function V1Shell() {
           const u = uu.units;
           return Array.isArray(u) ? u.map((x: any) => x.name) : u?.name ? [u.name] : [];
         });
-
       setProfile({ ...(user as any), teams });
-
-      const { data: notifs } = await supabase
-        .from("notification_logs")
-        .select("id,title,body,location,priority,created_at")
-        .eq("user_id", (user as any).id)
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      setNotifications((notifs ?? []) as Notif[]);
+      await loadNotifications((user as any).id);
 
       supabase
         .channel("v1-notifs")
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "notification_logs", filter: `user_id=eq.${(user as any).id}` },
-          (payload) => setNotifications((prev) => [payload.new as Notif, ...prev])
+          { event: "*", schema: "public", table: "notification_logs", filter: `user_id=eq.${(user as any).id}` },
+          () => void loadNotifications((user as any).id)
         )
         .subscribe();
     }
@@ -88,8 +79,35 @@ export default function V1Shell() {
     setLoading(false);
   }
 
+  async function loadNotifications(uid: string) {
+    const { data } = await supabase
+      .from("notification_logs")
+      .select("id,broadcast_id,title,body,location,priority,created_at,sender_id")
+      .eq("user_id", uid)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    // Deduplicate by broadcast_id so admins don't see their own send as a duplicate
+    const seen = new Set<string>();
+    const deduped: Notif[] = [];
+    for (const n of (data ?? []) as Notif[]) {
+      const key = n.broadcast_id ?? n.id;
+      if (!seen.has(key)) { seen.add(key); deduped.push(n); }
+    }
+    setNotifications(deduped);
+  }
+
   function fmt(d: string) {
     return new Date(d).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
+  async function deleteNotif(n: Notif) {
+    if (n.broadcast_id) {
+      await supabase.from("notification_logs").delete().eq("broadcast_id", n.broadcast_id);
+    } else {
+      await supabase.from("notification_logs").delete().eq("id", n.id);
+    }
+    setNotifications((prev) => prev.filter((x) => (n.broadcast_id ? x.broadcast_id !== n.broadcast_id : x.id !== n.id)));
   }
 
   if (loading) {
@@ -133,60 +151,171 @@ export default function V1Shell() {
           <div className="py-20 text-center text-sm text-zinc-500">No notifications yet.</div>
         ) : (
           notifications.map((n) => (
-            <div
+            <NotifCard
               key={n.id}
-              className={`rounded-2xl p-4 space-y-1.5 ${
-                n.priority === "critical" ? "bg-red-600" : "bg-[#E94E1B]"
-              } text-white`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-bold text-base leading-snug">{n.title}</span>
-                <span className="text-xs opacity-70 shrink-0 mt-0.5">{fmt(n.created_at)}</span>
-              </div>
-              {n.body && <p className="text-sm opacity-90 leading-relaxed">{n.body}</p>}
-              {n.location && (
-                <p className="text-xs opacity-75 flex items-center gap-1">
-                  <span>📍</span><span>{n.location}</span>
-                </p>
-              )}
-            </div>
+              notif={n}
+              isAdmin={isAdmin}
+              adminId={profile?.id ?? null}
+              fmt={fmt}
+              onDelete={() => void deleteNotif(n)}
+              onUpdate={(updated) =>
+                setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, ...updated } : x))
+              }
+            />
           ))
         )}
       </div>
 
-      {/* Account Panel */}
       {accountOpen && (
-        <AccountPanel
-          profile={profile}
-          isAdmin={isAdmin}
-          onClose={() => setAccountOpen(false)}
-        />
+        <AccountPanel profile={profile} isAdmin={isAdmin} onClose={() => setAccountOpen(false)} />
       )}
-
-      {/* Compose Modal */}
       {isAdmin && composeOpen && (
-        <ComposeModal onClose={() => setComposeOpen(false)} />
+        <ComposeModal
+          onClose={() => setComposeOpen(false)}
+          onSent={(n) => setNotifications((prev) => [n, ...prev])}
+          senderId={profile?.id ?? null}
+        />
       )}
     </div>
   );
 }
 
-function AccountPanel({
-  profile,
+function NotifCard({
+  notif,
   isAdmin,
-  onClose,
+  adminId,
+  fmt,
+  onDelete,
+  onUpdate,
 }: {
-  profile: Profile | null;
+  notif: Notif;
   isAdmin: boolean;
-  onClose: () => void;
+  adminId: string | null;
+  fmt: (d: string) => string;
+  onDelete: () => void;
+  onUpdate: (patch: Partial<Notif>) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(notif.title);
+  const [body, setBody] = useState(notif.body ?? "");
+  const [location, setLocation] = useState(notif.location ?? "");
+  const [priority, setPriority] = useState<string>(notif.priority ?? "routine");
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const canEdit = isAdmin && notif.sender_id === adminId;
+
+  async function save() {
+    setSaving(true);
+    const patch = {
+      title: title.trim(),
+      body: body.trim() || null,
+      location: location.trim() || null,
+      priority,
+    };
+    if (notif.broadcast_id) {
+      await supabase.from("notification_logs").update(patch).eq("broadcast_id", notif.broadcast_id);
+    } else {
+      await supabase.from("notification_logs").update(patch).eq("id", notif.id);
+    }
+    setSaving(false);
+    setEditing(false);
+    onUpdate(patch);
+  }
+
+  const bg = priority === "critical" ? "bg-red-600" : "bg-[#E94E1B]";
+
+  if (editing) {
+    return (
+      <div className={`rounded-2xl p-4 space-y-3 ${bg} text-white`}>
+        <div className="flex gap-2">
+          {(["routine", "critical"] as const).map((p) => (
+            <button key={p} onClick={() => setPriority(p)}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${priority === p ? "bg-white/30" : "bg-white/10 hover:bg-white/20"}`}>
+              {p === "routine" ? "Routine" : "⚠ Critical"}
+            </button>
+          ))}
+        </div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)}
+          className="w-full rounded-lg bg-white/20 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30"
+          placeholder="Title" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2}
+          className="w-full rounded-lg bg-white/20 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30 resize-none"
+          placeholder="Description (optional)" />
+        <input value={location} onChange={(e) => setLocation(e.target.value)}
+          className="w-full rounded-lg bg-white/20 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30"
+          placeholder="Location (optional)" />
+        <div className="flex gap-2">
+          <button onClick={() => void save()} disabled={saving || !title.trim()}
+            className="rounded-lg bg-white/30 px-4 py-1.5 text-sm font-semibold hover:bg-white/40 disabled:opacity-50 transition">
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button onClick={() => setEditing(false)}
+            className="rounded-lg bg-white/10 px-4 py-1.5 text-sm hover:bg-white/20 transition">
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-2xl p-4 space-y-1.5 ${bg} text-white`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-bold text-base leading-snug">{notif.title}</span>
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-xs opacity-70 mt-0.5">{fmt(notif.created_at)}</span>
+          {canEdit && (
+            <>
+              <button onClick={() => setEditing(true)}
+                className="ml-1 rounded-md p-1 hover:bg-white/20 transition" aria-label="Edit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+              {confirmDelete ? (
+                <>
+                  <button onClick={onDelete}
+                    className="rounded-md px-2 py-0.5 text-xs font-semibold bg-white/30 hover:bg-white/40 transition">
+                    Confirm
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)}
+                    className="rounded-md px-2 py-0.5 text-xs bg-white/10 hover:bg-white/20 transition">
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)}
+                  className="rounded-md p-1 hover:bg-white/20 transition" aria-label="Delete">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                    <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                  </svg>
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {notif.body && <p className="text-sm opacity-90 leading-relaxed">{notif.body}</p>}
+      {notif.location && (
+        <p className="text-xs opacity-75 flex items-center gap-1">
+          <span>📍</span><span>{notif.location}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AccountPanel({ profile, isAdmin, onClose }: { profile: Profile | null; isAdmin: boolean; onClose: () => void }) {
   const [resetSent, setResetSent] = useState(false);
 
   async function resetPassword() {
     if (!profile?.email) return;
-    await supabase.auth.resetPasswordForEmail(profile.email, {
-      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
-    });
+    await supabase.auth.resetPasswordForEmail(profile.email, { redirectTo: `${window.location.origin}/auth/callback?type=recovery` });
     setResetSent(true);
   }
 
@@ -199,11 +328,6 @@ function AccountPanel({
     window.location.href = "/login";
   }
 
-  function switchToV2() {
-    sessionStorage.setItem("v2-mode", "1");
-    window.location.reload();
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -212,61 +336,40 @@ function AccountPanel({
           <h2 className="font-semibold text-zinc-50">Account</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">✕</button>
         </div>
-
         {profile && (
           <div className="flex-1 p-5 space-y-5">
             <div>
               <div className="text-xl font-bold text-zinc-50">{profile.full_name ?? "—"}</div>
-              {profile.call_sign && (
-                <div className="text-sm font-mono font-semibold text-[#E94E1B] mt-0.5">{profile.call_sign}</div>
-              )}
+              {profile.call_sign && <div className="text-sm font-mono font-semibold text-[#E94E1B] mt-0.5">{profile.call_sign}</div>}
             </div>
-
             <div className="space-y-3">
               <InfoRow label="Email" value={profile.email} />
               <InfoRow label="Phone" value={profile.phone} />
               <InfoRow label="Home Address" value={profile.home_address} />
-              {profile.teams.length > 0 && (
-                <InfoRow label="Assigned Teams" value={profile.teams.join(", ")} />
-              )}
+              {profile.teams.length > 0 && <InfoRow label="Assigned Teams" value={profile.teams.join(", ")} />}
             </div>
-
             {(profile.car_make || profile.car_model || profile.car_color || profile.license_plate_number) && (
               <div className="rounded-xl bg-zinc-800 p-4 space-y-1.5">
                 <div className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Vehicle</div>
-                <div className="text-sm text-zinc-100">
-                  {[profile.car_color, profile.car_make, profile.car_model].filter(Boolean).join(" ") || "—"}
-                </div>
+                <div className="text-sm text-zinc-100">{[profile.car_color, profile.car_make, profile.car_model].filter(Boolean).join(" ") || "—"}</div>
                 {profile.license_plate_number && (
-                  <div className="text-sm text-zinc-400">
-                    {[profile.license_plate_state, profile.license_plate_number].filter(Boolean).join(" · ")}
-                  </div>
+                  <div className="text-sm text-zinc-400">{[profile.license_plate_state, profile.license_plate_number].filter(Boolean).join(" · ")}</div>
                 )}
               </div>
             )}
-
             <div className="space-y-2 pt-2 border-t border-zinc-800">
-              <button
-                onClick={() => void resetPassword()}
-                disabled={resetSent}
-                className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-700 transition text-left"
-              >
+              <button onClick={() => void resetPassword()} disabled={resetSent}
+                className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-700 transition text-left">
                 {resetSent ? "Reset email sent ✓" : "Reset Password"}
               </button>
-
               {isAdmin && (
-                <button
-                  onClick={switchToV2}
-                  className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-[#E94E1B] hover:bg-zinc-700 transition text-left"
-                >
+                <button onClick={() => { sessionStorage.setItem("v2-mode", "1"); window.location.reload(); }}
+                  className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-[#E94E1B] hover:bg-zinc-700 transition text-left">
                   Switch to V2 →
                 </button>
               )}
-
-              <button
-                onClick={() => void logout()}
-                className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-red-400 hover:bg-zinc-700 transition text-left"
-              >
+              <button onClick={() => void logout()}
+                className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-red-400 hover:bg-zinc-700 transition text-left">
                 Log Out
               </button>
             </div>
@@ -286,7 +389,7 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
-function ComposeModal({ onClose }: { onClose: () => void }) {
+function ComposeModal({ onClose, onSent, senderId }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
@@ -302,26 +405,24 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
     const query = target === "all"
       ? supabase.from("users").select("id").eq("is_active", true)
       : supabase.from("users").select("id").eq("is_on_duty", true);
-
     const { data: recipients } = await query;
     const targetIds = (recipients ?? []).map((r: any) => r.id);
 
-    const email = getCurrentTestEmail();
-    const { data: sender } = await supabase.from("users").select("id").eq("email", email).single();
+    const broadcast_id = crypto.randomUUID();
+    const rows = targetIds.map((uid) => ({
+      user_id: uid,
+      sender_id: senderId,
+      broadcast_id,
+      channel: "app",
+      notification_type: "broadcast",
+      title: title.trim(),
+      body: body.trim() || null,
+      location: location.trim() || null,
+      priority,
+      status: "sent",
+    }));
 
-    await supabase.from("notification_logs").insert(
-      targetIds.map((uid) => ({
-        user_id: uid,
-        sender_id: (sender as any)?.id ?? null,
-        channel: "app",
-        notification_type: "broadcast",
-        title: title.trim(),
-        body: body.trim() || null,
-        location: location.trim() || null,
-        priority,
-        status: "sent",
-      }))
-    );
+    const { data: inserted } = await supabase.from("notification_logs").insert(rows).select("id,broadcast_id,title,body,location,priority,created_at,sender_id").limit(1);
 
     await Promise.all(
       targetIds.map((user_id) =>
@@ -333,6 +434,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
       )
     );
 
+    if (inserted?.[0]) onSent(inserted[0] as Notif);
     setSending(false);
     setSent(true);
     setTimeout(onClose, 1200);
@@ -346,64 +448,30 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
           <h2 className="font-semibold text-zinc-50 text-lg">Send Notification</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">✕</button>
         </div>
-
         <div className="flex gap-2">
           {(["routine", "critical"] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPriority(p)}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                priority === p
-                  ? p === "critical" ? "bg-red-600 text-white" : "bg-[#E94E1B] text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-              }`}
-            >
+            <button key={p} onClick={() => setPriority(p)}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${priority === p ? p === "critical" ? "bg-red-600 text-white" : "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
               {p === "routine" ? "Routine" : "⚠ Critical"}
             </button>
           ))}
         </div>
-
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title *"
-          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600"
-        />
-
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Description (optional)"
-          rows={2}
-          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600 resize-none"
-        />
-
-        <input
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="Location (optional)"
-          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600"
-        />
-
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title *"
+          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Description (optional)" rows={2}
+          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600 resize-none" />
+        <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location (optional)"
+          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
         <div className="flex gap-2">
           {(["all", "duty"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTarget(t)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                target === t ? "bg-zinc-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-              }`}
-            >
+            <button key={t} onClick={() => setTarget(t)}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${target === t ? "bg-zinc-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
               {t === "all" ? "All members" : "On-duty only"}
             </button>
           ))}
         </div>
-
-        <button
-          onClick={() => void send()}
-          disabled={sending || !title.trim() || sent}
-          className="w-full rounded-xl bg-[#E94E1B] py-3 font-semibold text-white disabled:opacity-50 transition hover:bg-orange-600"
-        >
+        <button onClick={() => void send()} disabled={sending || !title.trim() || sent}
+          className="w-full rounded-xl bg-[#E94E1B] py-3 font-semibold text-white disabled:opacity-50 transition hover:bg-orange-600">
           {sent ? "Sent ✓" : sending ? "Sending…" : "Send"}
         </button>
       </div>
