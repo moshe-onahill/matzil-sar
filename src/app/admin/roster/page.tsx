@@ -647,7 +647,7 @@ export default function AdminRosterPage() {
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
                 {filtered.map((m) =>
-                  editingId === m.id && editState ? (
+                  editingId === m.id && editState ? (<>
                     <tr key={m.id} className="bg-zinc-800/60">
                       <td className="px-3 py-2">
                         <input value={editState.full_name} onChange={(e) => setEditState({ ...editState, full_name: e.target.value })}
@@ -747,7 +747,7 @@ export default function AdminRosterPage() {
                         </div>
                       </td>
                     </tr>
-                  ) : (
+                  </>) : (
                     <tr key={m.id} className="hover:bg-zinc-800/40 transition">
                       <td className="px-4 py-3 font-medium text-zinc-100">{m.full_name ?? <span className="text-zinc-600">—</span>}</td>
                       <td className="px-4 py-3 font-mono text-zinc-300">{m.call_sign ?? <span className="text-zinc-600">—</span>}</td>
