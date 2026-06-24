@@ -85,7 +85,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/matzil-logo.avif" alt="Matzil SAR" width={72} height={88} className="object-contain" />
+          <img src="/matzil-logo.png" alt="Matzil SAR" width={72} height={88} className="object-contain" />
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-zinc-50">Matzil SAR</h1>
             <p className="mt-1 text-sm text-zinc-500">
