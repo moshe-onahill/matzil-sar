@@ -1,0 +1,39 @@
+"use client";
+
+import { useState } from "react";
+import { getStoredRole } from "@/lib/dev-user";
+import V1Shell from "./V1Shell";
+import PushPermission from "./PushPermission";
+import NotificationListener from "./NotificationListener";
+import SwipeNav from "./SwipeNav";
+import NavContentWrapper from "./NavContentWrapper";
+import AppBottomNav from "./AppBottomNav";
+import PrivacyGate from "./PrivacyGate";
+
+const V2_ROLES = ["Dispatcher", "SAR Manager", "Global Admin"];
+
+function isV2Session(): boolean {
+  if (typeof window === "undefined") return false;
+  return sessionStorage.getItem("v2-mode") === "1" && V2_ROLES.includes(getStoredRole());
+}
+
+export default function V1Gate({ children }: { children: React.ReactNode }) {
+  // Read synchronously on first render — no flash, no useEffect needed
+  const [v2] = useState(isV2Session);
+
+  if (v2) {
+    return (
+      <>
+        <PushPermission />
+        <NotificationListener />
+        <SwipeNav>
+          <NavContentWrapper>{children}</NavContentWrapper>
+        </SwipeNav>
+        <AppBottomNav />
+        <PrivacyGate />
+      </>
+    );
+  }
+
+  return <V1Shell />;
+}

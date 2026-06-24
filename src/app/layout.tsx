@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import AppBottomNav from "@/components/AppBottomNav";
-import NavContentWrapper from "@/components/NavContentWrapper";
 import AuthGate from "@/components/AuthGate";
-import PushPermission from "@/components/PushPermission";
-import NotificationListener from "@/components/NotificationListener";
+import V1Gate from "@/components/V1Gate";
 import { ToastProvider } from "@/components/Toast";
-import SwipeNav from "@/components/SwipeNav";
-import PrivacyGate from "@/components/PrivacyGate";
 import ThemeApplier from "@/components/ThemeApplier";
 
 export const metadata: Metadata = {
@@ -28,15 +23,7 @@ export default function RootLayout({
         <ThemeApplier />
         <AuthGate>
           <ToastProvider>
-            <PushPermission />
-            <NotificationListener />
-            <SwipeNav>
-              <NavContentWrapper>
-                {children}
-              </NavContentWrapper>
-            </SwipeNav>
-            <AppBottomNav />
-            <PrivacyGate />
+            <V1Gate>{children}</V1Gate>
           </ToastProvider>
         </AuthGate>
       </body>

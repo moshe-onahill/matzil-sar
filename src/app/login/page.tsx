@@ -7,20 +7,38 @@ import MatzilLogo from "@/components/MatzilLogo";
 
 export default function LoginPage() {
   const toast = useToast();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "forgot">("login");
   const [rememberMe, setRememberMe] = useState(true);
 
   async function login() {
-    if (!email || !password) { toast("Enter your email and password.", "error"); return; }
+    if (!identifier || !password) { toast("Enter your credentials.", "error"); return; }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+
+    let loginEmail = identifier.trim();
+
+    // Accept call sign (no "@") — look up the email
+    if (!loginEmail.includes("@")) {
+      const { data: matched } = await supabase
+        .from("users")
+        .select("email")
+        .ilike("call_sign", loginEmail)
+        .maybeSingle();
+      if (!matched?.email) {
+        setLoading(false);
+        toast("Unit number not found.", "error");
+        return;
+      }
+      loginEmail = matched.email;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     if (error) { setLoading(false); toast(error.message, "error"); return; }
 
     // Check if this email is a registered member
-    const { data: userRow } = await supabase.from("users").select("id").eq("email", email.trim().toLowerCase()).maybeSingle();
+    const { data: userRow } = await supabase.from("users").select("id").eq("email", loginEmail.toLowerCase()).maybeSingle();
     if (!userRow) {
       await supabase.auth.signOut();
       setLoading(false);
@@ -28,7 +46,7 @@ export default function LoginPage() {
       void fetch("/api/alert-admins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "⚠️ Unknown Login Attempt", message: `Unregistered user tried to log in: ${email.trim()}`, url: "/admin/audit" }),
+        body: JSON.stringify({ title: "⚠️ Unknown Login Attempt", message: `Unregistered user tried to log in: ${loginEmail}`, url: "/admin/audit" }),
       });
       return;
     }
@@ -40,6 +58,8 @@ export default function LoginPage() {
     } else {
       localStorage.removeItem("session-temporary");
     }
+    // V1 mode: clear any stale v2 session so users land on V1
+    sessionStorage.removeItem("v2-mode");
     window.location.replace("/");
   }
 
@@ -51,9 +71,9 @@ export default function LoginPage() {
   }
 
   async function sendReset() {
-    if (!email) { toast("Enter your email first.", "error"); return; }
+    if (!identifier) { toast("Enter your email first.", "error"); return; }
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    const { error } = await supabase.auth.resetPasswordForEmail(identifier.trim(), {
       redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
     });
     setLoading(false);
@@ -103,12 +123,12 @@ export default function LoginPage() {
               </div>
 
               <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && void login()}
-                placeholder="Email"
-                type="email"
-                autoComplete="email"
+                placeholder="Unit number or email"
+                type="text"
+                autoComplete="username"
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
               />
 
@@ -148,8 +168,8 @@ export default function LoginPage() {
               <p className="text-sm text-zinc-400">Enter your email and we'll send a reset link.</p>
 
               <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && void sendReset()}
                 placeholder="Email"
                 type="email"
