@@ -155,6 +155,7 @@ export default function V1Shell() {
               key={n.id}
               notif={n}
               isAdmin={isAdmin}
+              isGlobalAdmin={role === "Global Admin"}
               adminId={profile?.id ?? null}
               fmt={fmt}
               onDelete={() => void deleteNotif(n)}
@@ -184,6 +185,7 @@ export default function V1Shell() {
 function NotifCard({
   notif,
   isAdmin,
+  isGlobalAdmin,
   adminId,
   fmt,
   onDelete,
@@ -191,6 +193,7 @@ function NotifCard({
 }: {
   notif: Notif;
   isAdmin: boolean;
+  isGlobalAdmin: boolean;
   adminId: string | null;
   fmt: (d: string) => string;
   onDelete: () => void;
@@ -205,6 +208,7 @@ function NotifCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const canEdit = isAdmin && notif.sender_id === adminId;
+  const canDelete = canEdit || isGlobalAdmin;
 
   async function save() {
     setSaving(true);
@@ -266,36 +270,40 @@ function NotifCard({
         <span className="font-bold text-base leading-snug">{notif.title}</span>
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-xs opacity-70 mt-0.5">{fmt(notif.created_at)}</span>
-          {canEdit && (
+          {(canEdit || canDelete) && (
             <>
-              <button onClick={() => setEditing(true)}
-                className="ml-1 rounded-md p-1 hover:bg-white/20 transition" aria-label="Edit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </button>
-              {confirmDelete ? (
-                <>
-                  <button onClick={onDelete}
-                    className="rounded-md px-2 py-0.5 text-xs font-semibold bg-white/30 hover:bg-white/40 transition">
-                    Confirm
-                  </button>
-                  <button onClick={() => setConfirmDelete(false)}
-                    className="rounded-md px-2 py-0.5 text-xs bg-white/10 hover:bg-white/20 transition">
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => setConfirmDelete(true)}
-                  className="rounded-md p-1 hover:bg-white/20 transition" aria-label="Delete">
+              {canEdit && (
+                <button onClick={() => setEditing(true)}
+                  className="ml-1 rounded-md p-1 hover:bg-white/20 transition" aria-label="Edit">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                    <path d="M10 11v6M14 11v6" />
-                    <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
                 </button>
+              )}
+              {canDelete && (
+                confirmDelete ? (
+                  <>
+                    <button onClick={onDelete}
+                      className="rounded-md px-2 py-0.5 text-xs font-semibold bg-white/30 hover:bg-white/40 transition">
+                      Confirm
+                    </button>
+                    <button onClick={() => setConfirmDelete(false)}
+                      className="rounded-md px-2 py-0.5 text-xs bg-white/10 hover:bg-white/20 transition">
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setConfirmDelete(true)}
+                    className="rounded-md p-1 hover:bg-white/20 transition" aria-label="Delete">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                    </svg>
+                  </button>
+                )
               )}
             </>
           )}
