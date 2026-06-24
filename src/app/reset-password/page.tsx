@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import MatzilLogo from "@/components/MatzilLogo";
@@ -9,6 +9,8 @@ import MatzilLogo from "@/components/MatzilLogo";
 export default function ResetPasswordPage() {
   const toast = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromGoogle = searchParams.get("from") === "google";
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,10 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (error) { toast(error.message, "error"); return; }
-    toast("Password updated. Redirecting…", "success");
+    if (fromGoogle) {
+      localStorage.setItem("google-setup-done", "1");
+    }
+    toast("Password set. Redirecting…", "success");
     setTimeout(() => router.replace("/"), 1500);
   }
 
@@ -48,8 +53,14 @@ export default function ResetPasswordPage() {
         <div className="mb-8 flex flex-col items-center gap-4">
           <MatzilLogo size={64} />
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-50">Set New Password</h1>
-            <p className="mt-1 text-sm text-zinc-500">Choose a new password for your account</p>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-50">
+              {fromGoogle ? "Set Your Password" : "Set New Password"}
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              {fromGoogle
+                ? "Create a password to sign in with your unit number next time"
+                : "Choose a new password for your account"}
+            </p>
           </div>
         </div>
 

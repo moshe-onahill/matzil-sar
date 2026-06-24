@@ -30,7 +30,15 @@ export async function GET(request: NextRequest) {
     if (!error) {
       const isRecovery = data.session?.user?.recovery_sent_at != null &&
         searchParams.get("type") === "recovery";
-      const next = isRecovery ? "/reset-password" : (searchParams.get("next") ?? "/");
+      const isGoogle = data.session?.user?.app_metadata?.provider === "google";
+      let next: string;
+      if (isRecovery) {
+        next = "/reset-password";
+      } else if (isGoogle) {
+        next = "/reset-password?from=google";
+      } else {
+        next = searchParams.get("next") ?? "/";
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }
