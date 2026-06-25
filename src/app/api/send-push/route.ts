@@ -110,34 +110,6 @@ export async function POST(req: Request) {
     const { data: userRow } = await supabaseAdmin
       .from("users").select("email, phone").eq("id", user_id).single();
 
-    // Email via Resend
-    const resendKey = process.env.RESEND_API_KEY;
-    if (resendKey && userRow?.email) {
-      try {
-        const emailRes = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from: "Matzil SAR <alerts@matzil-sar.com>",
-            to: [userRow.email],
-            subject: `⚠️ CRITICAL ALERT: ${title}`,
-            html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-              <div style="background:#dc2626;padding:20px;border-radius:8px 8px 0 0">
-                <h1 style="color:white;margin:0;font-size:20px">⚠️ CRITICAL ALERT</h1>
-              </div>
-              <div style="background:#1f1f1f;padding:20px;border-radius:0 0 8px 8px;color:#fff">
-                <h2 style="margin:0 0 12px;color:#fff">${title}</h2>
-                ${msgBody ? `<p style="color:#ccc;margin:0 0 12px">${msgBody}</p>` : ""}
-                <p style="color:#888;font-size:12px;margin:0">Matzil SAR — This is an automated critical alert.</p>
-              </div>
-            </div>`,
-          }),
-        });
-        if (emailRes.ok) results.email = true;
-        else { const e = await emailRes.json(); results.errors.push(`Email: ${e.message ?? emailRes.statusText}`); }
-      } catch (err: any) { results.errors.push(`Email: ${err.message}`); }
-    }
-
     // SMS via Twilio
     const twilioSid = process.env.TWILIO_ACCOUNT_SID;
     const twilioToken = process.env.TWILIO_AUTH_TOKEN;
