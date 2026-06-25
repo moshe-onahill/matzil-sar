@@ -9,9 +9,7 @@ export const runtime = "nodejs";
 
 function getFirebaseApp() {
   if (getApps().length > 0) return getApp();
-
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-
   return initializeApp({
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -24,7 +22,6 @@ function getFirebaseApp() {
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ error: "Missing Supabase server credentials" }, { status: 500 });
   }
@@ -32,107 +29,141 @@ export async function POST(req: Request) {
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
   let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  try { body = await req.json(); }
+  catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const { user_id, title, body: msgBody, url, critical = false } = body;
-
   if (!user_id || !title) {
     return NextResponse.json({ error: "Missing user_id or title" }, { status: 400 });
   }
 
-  const results = { fcm: 0, vapid: 0, errors: [] as string[] };
+  const results = { fcm: 0, vapid: 0, email: false, sms: false, errors: [] as string[] };
 
   // --- FCM (native iOS/Android) ---
-  const fcmConfigured =
-    process.env.FIREBASE_PROJECT_ID &&
-    process.env.FIREBASE_CLIENT_EMAIL &&
-    process.env.FIREBASE_PRIVATE_KEY;
-
+  const fcmConfigured = process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY;
   if (fcmConfigured) {
     try {
-      const firebaseApp = getFirebaseApp();
-      const messaging = getMessaging(firebaseApp);
-
+      const messaging = getMessaging(getFirebaseApp());
       const { data: tokens } = await supabaseAdmin
-        .from("fcm_tokens")
-        .select("token, platform")
-        .eq("user_id", user_id);
+        .from("fcm_tokens").select("token, platform").eq("user_id", user_id);
 
       if (tokens && tokens.length > 0) {
-        await Promise.all(
-          tokens.map(async (row: { token: string; platform: string }) => {
-            const message: Message = {
-              token: row.token,
-              notification: { title, body: msgBody || "" },
-              data: { url: url || "/" },
-              ...(row.platform === "ios"
-                ? {
-                    apns: {
-                      payload: {
-                        aps: {
-                          sound: critical
-                            ? { critical: true, name: "default", volume: 1.0 }
-                            : "default",
-                          badge: 1,
-                        },
-                      },
-                    },
-                  }
-                : {
-                    android: {
-                      priority: "high" as const,
-                      notification: { sound: "default", priority: "max" as const },
-                    },
-                  }),
-            };
-
-            try {
-              await messaging.send(message);
-              results.fcm++;
-            } catch (err: any) {
-              results.errors.push(`FCM: ${err.message}`);
-            }
-          })
-        );
+        await Promise.all(tokens.map(async (row: { token: string; platform: string }) => {
+          const message: Message = {
+            token: row.token,
+            notification: { title, body: msgBody || "" },
+            data: { url: url || "/" },
+            ...(row.platform === "ios" ? {
+              apns: {
+                headers: critical ? { "apns-priority": "10" } : { "apns-priority": "5" },
+                payload: {
+                  aps: {
+                    sound: critical
+                      ? { critical: 1, name: "default", volume: 1.0 }
+                      : "default",
+                    badge: 1,
+                    "interruption-level": critical ? "critical" : "active",
+                  },
+                },
+              },
+            } : {
+              android: {
+                priority: "high" as const,
+                notification: {
+                  sound: "default",
+                  priority: critical ? "max" as const : "high" as const,
+                  defaultSound: true,
+                },
+              },
+            }),
+          };
+          try { await messaging.send(message); results.fcm++; }
+          catch (err: any) { results.errors.push(`FCM: ${err.message}`); }
+        }));
       }
-    } catch (err: any) {
-      results.errors.push(`FCM setup: ${err.message}`);
-    }
+    } catch (err: any) { results.errors.push(`FCM setup: ${err.message}`); }
   }
 
-  // --- VAPID web push (keep existing web subscribers working) ---
+  // --- VAPID web push ---
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
   const vapidEmail = process.env.VAPID_EMAIL || "mailto:briefmoshe@gmail.com";
-
   if (vapidPublicKey && vapidPrivateKey) {
     try {
       webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
-
       const { data: subs } = await supabaseAdmin
-        .from("push_subscriptions")
-        .select("subscription")
-        .eq("user_id", user_id);
-
+        .from("push_subscriptions").select("subscription").eq("user_id", user_id);
       if (subs && subs.length > 0) {
-        const payload = JSON.stringify({ title, body: msgBody || "", url: url || "/" });
-
-        await Promise.all(
-          subs.map((s: { subscription: any }) =>
-            webpush.sendNotification(s.subscription, payload).then(() => {
-              results.vapid++;
-            }).catch((err: any) => {
-              results.errors.push(`VAPID: ${err.message}`);
-            })
-          )
-        );
+        const payload = JSON.stringify({ title, body: msgBody || "", url: url || "/", critical });
+        await Promise.all(subs.map((s: { subscription: any }) =>
+          webpush.sendNotification(s.subscription, payload)
+            .then(() => { results.vapid++; })
+            .catch((err: any) => { results.errors.push(`VAPID: ${err.message}`); })
+        ));
       }
-    } catch (err: any) {
-      results.errors.push(`VAPID setup: ${err.message}`);
+    } catch (err: any) { results.errors.push(`VAPID setup: ${err.message}`); }
+  }
+
+  // --- Critical-only: Email + SMS ---
+  if (critical) {
+    // Get user contact info
+    const { data: userRow } = await supabaseAdmin
+      .from("users").select("email, phone").eq("id", user_id).single();
+
+    // Email via Resend
+    const resendKey = process.env.RESEND_API_KEY;
+    if (resendKey && userRow?.email) {
+      try {
+        const emailRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "Matzil SAR <alerts@matzil-sar.com>",
+            to: [userRow.email],
+            subject: `⚠️ CRITICAL ALERT: ${title}`,
+            html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+              <div style="background:#dc2626;padding:20px;border-radius:8px 8px 0 0">
+                <h1 style="color:white;margin:0;font-size:20px">⚠️ CRITICAL ALERT</h1>
+              </div>
+              <div style="background:#1f1f1f;padding:20px;border-radius:0 0 8px 8px;color:#fff">
+                <h2 style="margin:0 0 12px;color:#fff">${title}</h2>
+                ${msgBody ? `<p style="color:#ccc;margin:0 0 12px">${msgBody}</p>` : ""}
+                <p style="color:#888;font-size:12px;margin:0">Matzil SAR — This is an automated critical alert.</p>
+              </div>
+            </div>`,
+          }),
+        });
+        if (emailRes.ok) results.email = true;
+        else { const e = await emailRes.json(); results.errors.push(`Email: ${e.message ?? emailRes.statusText}`); }
+      } catch (err: any) { results.errors.push(`Email: ${err.message}`); }
+    }
+
+    // SMS via Twilio
+    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+    const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+    const twilioFrom = process.env.TWILIO_FROM_NUMBER;
+    if (twilioSid && twilioToken && twilioFrom && userRow?.phone) {
+      try {
+        const phone = userRow.phone.replace(/\D/g, "");
+        const e164 = phone.startsWith("1") ? `+${phone}` : `+1${phone}`;
+        const smsRes = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString("base64")}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              From: twilioFrom,
+              To: e164,
+              Body: `⚠️ CRITICAL ALERT — Matzil SAR\n${title}${msgBody ? `\n${msgBody}` : ""}`,
+            }).toString(),
+          }
+        );
+        if (smsRes.ok) results.sms = true;
+        else { const e = await smsRes.json(); results.errors.push(`SMS: ${e.message ?? smsRes.statusText}`); }
+      } catch (err: any) { results.errors.push(`SMS: ${err.message}`); }
     }
   }
 

@@ -38,6 +38,7 @@ export default function V1Shell() {
   const [loading, setLoading] = useState(true);
   const [accountOpen, setAccountOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [criticalAlert, setCriticalAlert] = useState<Notif | null>(null);
   const role = getStoredRole();
   const isAdmin = ADMIN_ROLES.includes(role);
 
@@ -70,7 +71,16 @@ export default function V1Shell() {
         .channel("v1-notifs")
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "notification_logs", filter: `user_id=eq.${(user as any).id}` },
+          { event: "INSERT", schema: "public", table: "notification_logs", filter: `user_id=eq.${(user as any).id}` },
+          (payload) => {
+            const n = payload.new as Notif;
+            if (n.priority === "critical") setCriticalAlert(n);
+            void loadNotifications((user as any).id);
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "DELETE", schema: "public", table: "notification_logs", filter: `user_id=eq.${(user as any).id}` },
           () => void loadNotifications((user as any).id)
         )
         .subscribe();
@@ -172,6 +182,9 @@ export default function V1Shell() {
         )}
       </div>
 
+      {criticalAlert && (
+        <CriticalAlertPopup notif={criticalAlert} onDismiss={() => setCriticalAlert(null)} />
+      )}
       {accountOpen && (
         <AccountPanel profile={profile} isAdmin={isAdmin} onClose={() => setAccountOpen(false)} />
       )}
@@ -183,6 +196,39 @@ export default function V1Shell() {
           onRefresh={() => profile && void loadNotifications(profile.id)}
         />
       )}
+    </div>
+  );
+}
+
+function CriticalAlertPopup({ notif, onDismiss }: { notif: Notif; onDismiss: () => void }) {
+  useEffect(() => {
+    // Vibrate on mobile if supported
+    if (navigator.vibrate) navigator.vibrate([500, 100, 500, 100, 500]);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-3xl bg-red-600 p-6 shadow-2xl text-white animate-bounce-in">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-3xl">🚨</span>
+          <div>
+            <div className="text-xs font-bold uppercase tracking-widest opacity-80">Critical Alert</div>
+            <div className="text-xl font-bold leading-tight">{notif.title}</div>
+          </div>
+        </div>
+        {notif.body && <p className="text-sm opacity-90 mb-3 leading-relaxed">{notif.body}</p>}
+        {notif.location && (
+          <p className="text-sm opacity-80 mb-4 flex items-center gap-1.5">
+            <span>📍</span><span>{notif.location}</span>
+          </p>
+        )}
+        <button
+          onClick={onDismiss}
+          className="w-full rounded-xl bg-white/25 hover:bg-white/35 active:bg-white/40 py-3 font-bold text-white transition"
+        >
+          Acknowledge
+        </button>
+      </div>
     </div>
   );
 }
