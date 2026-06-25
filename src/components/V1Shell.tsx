@@ -405,60 +405,86 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
-const GROUPS = ["ALL", "WATER", "WILDERNESS", "MRU", "SUPPORT", "CUSTOM"] as const;
-type Group = typeof GROUPS[number];
+const TEAM_GROUPS = ["WATER", "WILDERNESS", "MRU", "SUPPORT"] as const;
+type TeamGroup = typeof TEAM_GROUPS[number];
 
 function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; onRefresh: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
   const [priority, setPriority] = useState<"routine" | "critical">("routine");
-  const [group, setGroup] = useState<Group>("ALL");
+  // selectedGroups: set of team names; empty = ALL; "CUSTOM" uses customIds
+  const [selectedGroups, setSelectedGroups] = useState<Set<TeamGroup>>(new Set());
+  const [useCustom, setUseCustom] = useState(false);
   const [members, setMembers] = useState<{ id: string; full_name: string | null; call_sign: string | null }[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [customIds, setCustomIds] = useState<Set<string>>(new Set());
   const [memberSearch, setMemberSearch] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const allSelected = selectedGroups.size === TEAM_GROUPS.length;
+
   useEffect(() => {
-    if (group === "CUSTOM") {
+    if (useCustom) {
       supabase.from("users").select("id,full_name,call_sign").order("call_sign")
         .then(({ data }) => setMembers((data ?? []) as any));
     }
-  }, [group]);
+  }, [useCustom]);
+
+  function toggleAll() {
+    if (allSelected) { setSelectedGroups(new Set()); }
+    else { setSelectedGroups(new Set(TEAM_GROUPS)); }
+    setUseCustom(false);
+  }
+
+  function toggleGroup(g: TeamGroup) {
+    setUseCustom(false);
+    setSelectedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(g) ? next.delete(g) : next.add(g);
+      return next;
+    });
+  }
+
+  function toggleCustom() {
+    setUseCustom((v) => !v);
+    if (!useCustom) setSelectedGroups(new Set());
+  }
 
   function toggleMember(id: string) {
-    setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setCustomIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
   async function getTargetIds(): Promise<string[]> {
-    if (group === "ALL") {
+    if (useCustom) return [...customIds];
+    // No groups selected = all members
+    if (selectedGroups.size === 0 || allSelected) {
       const { data } = await supabase.from("users").select("id");
       return (data ?? []).map((r: any) => r.id);
     }
-    if (group === "CUSTOM") {
-      return [...selectedIds];
-    }
-    // Named group — look up by unit name
-    const { data } = await supabase
-      .from("user_units")
-      .select("user_id, units!inner(name)")
-      .ilike("units.name", group);
-    return (data ?? []).map((r: any) => r.user_id);
+    // Fetch members for each selected group and union them
+    const results = await Promise.all(
+      [...selectedGroups].map((g) =>
+        supabase.from("user_units").select("user_id, units!inner(name)").ilike("units.name", g)
+          .then(({ data }) => (data ?? []).map((r: any) => r.user_id as string))
+      )
+    );
+    return [...new Set(results.flat())];
   }
 
   async function send() {
     if (!title.trim()) return;
-    if (group === "CUSTOM" && selectedIds.size === 0) { setErrorMsg("Select at least one member."); return; }
+    if (useCustom && customIds.size === 0) { setErrorMsg("Select at least one member."); return; }
     setSending(true);
     setErrorMsg(null);
 
     const targetIds = await getTargetIds();
-    if (targetIds.length === 0) { setErrorMsg("No recipients found."); setSending(false); return; }
+    const uniqueTargetIds = [...new Set(targetIds)];
+    if (uniqueTargetIds.length === 0) { setErrorMsg("No recipients found."); setSending(false); return; }
 
     const broadcast_id = crypto.randomUUID();
-    const rows = targetIds.map((uid: string) => ({
+    const rows = uniqueTargetIds.map((uid: string) => ({
       user_id: uid,
       sender_id: senderId,
       broadcast_id,
@@ -475,7 +501,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
     if (insertError) { setErrorMsg(`Send failed: ${insertError.message}`); setSending(false); return; }
 
     await Promise.all(
-      targetIds.map((user_id: string) =>
+      uniqueTargetIds.map((user_id: string) =>
         fetch("/api/send-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -521,31 +547,39 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
         <div>
           <div className="text-xs font-medium text-zinc-400 mb-2">Send to</div>
           <div className="flex flex-wrap gap-2">
-            {GROUPS.map((g) => (
-              <button key={g} onClick={() => setGroup(g)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${group === g ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+            <button onClick={toggleAll}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${allSelected || (!useCustom && selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+              ALL
+            </button>
+            {TEAM_GROUPS.map((g) => (
+              <button key={g} onClick={() => toggleGroup(g)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${(!useCustom && (selectedGroups.has(g) || allSelected || selectedGroups.size === 0)) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
                 {g}
               </button>
             ))}
+            <button onClick={toggleCustom}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${useCustom ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+              CUSTOM
+            </button>
           </div>
         </div>
 
         {/* Custom member picker */}
-        {group === "CUSTOM" && (
+        {useCustom && (
           <div className="space-y-2">
             <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} placeholder="Search members…"
               className="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
             <div className="max-h-44 overflow-y-auto rounded-lg border border-zinc-800 divide-y divide-zinc-800">
-              {filteredMembers.map((m) => (
+              {(memberSearch.trim() ? members.filter((m) => [m.full_name, m.call_sign].join(" ").toLowerCase().includes(memberSearch.toLowerCase())) : members).map((m) => (
                 <button key={m.id} onClick={() => toggleMember(m.id)}
                   className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-800 transition">
-                  <span className={`h-4 w-4 rounded border-2 shrink-0 transition ${selectedIds.has(m.id) ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-600"}`} />
+                  <span className={`h-4 w-4 rounded border-2 shrink-0 transition ${customIds.has(m.id) ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-600"}`} />
                   <span className="font-mono text-sm text-zinc-100">{m.call_sign ?? "—"}</span>
                   <span className="text-sm text-zinc-400">{m.full_name}</span>
                 </button>
               ))}
             </div>
-            {selectedIds.size > 0 && <div className="text-xs text-zinc-500">{selectedIds.size} selected</div>}
+            {customIds.size > 0 && <div className="text-xs text-zinc-500">{customIds.size} selected</div>}
           </div>
         )}
 

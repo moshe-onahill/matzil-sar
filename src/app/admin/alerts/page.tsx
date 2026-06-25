@@ -27,9 +27,12 @@ export default function AdminAlertsPage() {
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
   const [priority, setPriority] = useState<"routine" | "critical">("routine");
-  const [group, setGroup] = useState<string>("ALL");
+  const TEAM_GROUPS = ["WATER", "WILDERNESS", "MRU", "SUPPORT"] as const;
+  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
+  const [useCustom, setUseCustom] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [memberSearch, setMemberSearch] = useState("");
+  const allSelected = selectedGroups.size === 4;
   const [sending, setSending] = useState(false);
   const [sentHistory, setSentHistory] = useState<SentNotification[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -100,21 +103,34 @@ export default function AdminAlertsPage() {
     });
   }
 
+  function toggleAll() {
+    if (allSelected) { setSelectedGroups(new Set()); }
+    else { setSelectedGroups(new Set(TEAM_GROUPS)); }
+    setUseCustom(false);
+  }
+
+  function toggleGroup(g: string) {
+    setUseCustom(false);
+    setSelectedGroups((prev) => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n; });
+  }
+
   async function getTargetIds(): Promise<string[]> {
-    if (group === "ALL") return members.map((m) => m.id);
-    if (group === "CUSTOM") return [...selectedIds];
-    const { data } = await supabase
-      .from("user_units")
-      .select("user_id, units!inner(name)")
-      .ilike("units.name", group);
-    return (data ?? []).map((r: any) => r.user_id);
+    if (useCustom) return [...selectedIds];
+    if (selectedGroups.size === 0 || allSelected) return members.map((m) => m.id);
+    const results = await Promise.all(
+      [...selectedGroups].map((g) =>
+        supabase.from("user_units").select("user_id, units!inner(name)").ilike("units.name", g)
+          .then(({ data }) => (data ?? []).map((r: any) => r.user_id as string))
+      )
+    );
+    return [...new Set(results.flat())];
   }
 
   async function send() {
     if (!title.trim()) { toast("Title is required.", "error"); return; }
-    if (group === "CUSTOM" && selectedIds.size === 0) { toast("Select at least one member.", "error"); return; }
+    if (useCustom && selectedIds.size === 0) { toast("Select at least one member.", "error"); return; }
 
-    const targetIds = await getTargetIds();
+    const targetIds = [...new Set(await getTargetIds())];
     if (targetIds.length === 0) { toast("No recipients found.", "error"); return; }
 
     setSending(true);
@@ -160,7 +176,7 @@ export default function AdminAlertsPage() {
       action: "send_alert",
       entity_type: "alert",
       entity_label: title.trim(),
-      details: { group, recipient_count: targetIds.length, priority },
+      details: { groups: [...selectedGroups], useCustom, recipient_count: targetIds.length, priority },
     });
 
     setTitle("");
@@ -266,17 +282,23 @@ export default function AdminAlertsPage() {
         <div className="rounded-xl bg-zinc-900 p-5 space-y-4">
           <div className="font-semibold text-zinc-100">Send to</div>
           <div className="flex flex-wrap gap-2">
-            {(["ALL", "WATER", "WILDERNESS", "MRU", "SUPPORT", "CUSTOM"] as const).map((g) => (
-              <button key={g} onClick={() => setGroup(g)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                  group === g ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                }`}>
+            <button onClick={toggleAll}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${allSelected || (!useCustom && selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+              ALL
+            </button>
+            {TEAM_GROUPS.map((g) => (
+              <button key={g} onClick={() => toggleGroup(g)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${!useCustom && (selectedGroups.has(g) || allSelected || selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
                 {g}
               </button>
             ))}
+            <button onClick={() => { setUseCustom((v) => !v); if (!useCustom) setSelectedGroups(new Set()); }}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${useCustom ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+              CUSTOM
+            </button>
           </div>
 
-          {group === "CUSTOM" && (
+          {useCustom && (
             <div className="space-y-3">
               <input
                 value={memberSearch}
