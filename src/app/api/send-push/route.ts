@@ -54,7 +54,7 @@ export async function POST(req: Request) {
           const message: Message = {
             token: row.token,
             notification: { title, body: msgBody || "" },
-            data: { url: url || "/" },
+            data: { url: url || "/", critical: critical ? "true" : "false" },
             ...(row.platform === "ios" ? {
               apns: {
                 headers: critical ? { "apns-priority": "10" } : { "apns-priority": "5" },
