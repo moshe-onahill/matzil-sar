@@ -27,7 +27,7 @@ export default function AdminAlertsPage() {
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
   const [priority, setPriority] = useState<"routine" | "critical">("routine");
-  const [target, setTarget] = useState<"all" | "duty" | "specific">("all");
+  const [group, setGroup] = useState<string>("ALL");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [memberSearch, setMemberSearch] = useState("");
   const [sending, setSending] = useState(false);
@@ -100,21 +100,22 @@ export default function AdminAlertsPage() {
     });
   }
 
+  async function getTargetIds(): Promise<string[]> {
+    if (group === "ALL") return members.map((m) => m.id);
+    if (group === "CUSTOM") return [...selectedIds];
+    const { data } = await supabase
+      .from("user_units")
+      .select("user_id, units!inner(name)")
+      .ilike("units.name", group);
+    return (data ?? []).map((r: any) => r.user_id);
+  }
+
   async function send() {
     if (!title.trim()) { toast("Title is required.", "error"); return; }
+    if (group === "CUSTOM" && selectedIds.size === 0) { toast("Select at least one member.", "error"); return; }
 
-    let targetIds: string[] = [];
-
-    if (target === "all") {
-      targetIds = members.map((m) => m.id);
-    } else if (target === "duty") {
-      const { data } = await supabase.from("users").select("id").eq("is_on_duty", true);
-      targetIds = (data ?? []).map((r: any) => r.id);
-    } else {
-      targetIds = [...selectedIds];
-    }
-
-    if (targetIds.length === 0) { toast("No recipients selected.", "error"); return; }
+    const targetIds = await getTargetIds();
+    if (targetIds.length === 0) { toast("No recipients found.", "error"); return; }
 
     setSending(true);
 
@@ -159,7 +160,7 @@ export default function AdminAlertsPage() {
       action: "send_alert",
       entity_type: "alert",
       entity_label: title.trim(),
-      details: { target, recipient_count: targetIds.length, priority },
+      details: { group, recipient_count: targetIds.length, priority },
     });
 
     setTitle("");
@@ -263,23 +264,19 @@ export default function AdminAlertsPage() {
 
         {/* Recipients */}
         <div className="rounded-xl bg-zinc-900 p-5 space-y-4">
-          <div className="font-semibold text-zinc-100">Recipients</div>
-
+          <div className="font-semibold text-zinc-100">Send to</div>
           <div className="flex flex-wrap gap-2">
-            {(["all", "duty", "specific"] as const).map((opt) => (
-              <button
-                key={opt}
-                onClick={() => setTarget(opt)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  target === opt ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                }`}
-              >
-                {opt === "all" ? "All members" : opt === "duty" ? "On-duty only" : "Specific members"}
+            {(["ALL", "WATER", "WILDERNESS", "MRU", "SUPPORT", "CUSTOM"] as const).map((g) => (
+              <button key={g} onClick={() => setGroup(g)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                  group === g ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                }`}>
+                {g}
               </button>
             ))}
           </div>
 
-          {target === "specific" && (
+          {group === "CUSTOM" && (
             <div className="space-y-3">
               <input
                 value={memberSearch}
@@ -289,11 +286,8 @@ export default function AdminAlertsPage() {
               />
               <div className="max-h-60 overflow-y-auto rounded-lg border border-zinc-800 divide-y divide-zinc-800">
                 {filteredMembers.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => toggleMember(m.id)}
-                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-800 transition"
-                  >
+                  <button key={m.id} onClick={() => toggleMember(m.id)}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-800 transition">
                     <span className={`h-4 w-4 rounded border-2 shrink-0 transition ${
                       selectedIds.has(m.id) ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-600"
                     }`} />

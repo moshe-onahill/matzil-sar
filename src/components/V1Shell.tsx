@@ -405,32 +405,57 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
+const GROUPS = ["ALL", "WATER", "WILDERNESS", "MRU", "SUPPORT", "CUSTOM"] as const;
+type Group = typeof GROUPS[number];
+
 function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; onRefresh: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
   const [priority, setPriority] = useState<"routine" | "critical">("routine");
-  const [target, setTarget] = useState<"all" | "duty">("all");
+  const [group, setGroup] = useState<Group>("ALL");
+  const [members, setMembers] = useState<{ id: string; full_name: string | null; call_sign: string | null }[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [memberSearch, setMemberSearch] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (group === "CUSTOM") {
+      supabase.from("users").select("id,full_name,call_sign").order("call_sign")
+        .then(({ data }) => setMembers((data ?? []) as any));
+    }
+  }, [group]);
+
+  function toggleMember(id: string) {
+    setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function getTargetIds(): Promise<string[]> {
+    if (group === "ALL") {
+      const { data } = await supabase.from("users").select("id");
+      return (data ?? []).map((r: any) => r.id);
+    }
+    if (group === "CUSTOM") {
+      return [...selectedIds];
+    }
+    // Named group — look up by unit name
+    const { data } = await supabase
+      .from("user_units")
+      .select("user_id, units!inner(name)")
+      .ilike("units.name", group);
+    return (data ?? []).map((r: any) => r.user_id);
+  }
+
   async function send() {
     if (!title.trim()) return;
+    if (group === "CUSTOM" && selectedIds.size === 0) { setErrorMsg("Select at least one member."); return; }
     setSending(true);
     setErrorMsg(null);
 
-    const query = target === "all"
-      ? supabase.from("users").select("id")
-      : supabase.from("users").select("id").eq("is_on_duty", true);
-    const { data: recipients } = await query;
-    const targetIds = (recipients ?? []).map((r: any) => r.id);
-
-    if (targetIds.length === 0) {
-      setErrorMsg("No recipients found.");
-      setSending(false);
-      return;
-    }
+    const targetIds = await getTargetIds();
+    if (targetIds.length === 0) { setErrorMsg("No recipients found."); setSending(false); return; }
 
     const broadcast_id = crypto.randomUUID();
     const rows = targetIds.map((uid: string) => ({
@@ -447,13 +472,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
     }));
 
     const { error: insertError } = await supabase.from("notification_logs").insert(rows);
-
-    if (insertError) {
-      console.error("Notification insert error:", insertError.message);
-      setErrorMsg(`Send failed: ${insertError.message}`);
-      setSending(false);
-      return;
-    }
+    if (insertError) { setErrorMsg(`Send failed: ${insertError.message}`); setSending(false); return; }
 
     await Promise.all(
       targetIds.map((user_id: string) =>
@@ -471,10 +490,14 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
     setTimeout(onClose, 1000);
   }
 
+  const filteredMembers = memberSearch.trim()
+    ? members.filter((m) => [m.full_name, m.call_sign].join(" ").toLowerCase().includes(memberSearch.toLowerCase()))
+    : members;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-zinc-900 p-6 space-y-4 shadow-2xl">
+      <div className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-zinc-900 p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-zinc-50 text-lg">Send Notification</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">✕</button>
@@ -493,14 +516,39 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
           className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600 resize-none" />
         <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location (optional)"
           className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
-        <div className="flex gap-2">
-          {(["all", "duty"] as const).map((t) => (
-            <button key={t} onClick={() => setTarget(t)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${target === t ? "bg-zinc-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-              {t === "all" ? "All members" : "On-duty only"}
-            </button>
-          ))}
+
+        {/* Group selector */}
+        <div>
+          <div className="text-xs font-medium text-zinc-400 mb-2">Send to</div>
+          <div className="flex flex-wrap gap-2">
+            {GROUPS.map((g) => (
+              <button key={g} onClick={() => setGroup(g)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${group === g ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+                {g}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Custom member picker */}
+        {group === "CUSTOM" && (
+          <div className="space-y-2">
+            <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} placeholder="Search members…"
+              className="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-zinc-800 divide-y divide-zinc-800">
+              {filteredMembers.map((m) => (
+                <button key={m.id} onClick={() => toggleMember(m.id)}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-800 transition">
+                  <span className={`h-4 w-4 rounded border-2 shrink-0 transition ${selectedIds.has(m.id) ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-600"}`} />
+                  <span className="font-mono text-sm text-zinc-100">{m.call_sign ?? "—"}</span>
+                  <span className="text-sm text-zinc-400">{m.full_name}</span>
+                </button>
+              ))}
+            </div>
+            {selectedIds.size > 0 && <div className="text-xs text-zinc-500">{selectedIds.size} selected</div>}
+          </div>
+        )}
+
         {errorMsg && (
           <p className="rounded-lg bg-red-900/40 border border-red-700/50 px-3 py-2 text-sm text-red-300">{errorMsg}</p>
         )}
