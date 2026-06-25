@@ -1,11 +1,11 @@
 import { createBrowserClient } from "@supabase/ssr";
 
 export const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co",
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "placeholder",
   {
     cookieOptions: {
-      maxAge: 60 * 60 * 24 * 365, // 1 year — makes cookies persistent across browser restarts
+      maxAge: 60 * 60 * 24 * 365,
     },
   }
 );
