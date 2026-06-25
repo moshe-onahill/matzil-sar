@@ -59,7 +59,7 @@ export async function POST(req: Request) {
                 payload: {
                   aps: {
                     sound: critical
-                      ? { critical: 1, name: "default", volume: 1.0 }
+                      ? { critical: true, name: "default", volume: 1.0 }
                       : "default",
                     badge: 1,
                     "interruption-level": critical ? "critical" : "active",
