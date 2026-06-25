@@ -254,7 +254,7 @@ function NotifCard({
   const [title, setTitle] = useState(notif.title);
   const [body, setBody] = useState(notif.body ?? "");
   const [location, setLocation] = useState(notif.location ?? "");
-  const [priority, setPriority] = useState<string>(notif.priority ?? "routine");
+  const [priority, setPriority] = useState<string>(notif.priority ?? "critical");
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -285,12 +285,10 @@ function NotifCard({
     return (
       <div className={`rounded-2xl p-4 space-y-3 ${bg} text-white`}>
         <div className="flex gap-2">
-          {(["routine", "critical"] as const).map((p) => (
-            <button key={p} onClick={() => setPriority(p)}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${priority === p ? "bg-white/30" : "bg-white/10 hover:bg-white/20"}`}>
-              {p === "routine" ? "Routine" : "⚠ Critical"}
-            </button>
-          ))}
+          <button onClick={() => setPriority("critical")}
+            className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${priority === "critical" ? "bg-white/30" : "bg-white/10 hover:bg-white/20"}`}>
+            ⚠ Critical
+          </button>
         </div>
         <input value={title} onChange={(e) => setTitle(e.target.value)}
           className="w-full rounded-lg bg-white/20 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30"
@@ -458,7 +456,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
-  const [priority, setPriority] = useState<"routine" | "critical">("routine");
+  const [priority, setPriority] = useState<"routine" | "critical">("critical");
   // selectedGroups: set of team names; empty = ALL; "CUSTOM" uses customIds
   const [selectedGroups, setSelectedGroups] = useState<Set<TeamGroup>>(new Set());
   const [useCustom, setUseCustom] = useState(false);
@@ -567,12 +565,10 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">✕</button>
         </div>
         <div className="flex gap-2">
-          {(["routine", "critical"] as const).map((p) => (
-            <button key={p} onClick={() => setPriority(p)}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${priority === p ? p === "critical" ? "bg-red-600 text-white" : "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-              {p === "routine" ? "Routine" : "⚠ Critical"}
-            </button>
-          ))}
+          <button onClick={() => setPriority("critical")}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${priority === "critical" ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+            ⚠ Critical
+          </button>
         </div>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title *"
           className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
