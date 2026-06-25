@@ -59,3 +59,25 @@ workflows:
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
+
+  android-debug:
+    name: Android Debug APK
+    max_build_duration: 30
+    environment:
+      node: v22
+      java: 17
+    scripts:
+      - name: Install Node dependencies
+        script: npm ci
+
+      - name: Build Next.js for Capacitor
+        script: CAPACITOR_BUILD=1 npm run build
+
+      - name: Capacitor sync
+        script: npx cap sync android
+
+      - name: Build debug APK
+        script: cd android && ./gradlew assembleDebug
+
+    artifacts:
+      - android/app/build/outputs/apk/debug/app-debug.apk
