@@ -423,20 +423,12 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
   const [sent, setSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const allSelected = selectedGroups.size === TEAM_GROUPS.length;
-
   useEffect(() => {
     if (useCustom) {
       supabase.from("users").select("id,full_name,call_sign").order("call_sign")
         .then(({ data }) => setMembers((data ?? []) as any));
     }
   }, [useCustom]);
-
-  function toggleAll() {
-    if (allSelected) { setSelectedGroups(new Set()); }
-    else { setSelectedGroups(new Set(TEAM_GROUPS)); }
-    setUseCustom(false);
-  }
 
   function toggleGroup(g: TeamGroup) {
     setUseCustom(false);
@@ -459,7 +451,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
   async function getTargetIds(): Promise<string[]> {
     if (useCustom) return [...customIds];
     // No groups selected = all members
-    if (selectedGroups.size === 0 || allSelected) {
+    if (selectedGroups.size === 0) {
       const { data } = await supabase.from("users").select("id");
       return (data ?? []).map((r: any) => r.id);
     }
@@ -544,24 +536,20 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
           className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
 
         {/* Group selector */}
-        <div>
-          <div className="text-xs font-medium text-zinc-400 mb-2">Send to</div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={toggleAll}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${allSelected || (!useCustom && selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-              ALL
-            </button>
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-zinc-400">Send to</div>
+          <div className="grid grid-cols-4 gap-2">
             {TEAM_GROUPS.map((g) => (
               <button key={g} onClick={() => toggleGroup(g)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${(!useCustom && (selectedGroups.has(g) || allSelected || selectedGroups.size === 0)) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+                className={`rounded-lg py-2 text-xs font-semibold transition ${!useCustom && (selectedGroups.has(g) || selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
                 {g}
               </button>
             ))}
-            <button onClick={toggleCustom}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${useCustom ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-              CUSTOM
-            </button>
           </div>
+          <button onClick={toggleCustom}
+            className={`w-full rounded-lg py-2 text-xs font-semibold transition ${useCustom ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+            CUSTOM GROUP
+          </button>
         </div>
 
         {/* Custom member picker */}

@@ -32,7 +32,6 @@ export default function AdminAlertsPage() {
   const [useCustom, setUseCustom] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [memberSearch, setMemberSearch] = useState("");
-  const allSelected = selectedGroups.size === 4;
   const [sending, setSending] = useState(false);
   const [sentHistory, setSentHistory] = useState<SentNotification[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -103,12 +102,6 @@ export default function AdminAlertsPage() {
     });
   }
 
-  function toggleAll() {
-    if (allSelected) { setSelectedGroups(new Set()); }
-    else { setSelectedGroups(new Set(TEAM_GROUPS)); }
-    setUseCustom(false);
-  }
-
   function toggleGroup(g: string) {
     setUseCustom(false);
     setSelectedGroups((prev) => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n; });
@@ -116,7 +109,7 @@ export default function AdminAlertsPage() {
 
   async function getTargetIds(): Promise<string[]> {
     if (useCustom) return [...selectedIds];
-    if (selectedGroups.size === 0 || allSelected) return members.map((m) => m.id);
+    if (selectedGroups.size === 0) return members.map((m) => m.id);
     const results = await Promise.all(
       [...selectedGroups].map((g) =>
         supabase.from("user_units").select("user_id, units!inner(name)").ilike("units.name", g)
@@ -281,22 +274,18 @@ export default function AdminAlertsPage() {
         {/* Recipients */}
         <div className="rounded-xl bg-zinc-900 p-5 space-y-4">
           <div className="font-semibold text-zinc-100">Send to</div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={toggleAll}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${allSelected || (!useCustom && selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-              ALL
-            </button>
+          <div className="grid grid-cols-4 gap-2">
             {TEAM_GROUPS.map((g) => (
               <button key={g} onClick={() => toggleGroup(g)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${!useCustom && (selectedGroups.has(g) || allSelected || selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+                className={`rounded-lg py-2 text-sm font-semibold transition ${!useCustom && (selectedGroups.has(g) || selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
                 {g}
               </button>
             ))}
-            <button onClick={() => { setUseCustom((v) => !v); if (!useCustom) setSelectedGroups(new Set()); }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${useCustom ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-              CUSTOM
-            </button>
           </div>
+          <button onClick={() => { setUseCustom((v) => !v); if (!useCustom) setSelectedGroups(new Set()); }}
+            className={`w-full rounded-lg py-2 text-sm font-semibold transition ${useCustom ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
+            CUSTOM GROUP
+          </button>
 
           {useCustom && (
             <div className="space-y-3">
