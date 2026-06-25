@@ -43,6 +43,8 @@ type Snapshot = {
   support_needed: string;
 };
 
+export function generateStaticParams() { return []; }
+
 export default function EditIncidentPage() {
   const params = useParams<{ id: string }>();
 

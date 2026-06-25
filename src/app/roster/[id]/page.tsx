@@ -4,6 +4,7 @@ export const dynamic = 'force-static';
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import { getStoredRole, UserRole } from "@/lib/dev-user";
@@ -28,12 +29,11 @@ type ActivityItem = {
   created_at: string;
 };
 
-export default function UserProfilePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const [userId, setUserId] = useState<string | null>(null);
+export function generateStaticParams() { return []; }
+
+export default function UserProfilePage() {
+  const rawParams = useParams<{ id: string }>();
+  const [userId, setUserId] = useState<string | null>(rawParams?.id ?? null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [currentRole, setCurrentRole] = useState<UserRole>("Member");
 
@@ -53,14 +53,6 @@ export default function UserProfilePage({
 
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [limit, setLimit] = useState(10);
-
-  useEffect(() => {
-    async function init() {
-      const p = await params;
-      setUserId(p.id);
-    }
-    void init();
-  }, [params]);
 
   useEffect(() => {
     if (!userId) return;

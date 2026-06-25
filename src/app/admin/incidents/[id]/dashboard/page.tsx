@@ -63,6 +63,8 @@ function Clock() {
   );
 }
 
+export function generateStaticParams() { return []; }
+
 export default function CommandDashboardPage() {
   const { id } = useParams<{ id: string }>();
 
