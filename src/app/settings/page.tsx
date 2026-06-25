@@ -370,6 +370,7 @@ export default function SettingsPage() {
             <div className="text-xl font-semibold">Notifications</div>
             <div className="text-sm text-gray-400">Choose how much you want to hear from us.</div>
           </div>
+          <PushSetupButton />
           {(() => {
             const preset = currentPreset();
             return (
@@ -679,5 +680,53 @@ function ProfileField({
         {pending ? "Pending…" : "Request Change"}
       </button>
     </div>
+  );
+}
+
+function PushSetupButton() {
+  const [status, setStatus] = useState<"idle" | "registering" | "ok" | "error">("idle");
+  const [isNative, setIsNative] = useState(false);
+
+  useEffect(() => {
+    import("@capacitor/core").then(({ Capacitor }) => {
+      setIsNative(Capacitor.isNativePlatform());
+    });
+  }, []);
+
+  if (!isNative) return null;
+
+  async function register() {
+    setStatus("registering");
+    try {
+      const { registerFcmToken } = await import("@/lib/push-notifications");
+      await registerFcmToken();
+      setStatus("ok");
+    } catch (e: any) {
+      console.error("[FCM] Manual register failed:", e);
+      setStatus("error");
+    }
+  }
+
+  return (
+    <button
+      onClick={() => void register()}
+      disabled={status === "registering"}
+      className={`w-full rounded-xl p-4 text-left transition border ${
+        status === "ok" ? "bg-green-900/40 border-green-700" :
+        status === "error" ? "bg-red-900/40 border-red-700" :
+        "bg-gray-800 border-transparent hover:bg-gray-700"
+      }`}
+    >
+      <div className="font-semibold text-sm">
+        {status === "registering" ? "Registering…" :
+         status === "ok" ? "✓ Push notifications active" :
+         status === "error" ? "Push setup failed — tap to retry" :
+         "Set up push notifications"}
+      </div>
+      <div className="mt-0.5 text-xs text-gray-400">
+        {status === "ok" ? "Your device is registered to receive alerts" :
+         "Tap to register this device for push alerts"}
+      </div>
+    </button>
   );
 }

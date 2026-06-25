@@ -46,18 +46,28 @@ export async function registerFcmToken(): Promise<void> {
   const { FirebaseMessaging } = await import("@capacitor-firebase/messaging");
 
   const { receive } = await FirebaseMessaging.requestPermissions();
-  if (receive !== "granted") return;
+  if (receive !== "granted") {
+    console.warn("[FCM] Permission not granted:", receive);
+    return;
+  }
 
   const { token } = await FirebaseMessaging.getToken();
-  if (!token) return;
+  if (!token) { console.warn("[FCM] No token returned"); return; }
+  console.log("[FCM] Token:", token);
 
   const userId = await getCurrentUserId();
-  if (!userId) return;
+  if (!userId) { console.warn("[FCM] No userId — user not authenticated yet"); return; }
 
-  await supabase.from("fcm_tokens").upsert(
+  const { error } = await supabase.from("fcm_tokens").upsert(
     { user_id: userId, token, platform },
     { onConflict: "user_id,platform" }
   );
+  if (error) console.error("[FCM] Save error:", error.message);
+  else console.log("[FCM] Token saved for user", userId);
+
+  // Don't re-add listeners on every call — guard with a flag
+  if ((globalThis as any).__fcmListenersAdded) return;
+  (globalThis as any).__fcmListenersAdded = true;
 
   await FirebaseMessaging.addListener("tokenReceived", async (event) => {
     const uid = await getCurrentUserId();
