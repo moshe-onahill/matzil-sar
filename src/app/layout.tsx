@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AuthGate from "@/components/AuthGate";
 import V1Gate from "@/components/V1Gate";
@@ -9,7 +9,10 @@ export const metadata: Metadata = {
   title: { default: "Matzil SAR", template: "%s · Matzil SAR" },
   description: "Matzil Search & Rescue Operations Platform",
   applicationName: "Matzil SAR",
-  themeColor: "#dc2626",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#E94E1B",
 };
 
 export default function RootLayout({
