@@ -30,11 +30,11 @@ export async function POST(req: Request) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean };
+  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean; location?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { user_id, title, body: msgBody, url, critical = false } = body;
+  const { user_id, title, body: msgBody, url, critical = false, location } = body;
   if (!user_id || !title) {
     return NextResponse.json({ error: "Missing user_id or title" }, { status: 400 });
   }
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
           const message: Message = {
             token: row.token,
             notification: { title, body: msgBody || "" },
-            data: { url: url || "/", critical: critical ? "true" : "false" },
+            data: { url: url || "/", critical: critical ? "true" : "false", ...(location ? { location } : {}) },
             ...(row.platform === "ios" ? {
               apns: {
                 headers: critical ? { "apns-priority": "10" } : { "apns-priority": "5" },
@@ -72,9 +72,12 @@ export async function POST(req: Request) {
               android: {
                 priority: "high" as const,
                 notification: {
+                  channelId: critical ? "matzil_critical" : "matzil_default",
                   sound: "default",
                   priority: critical ? "max" as const : "high" as const,
                   defaultSound: true,
+                  defaultVibrateTimings: true,
+                  notificationPriority: critical ? "PRIORITY_MAX" as const : "PRIORITY_HIGH" as const,
                 },
               },
             }),
@@ -131,7 +134,7 @@ export async function POST(req: Request) {
             body: new URLSearchParams({
               From: twilioFrom,
               To: e164,
-              Body: `⚠️ CRITICAL ALERT — Matzil SAR\n${title}${msgBody ? `\n${msgBody}` : ""}`,
+              Body: `⚠️ CRITICAL ALERT — Matzil SAR\n${title}${msgBody ? `\n${msgBody}` : ""}${location ? `\n📍 ${location}` : ""}`,
             }).toString(),
           }
         );

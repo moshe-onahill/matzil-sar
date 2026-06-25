@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { getCurrentTestEmail, getStoredRole } from "@/lib/dev-user";
 
@@ -452,6 +452,63 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 const TEAM_GROUPS = ["WATER", "WILDERNESS", "MRU", "SUPPORT"] as const;
 type TeamGroup = typeof TEAM_GROUPS[number];
 
+type NominatimResult = { display_name: string; place_id: number };
+
+function AddressSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [query, setQuery] = useState(value);
+  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleInput(v: string) {
+    setQuery(v);
+    onChange(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (v.length < 3) { setSuggestions([]); setOpen(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(v)}&limit=5&countrycodes=ca,us`,
+          { headers: { "Accept-Language": "en" } }
+        );
+        const data: NominatimResult[] = await res.json();
+        setSuggestions(data);
+        setOpen(data.length > 0);
+      } catch { /* ignore */ }
+    }, 350);
+  }
+
+  function pick(display: string) {
+    setQuery(display);
+    onChange(display);
+    setSuggestions([]);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={query}
+        onChange={(e) => handleInput(e.target.value)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Location (optional)"
+        className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600"
+      />
+      {open && (
+        <ul className="absolute z-50 mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
+          {suggestions.map((s) => (
+            <li key={s.place_id}
+              onMouseDown={() => pick(s.display_name)}
+              className="px-3 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800 last:border-0 leading-snug">
+              {s.display_name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; onRefresh: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -541,7 +598,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
         fetch("/api/send-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical" }),
+          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined }),
         }).catch(() => null)
       )
     );
@@ -574,8 +631,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
           className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
         <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Description (optional)" rows={2}
           className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600 resize-none" />
-        <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location (optional)"
-          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
+        <AddressSearch value={location} onChange={setLocation} />
 
         {/* Group selector */}
         <div className="space-y-2">
