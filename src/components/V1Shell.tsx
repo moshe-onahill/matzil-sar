@@ -403,8 +403,8 @@ function PushSetupRow() {
       );
       if (error) { setDetail("DB error: " + error.message); setStatus("error"); return; }
       const { data: saved } = await supabase.from("fcm_tokens").select("token").eq("user_id", user.id).maybeSingle();
-      if (!saved) { setDetail("Saved but verify failed — check Supabase fcm_tokens table"); setStatus("error"); return; }
-      setDetail(`Token saved ✓ (${token.slice(0, 12)}…)`);
+      if (!saved) { setDetail(`Saved but read-back failed. user_id=${user.id}`); setStatus("error"); return; }
+      setDetail(`Token saved ✓  uid=${user.id.slice(0, 8)}… token=${token.slice(0, 12)}…`);
       setStatus("ok");
     } catch (e: any) { setDetail(e?.message ?? String(e)); setStatus("error"); }
   }
