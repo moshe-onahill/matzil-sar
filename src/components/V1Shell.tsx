@@ -641,18 +641,24 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
     const { error: insertError } = await supabase.from("notification_logs").insert(rows);
     if (insertError) { setErrorMsg(`Send failed: ${insertError.message}`); setSending(false); return; }
 
-    await Promise.all(
+    const pushResults = await Promise.all(
       uniqueTargetIds.map((user_id: string) =>
         fetch("/api/send-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined }),
-        }).catch(() => null)
+        }).then(r => r.json()).catch((e) => ({ error: e?.message }))
       )
     );
+    const totalFcm = pushResults.reduce((s: number, r: any) => s + (r?.fcm ?? 0), 0);
+    const totalSms = pushResults.reduce((s: number, r: any) => s + (r?.sms ? 1 : 0), 0);
+    const pushErrors = pushResults.flatMap((r: any) => r?.errors ?? []);
+    const summary = [`Sent to ${uniqueTargetIds.length}`, totalFcm ? `${totalFcm} push` : "0 push", totalSms ? `${totalSms} SMS` : ""].filter(Boolean).join(", ");
+    if (pushErrors.length) console.warn("[send-push errors]", pushErrors);
 
     setSending(false);
     setSent(true);
+    setErrorMsg(summary);
     onRefresh();
     setTimeout(onClose, 1000);
   }
@@ -718,7 +724,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
         )}
 
         {errorMsg && (
-          <p className="rounded-lg bg-red-900/40 border border-red-700/50 px-3 py-2 text-sm text-red-300">{errorMsg}</p>
+          <p className={`rounded-lg border px-3 py-2 text-sm ${sent ? "bg-zinc-800 border-zinc-700 text-zinc-300" : "bg-red-900/40 border-red-700/50 text-red-300"}`}>{errorMsg}</p>
         )}
         <button onClick={() => void send()} disabled={sending || !title.trim() || sent}
           className="w-full rounded-xl bg-[#E94E1B] py-3 font-semibold text-white disabled:opacity-50 transition hover:bg-orange-600">
