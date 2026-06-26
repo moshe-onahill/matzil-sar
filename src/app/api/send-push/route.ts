@@ -30,11 +30,11 @@ export async function POST(req: Request) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean; location?: string };
+  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean; location?: string; sms?: boolean };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { user_id, title, body: msgBody, url, critical = false, location } = body;
+  const { user_id, title, body: msgBody, url, critical = false, location, sms: sendSms = false } = body;
   if (!user_id || !title) {
     return NextResponse.json({ error: "Missing user_id or title" }, { status: 400 });
   }
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
   }
 
   // --- Critical-only: Email + SMS ---
-  if (critical) {
+  if (sendSms) {
     // Get user contact info
     const { data: userRow } = await supabaseAdmin
       .from("users").select("email, phone").eq("id", user_id).single();
