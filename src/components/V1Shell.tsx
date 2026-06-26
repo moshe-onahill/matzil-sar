@@ -44,6 +44,25 @@ export default function V1Shell() {
 
   useEffect(() => { void init(); }, []);
 
+  useEffect(() => {
+    if (!profile?.id) return;
+    const uid = profile.id;
+    const channel = supabase
+      .channel("v1-notifs")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notification_logs", filter: `user_id=eq.${uid}` },
+        (payload) => {
+          const n = payload.new as Notif;
+          if (n.priority === "critical") setCriticalAlert(n);
+          void loadNotifications(uid);
+        }
+      )
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notification_logs", filter: `user_id=eq.${uid}` },
+        () => void loadNotifications(uid)
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id]);
+
   async function init() {
     const email = getCurrentTestEmail();
 
@@ -67,23 +86,6 @@ export default function V1Shell() {
       setProfile({ ...(user as any), teams });
       await loadNotifications((user as any).id);
 
-      supabase
-        .channel("v1-notifs")
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "notification_logs", filter: `user_id=eq.${(user as any).id}` },
-          (payload) => {
-            const n = payload.new as Notif;
-            if (n.priority === "critical") setCriticalAlert(n);
-            void loadNotifications((user as any).id);
-          }
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table: "notification_logs", filter: `user_id=eq.${(user as any).id}` },
-          () => void loadNotifications((user as any).id)
-        )
-        .subscribe();
     }
 
     setLoading(false);
@@ -734,13 +736,19 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
           <span className="text-sm font-medium text-zinc-300">Trigger SMS</span>
         </label>
 
-        {errorMsg && (
-          <p className={`rounded-lg border px-3 py-2 text-sm ${sent ? "bg-zinc-800 border-zinc-700 text-zinc-300" : "bg-red-900/40 border-red-700/50 text-red-300"}`}>{errorMsg}</p>
+        {!sent && errorMsg && (
+          <p className="rounded-lg border px-3 py-2 text-sm bg-red-900/40 border-red-700/50 text-red-300">{errorMsg}</p>
         )}
         <button onClick={() => void send()} disabled={sending || !title.trim() || sent}
           className="w-full rounded-xl bg-[#E94E1B] py-3 font-semibold text-white disabled:opacity-50 transition hover:bg-orange-600">
           {sent ? "Sent ✓" : sending ? "Sending…" : "Send"}
         </button>
+        {sent && errorMsg && (
+          <div className="rounded-xl border border-zinc-600 bg-zinc-800 px-4 py-3 text-sm text-zinc-200">
+            <div className="font-semibold text-green-400 mb-1">Notification sent</div>
+            <div className="text-zinc-400">{errorMsg}</div>
+          </div>
+        )}
       </div>
     </div>
   );
