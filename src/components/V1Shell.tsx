@@ -370,6 +370,53 @@ function NotifCard({
   );
 }
 
+function PushSetupRow() {
+  const [status, setStatus] = useState<"idle" | "busy" | "ok" | "error">("idle");
+  const [detail, setDetail] = useState("");
+  const [isNative, setIsNative] = useState(false);
+
+  useEffect(() => {
+    import("@capacitor/core").then(({ Capacitor }) => setIsNative(Capacitor.isNativePlatform()));
+  }, []);
+
+  if (!isNative) return null;
+
+  async function setup() {
+    setStatus("busy"); setDetail("");
+    try {
+      const { Capacitor } = await import("@capacitor/core");
+      const { FirebaseMessaging } = await import("@capacitor-firebase/messaging");
+      const perm = await FirebaseMessaging.requestPermissions();
+      if (perm.receive !== "granted") { setDetail("Permission: " + perm.receive); setStatus("error"); return; }
+      const { token } = await FirebaseMessaging.getToken();
+      if (!token) { setDetail("No token returned"); setStatus("error"); return; }
+      const { data: authData } = await supabase.auth.getUser();
+      const email = authData.user?.email;
+      if (!email) { setDetail("Not logged in"); setStatus("error"); return; }
+      const { data: user } = await supabase.from("users").select("id").ilike("email", email).maybeSingle();
+      if (!user?.id) { setDetail("User not found: " + email); setStatus("error"); return; }
+      const { error } = await supabase.from("fcm_tokens").upsert(
+        { user_id: user.id, token, platform: Capacitor.getPlatform() },
+        { onConflict: "user_id,platform" }
+      );
+      if (error) { setDetail("DB: " + error.message); setStatus("error"); return; }
+      setDetail("Token saved ✓");
+      setStatus("ok");
+    } catch (e: any) { setDetail(e?.message ?? String(e)); setStatus("error"); }
+  }
+
+  return (
+    <button onClick={() => void setup()} disabled={status === "busy"}
+      className={`w-full rounded-xl px-4 py-3 text-sm font-medium text-left transition ${
+        status === "ok" ? "bg-green-900/40 text-green-300" :
+        status === "error" ? "bg-red-900/40 text-red-300" :
+        "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"}`}>
+      {status === "busy" ? "Registering…" : status === "ok" ? "Push notifications active ✓" : "Set up push notifications"}
+      {detail && <div className="mt-0.5 text-xs opacity-70 break-all">{detail}</div>}
+    </button>
+  );
+}
+
 function AccountPanel({ profile, isAdmin, onClose }: { profile: Profile | null; isAdmin: boolean; onClose: () => void }) {
   const [resetSent, setResetSent] = useState(false);
 
@@ -418,6 +465,7 @@ function AccountPanel({ profile, isAdmin, onClose }: { profile: Profile | null; 
               </div>
             )}
             <div className="space-y-2 pt-2 border-t border-zinc-800">
+              <PushSetupRow />
               <button onClick={() => void resetPassword()} disabled={resetSent}
                 className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-700 transition text-left">
                 {resetSent ? "Reset email sent ✓" : "Reset Password"}
