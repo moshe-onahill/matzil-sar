@@ -685,6 +685,8 @@ function ProfileField({
 
 function PushSetupButton() {
   const [status, setStatus] = useState<"idle" | "registering" | "ok" | "error">("idle");
+  const [detail, setDetail] = useState("");
+  const [token, setToken] = useState("");
   const [isNative, setIsNative] = useState(false);
 
   useEffect(() => {
@@ -697,12 +699,40 @@ function PushSetupButton() {
 
   async function register() {
     setStatus("registering");
+    setDetail("");
+    setToken("");
     try {
-      const { registerFcmToken } = await import("@/lib/push-notifications");
-      await registerFcmToken();
+      const { Capacitor } = await import("@capacitor/core");
+      setDetail("Native: " + Capacitor.getPlatform());
+
+      const { FirebaseMessaging } = await import("@capacitor-firebase/messaging");
+      const perm = await FirebaseMessaging.requestPermissions();
+      setDetail("Permission: " + perm.receive);
+      if (perm.receive !== "granted") { setStatus("error"); return; }
+
+      const { token: t } = await FirebaseMessaging.getToken();
+      if (!t) { setDetail("No token returned"); setStatus("error"); return; }
+      setToken(t.slice(0, 20) + "…");
+
+      const { supabase } = await import("@/lib/supabase");
+      const { data: authData } = await supabase.auth.getUser();
+      const email = authData.user?.email;
+      setDetail("Email: " + (email ?? "none"));
+      if (!email) { setStatus("error"); return; }
+
+      const { data: user } = await supabase.from("users").select("id").ilike("email", email).maybeSingle();
+      if (!user?.id) { setDetail("User not found in DB for: " + email); setStatus("error"); return; }
+
+      const { error } = await supabase.from("fcm_tokens").upsert(
+        { user_id: user.id, token: t, platform: Capacitor.getPlatform() },
+        { onConflict: "user_id,platform" }
+      );
+      if (error) { setDetail("DB error: " + error.message); setStatus("error"); return; }
+
+      setDetail("Saved for user " + user.id.slice(0, 8) + "…");
       setStatus("ok");
     } catch (e: any) {
-      console.error("[FCM] Manual register failed:", e);
+      setDetail(e?.message ?? String(e));
       setStatus("error");
     }
   }
@@ -723,10 +753,11 @@ function PushSetupButton() {
          status === "error" ? "Push setup failed — tap to retry" :
          "Set up push notifications"}
       </div>
-      <div className="mt-0.5 text-xs text-gray-400">
-        {status === "ok" ? "Your device is registered to receive alerts" :
-         "Tap to register this device for push alerts"}
-      </div>
+      {detail && <div className="mt-1 text-xs text-gray-400 break-all">{detail}</div>}
+      {token && <div className="mt-0.5 text-xs text-gray-500">Token: {token}</div>}
+      {!detail && <div className="mt-0.5 text-xs text-gray-400">
+        {status === "ok" ? "Your device is registered to receive alerts" : "Tap to register this device for push alerts"}
+      </div>}
     </button>
   );
 }
