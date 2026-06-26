@@ -39,16 +39,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing user_id or title" }, { status: 400 });
   }
 
-  const results = { fcm: 0, vapid: 0, email: false, sms: false, errors: [] as string[] };
+  const results = { fcm: 0, vapid: 0, email: false, sms: false, errors: [] as string[], fcmConfigured: false, fcmTokensFound: 0 };
 
   // --- FCM (native iOS/Android) ---
-  const fcmConfigured = process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY;
+  const fcmConfigured = !!(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY);
+  results.fcmConfigured = fcmConfigured;
   if (fcmConfigured) {
     try {
       const messaging = getMessaging(getFirebaseApp());
       const { data: tokens } = await supabaseAdmin
         .from("fcm_tokens").select("token, platform").eq("user_id", user_id);
 
+      results.fcmTokensFound = tokens?.length ?? 0;
       if (tokens && tokens.length > 0) {
         await Promise.all(tokens.map(async (row: { token: string; platform: string }) => {
           const message: Message = {
