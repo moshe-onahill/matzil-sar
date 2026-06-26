@@ -664,7 +664,6 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
     setSent(true);
     setErrorMsg(summary);
     onRefresh();
-    setTimeout(onClose, 1000);
   }
 
   const filteredMembers = memberSearch.trim()
