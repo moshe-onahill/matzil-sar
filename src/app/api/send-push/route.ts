@@ -78,7 +78,7 @@ export async function POST(req: Request) {
               android: {
                 priority: "high" as const,
                 notification: {
-                  channelId: critical ? "matzil_critical" : "matzil_default",
+                  channelId: critical ? "matzil_critical_v2" : "matzil_default",
                   sound: "default",
                   priority: critical ? "max" as const : "high" as const,
                   defaultSound: true,

@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
-const CRITICAL_CHANNEL_ID = "matzil_critical";
+const CRITICAL_CHANNEL_ID = "matzil_critical_v2";
 const DEFAULT_CHANNEL_ID = "matzil_default";
 
 async function getCurrentUserId(): Promise<string | null> {
@@ -23,6 +23,7 @@ async function setupNotificationChannels() {
     visibility: 1,
     lights: true,
     lightColor: "#E94E1B",
+    bypassDnd: true,
   });
   await LocalNotifications.createChannel({
     id: DEFAULT_CHANNEL_ID,
