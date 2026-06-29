@@ -19,6 +19,7 @@
     "@capacitor/push-notifications": "^8.1.1",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.104.0",
+    "capacitor-native-settings": "^8.1.0",
     "firebase": "^12.14.0",
     "firebase-admin": "^14.0.0",
     "next": "16.2.4",
