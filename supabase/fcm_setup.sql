@@ -27,7 +27,7 @@ select cron.schedule(
   $$
   select net.http_post(
     url := 'https://xmfzxeeiifcsxfenzceu.supabase.co/functions/v1/send-notifications',
-    headers := '{"Authorization": "Bearer sb_publishable_h6qZq-Se17M4xfyTFmNEwA_kJ-2UQtO", "Content-Type": "application/json"}'::jsonb,
+    headers := '{"Authorization": "Bearer <YOUR_SUPABASE_ANON_KEY>", "Content-Type": "application/json"}'::jsonb,
     body := '{}'::jsonb
   );
   $$
