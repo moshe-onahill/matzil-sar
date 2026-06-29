@@ -2,25 +2,12 @@
 
 import { useEffect, useState } from "react";
 
-type Step = "notify" | "fullscreen" | "dnd" | "done";
+type Step = "notify" | "dnd" | "done";
 
 async function openChannelSettings() {
   const { Capacitor } = await import("@capacitor/core");
   if (!Capacitor.isNativePlatform()) return;
   await (Capacitor as any).Plugins.AlertSettings.openChannelSettings();
-}
-
-async function openFullScreenSettings() {
-  const { Capacitor } = await import("@capacitor/core");
-  if (!Capacitor.isNativePlatform()) return;
-  await (Capacitor as any).Plugins.AlertSettings.openFullScreenIntentSettings();
-}
-
-async function needsFullScreenPermission(): Promise<boolean> {
-  const { Capacitor } = await import("@capacitor/core");
-  if (!Capacitor.isNativePlatform()) return false;
-  const result = await (Capacitor as any).Plugins.AlertSettings.canUseFullScreenIntent();
-  return result?.allowed === false;
 }
 
 export default function PushPermission() {
@@ -35,10 +22,6 @@ export default function PushPermission() {
 
     const registered = localStorage.getItem("fcm-registered") === "1";
     if (!registered) { setStep("notify"); return; }
-
-    const fullscreenDone = localStorage.getItem("fcm-fullscreen-done") === "1";
-    if (!fullscreenDone && await needsFullScreenPermission()) { setStep("fullscreen"); return; }
-    localStorage.setItem("fcm-fullscreen-done", "1");
 
     const dndDone = localStorage.getItem("fcm-dnd-done") === "1";
     if (!dndDone) { setStep("dnd"); return; }
@@ -76,14 +59,6 @@ export default function PushPermission() {
       body: "Get critical SAR alerts even when the app is closed",
       action: busy ? "Setting up…" : "Enable",
       onAction: () => void enable(),
-    },
-    fullscreen: {
-      icon: "📲",
-      title: "Allow app to appear on screen",
-      body: "Opens the app automatically when a critical alert is sent",
-      action: "Open Settings",
-      onAction: async () => { await openFullScreenSettings(); localStorage.setItem("fcm-fullscreen-done", "1"); void computeStep(); },
-      onSkip: () => { localStorage.setItem("fcm-fullscreen-done", "1"); void computeStep(); },
     },
     dnd: {
       icon: "🚨",
