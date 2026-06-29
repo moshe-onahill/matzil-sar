@@ -7,19 +7,19 @@ type Step = "notify" | "fullscreen" | "dnd" | "done";
 async function openChannelSettings() {
   const { Capacitor } = await import("@capacitor/core");
   if (!Capacitor.isNativePlatform()) return;
-  await (Capacitor.Plugins as any).AlertSettings.openChannelSettings();
+  await (Capacitor as any).Plugins.AlertSettings.openChannelSettings();
 }
 
 async function openFullScreenSettings() {
   const { Capacitor } = await import("@capacitor/core");
   if (!Capacitor.isNativePlatform()) return;
-  await (Capacitor.Plugins as any).AlertSettings.openFullScreenIntentSettings();
+  await (Capacitor as any).Plugins.AlertSettings.openFullScreenIntentSettings();
 }
 
 async function needsFullScreenPermission(): Promise<boolean> {
   const { Capacitor } = await import("@capacitor/core");
   if (!Capacitor.isNativePlatform()) return false;
-  const result = await (Capacitor.Plugins as any).AlertSettings.canUseFullScreenIntent();
+  const result = await (Capacitor as any).Plugins.AlertSettings.canUseFullScreenIntent();
   return result?.allowed === false;
 }
 
