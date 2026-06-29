@@ -23,8 +23,7 @@ async function setupNotificationChannels() {
     visibility: 1,
     lights: true,
     lightColor: "#E94E1B",
-    bypassDnd: true,
-  });
+  } as any);
   await LocalNotifications.createChannel({
     id: DEFAULT_CHANNEL_ID,
     name: "Matzil Notifications",
