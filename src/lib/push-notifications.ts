@@ -62,8 +62,11 @@ export async function registerFcmToken(): Promise<void> {
     { user_id: userId, token, platform },
     { onConflict: "user_id,platform" }
   );
-  if (error) console.error("[FCM] Save error:", error.message);
-  else console.log("[FCM] Token saved for user", userId);
+  if (error) { console.error("[FCM] Save error:", error.message); }
+  else {
+    console.log("[FCM] Token saved for user", userId);
+    if (typeof localStorage !== "undefined") localStorage.setItem("fcm-registered", "1");
+  }
 
   // Don't re-add listeners on every call — guard with a flag
   if ((globalThis as any).__fcmListenersAdded) return;

@@ -64,9 +64,9 @@ export default function PushPermission() {
     try {
       const { registerFcmToken } = await import("@/lib/push-notifications");
       await registerFcmToken();
-      if (localStorage.getItem("fcm-registered") === "1") void computeStep();
     } catch { /* ignore */ }
     setBusy(false);
+    void computeStep();
   }
 
   const banners: Record<Step, { icon: string; title: string; body: string; action: string; onAction: () => void; onSkip?: () => void }> = {
