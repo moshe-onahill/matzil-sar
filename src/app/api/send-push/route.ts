@@ -47,9 +47,10 @@ export async function POST(req: Request) {
   if (fcmConfigured) {
     try {
       const messaging = getMessaging(getFirebaseApp());
-      const { data: tokens } = await supabaseAdmin
+      const { data: tokens, error: tokenErr } = await supabaseAdmin
         .from("fcm_tokens").select("token, platform").eq("user_id", user_id);
 
+      if (tokenErr) results.errors.push(`fcm_tokens query: ${tokenErr.message}`);
       results.fcmTokensFound = tokens?.length ?? 0;
       if (tokens && tokens.length > 0) {
         await Promise.all(tokens.map(async (row: { token: string; platform: string }) => {
