@@ -18,7 +18,7 @@ async function setupNotificationChannels() {
     name: "Critical Alerts",
     description: "High-priority SAR alerts that override Do Not Disturb",
     importance: 5,
-    sound: "default",
+    sound: "alert.wav",
     vibration: true,
     visibility: 1,
     lights: true,
@@ -93,7 +93,7 @@ export async function registerFcmToken(): Promise<void> {
             title: title ?? "Matzil SAR",
             body: body ?? "",
             channelId: isCritical ? CRITICAL_CHANNEL_ID : DEFAULT_CHANNEL_ID,
-            sound: "default",
+            sound: isCritical ? "alert.wav" : "default",
             extra: data,
           }],
         });
