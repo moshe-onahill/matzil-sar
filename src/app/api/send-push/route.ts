@@ -11,7 +11,10 @@ export const runtime = "nodejs";
 
 function getFirebaseApp() {
   if (getApps().length > 0) return getApp();
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY ?? "";
+  const privateKey = rawKey
+    .replace(/^["']|["']$/g, "")   // strip surrounding quotes
+    .replace(/\\n/g, "\n");         // convert \n sequences to real newlines
   return initializeApp({
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
