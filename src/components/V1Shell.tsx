@@ -32,6 +32,42 @@ type Notif = {
 
 const ADMIN_ROLES = ["Dispatcher", "SAR Manager", "Global Admin"];
 
+function PullToRefresh({ onRefresh }: { onRefresh: () => void }) {
+  const [pulling, setPulling] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const startY = useRef(0);
+  const THRESHOLD = 70;
+
+  function onTouchStart(e: React.TouchEvent) { startY.current = e.touches[0].clientY; }
+  function onTouchMove(e: React.TouchEvent) {
+    if (window.scrollY > 0) return;
+    const dy = e.touches[0].clientY - startY.current;
+    setPulling(dy > 20);
+  }
+  async function onTouchEnd(e: React.TouchEvent) {
+    const dy = e.changedTouches[0].clientY - startY.current;
+    setPulling(false);
+    if (dy >= THRESHOLD && window.scrollY === 0) {
+      setRefreshing(true);
+      onRefresh();
+      await new Promise(r => setTimeout(r, 800));
+      setRefreshing(false);
+    }
+  }
+
+  return (
+    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+      className="absolute inset-x-0 top-14 flex justify-center pointer-events-none z-10">
+      {(pulling || refreshing) && (
+        <div className={`mt-2 flex items-center gap-2 rounded-full bg-zinc-800 px-4 py-1.5 text-xs text-zinc-400 shadow-lg pointer-events-none transition-opacity ${refreshing ? "opacity-100" : "opacity-70"}`}>
+          <div className={`h-3.5 w-3.5 rounded-full border-2 border-zinc-600 border-t-[#E94E1B] ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Refreshing…" : "Release to refresh"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function V1Shell() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [notifications, setNotifications] = useState<Notif[]>([]);
@@ -136,7 +172,7 @@ export default function V1Shell() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-50">
+    <div className="relative min-h-screen bg-zinc-950 text-zinc-50">
       {/* Header */}
       <div className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-900 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
         <span className="text-lg font-bold">Matzil SAR</span>
@@ -163,6 +199,7 @@ export default function V1Shell() {
       </div>
 
       {/* Feed */}
+      <PullToRefresh onRefresh={() => profile?.id ? void loadNotifications(profile.id) : undefined} />
       <div className="mx-auto max-w-lg px-4 py-4 space-y-3 pb-8">
         {notifications.length === 0 ? (
           <div className="py-20 text-center text-sm text-zinc-500">No notifications yet.</div>

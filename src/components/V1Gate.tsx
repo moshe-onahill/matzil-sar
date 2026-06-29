@@ -42,5 +42,10 @@ export default function V1Gate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <V1Shell />;
+  return (
+    <>
+      <PushPermission />
+      <V1Shell />
+    </>
+  );
 }
