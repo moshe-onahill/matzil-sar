@@ -662,7 +662,6 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
     const fcmTokensFound = pushResults.reduce((s: number, r: any) => s + (r?.fcmTokensFound ?? 0), 0);
     const parts = [`${uniqueTargetIds.length} recipients`, fcmConfigured ? `FCM: ${totalFcm} sent (${fcmTokensFound} tokens)` : "FCM: not configured", totalSms ? `SMS: ${totalSms}` : "SMS: 0"];
     if (pushErrors.length) parts.push(`errors: ${[...new Set(pushErrors)].join("; ")}`);
-    parts.push(`ids: ${uniqueTargetIds.slice(0, 3).map((id: string) => id.slice(0, 8)).join(", ")}…`);
     const summary = parts.join(" · ");
 
     setSending(false);
