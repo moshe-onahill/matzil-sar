@@ -376,16 +376,17 @@ function PushSetupRow() {
   const [status, setStatus] = useState<"idle" | "busy" | "ok" | "error">("idle");
   const [detail, setDetail] = useState("");
   const [isNative, setIsNative] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   useEffect(() => {
     import("@capacitor/core").then(({ Capacitor }) => {
       if (!Capacitor.isNativePlatform()) return;
       setIsNative(true);
-      if (localStorage.getItem("fcm-registered") === "1") setStatus("ok");
+      if (localStorage.getItem("fcm-registered") === "1") setRegistered(true);
     });
   }, []);
 
-  if (!isNative || status === "ok") return null;
+  if (!isNative || registered) return null;
 
   async function setup() {
     setStatus("busy"); setDetail("");
@@ -411,6 +412,7 @@ function PushSetupRow() {
       localStorage.setItem("fcm-registered", "1");
       setDetail(`Token saved ✓  uid=${user.id.slice(0, 8)}… token=${token.slice(0, 12)}…`);
       setStatus("ok");
+      setTimeout(() => setRegistered(true), 1500);
     } catch (e: any) { setDetail(e?.message ?? String(e)); setStatus("error"); }
   }
 
