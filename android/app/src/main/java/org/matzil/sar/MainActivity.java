@@ -33,8 +33,8 @@ public class MainActivity extends BridgeActivity {
 
         @PluginMethod
         public void openFullScreenIntentSettings(PluginCall call) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14+
-                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENTS);
+            if (Build.VERSION.SDK_INT >= 34) { // Android 14+
+                Intent intent = new Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENTS");
                 intent.setData(Uri.parse("package:" + getContext().getPackageName()));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 getContext().startActivity(intent);
@@ -45,7 +45,7 @@ public class MainActivity extends BridgeActivity {
         @PluginMethod
         public void canUseFullScreenIntent(PluginCall call) {
             boolean allowed = true;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (Build.VERSION.SDK_INT >= 34) {
                 android.app.NotificationManager nm = (android.app.NotificationManager)
                     getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE);
                 allowed = nm.canUseFullScreenIntent();
