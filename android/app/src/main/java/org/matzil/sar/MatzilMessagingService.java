@@ -14,7 +14,7 @@ import io.capawesome.capacitorjs.plugins.firebase.messaging.MessagingService;
 
 public class MatzilMessagingService extends MessagingService {
 
-    static final String CHANNEL_ID = "matzil_critical_v2";
+    static final String CHANNEL_ID = "matzil_critical_v3";
     static final String PREFS = "matzil_prefs";
 
     @Override

@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
-const CRITICAL_CHANNEL_ID = "matzil_critical_v2";
+const CRITICAL_CHANNEL_ID = "matzil_critical_v3";
 const DEFAULT_CHANNEL_ID = "matzil_default";
 
 async function getCurrentUserId(): Promise<string | null> {
@@ -12,18 +12,9 @@ async function getCurrentUserId(): Promise<string | null> {
 }
 
 async function setupNotificationChannels() {
+  // Critical channel is created natively in MatzilMessagingService with USAGE_ALARM audio stream
+  // so it overrides silent/vibrate. Only create the default channel here.
   const { LocalNotifications } = await import("@capacitor/local-notifications");
-  await LocalNotifications.createChannel({
-    id: CRITICAL_CHANNEL_ID,
-    name: "Critical Alerts",
-    description: "High-priority SAR alerts that override Do Not Disturb",
-    importance: 5,
-    sound: "alert.mp3",
-    vibration: true,
-    visibility: 1,
-    lights: true,
-    lightColor: "#E94E1B",
-  } as any);
   await LocalNotifications.createChannel({
     id: DEFAULT_CHANNEL_ID,
     name: "Matzil Notifications",

@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 
 type StepId = "notify" | "silent" | "dnd" | "overlay";
 
-const STEPS: { id: StepId; icon: string; title: string; body: string; required: boolean }[] = [
-  { id: "notify",  icon: "🔔", title: "Enable Notifications",     body: "Receive critical SAR alerts even when the app is closed.",          required: true },
-  { id: "silent",  icon: "🔕", title: "Override Silent Mode",      body: "Alerts will sound even when your phone is silenced or vibrating.", required: false },
-  { id: "dnd",     icon: "🚫", title: "Do Not Disturb Exceptions", body: "Allow Matzil SAR to interrupt Do Not Disturb mode.",               required: false },
-  { id: "overlay", icon: "📲", title: "Appear on Top",             body: "The app can open over other apps when an alert is sent.",          required: false },
+const STEPS: { id: StepId; icon: string; title: string; body: string }[] = [
+  { id: "notify",  icon: "🔔", title: "Enable Notifications",     body: "Receive critical SAR alerts even when the app is closed." },
+  { id: "silent",  icon: "🔕", title: "Override Silent Mode",      body: "Alerts will sound even when your phone is silenced or vibrating." },
+  { id: "dnd",     icon: "🚫", title: "Do Not Disturb Exceptions", body: "Allow Matzil SAR to interrupt Do Not Disturb mode." },
+  { id: "overlay", icon: "📲", title: "Appear on Top",             body: "The app can open over other apps when an alert is sent." },
 ];
 
 const FLAGS: Record<StepId, string> = {
@@ -71,17 +71,11 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
     refresh();
   }
 
-  function skip(id: StepId) {
-    localStorage.setItem(FLAGS[id], "1");
-    refresh();
-  }
-
   function finish() {
     localStorage.setItem("setup-complete", "1");
     onComplete();
   }
 
-  const allRequired = STEPS.filter(s => s.required).every(s => done[s.id]);
   const allDone = STEPS.every(s => done[s.id]);
 
   return (
@@ -113,10 +107,7 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                   {isDone ? "✓" : step.icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-zinc-100">{step.title}</span>
-                    {!step.required && <span className="text-xs text-zinc-500">Optional</span>}
-                  </div>
+                  <div className="text-sm font-semibold text-zinc-100">{step.title}</div>
                   <div className="text-xs text-zinc-400 mt-0.5 leading-snug">{step.body}</div>
                   {isActive && (
                     <div className="flex gap-2 mt-3">
@@ -124,12 +115,6 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
                         className="rounded-lg bg-[#E94E1B] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition hover:bg-orange-600">
                         {isBusy ? "Opening…" : step.id === "notify" ? "Enable" : "Open Settings"}
                       </button>
-                      {!step.required && (
-                        <button onClick={() => skip(step.id)}
-                          className="rounded-lg bg-zinc-800 px-4 py-2 text-xs text-zinc-400 hover:bg-zinc-700 transition">
-                          Skip
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>
@@ -141,12 +126,12 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
 
       {/* Footer */}
       <div className="px-4 py-6 safe-area-bottom">
-        <button onClick={finish} disabled={!allRequired}
+        <button onClick={finish} disabled={!allDone}
           className="w-full rounded-2xl bg-[#E94E1B] py-4 text-base font-bold text-white disabled:opacity-40 transition hover:bg-orange-600">
-          {allDone ? "All Set — Enter App" : allRequired ? "Continue to App →" : "Enable notifications to continue"}
+          {allDone ? "All Set — Enter App →" : "Complete all steps to continue"}
         </button>
-        {!allRequired && (
-          <p className="text-center text-xs text-zinc-500 mt-3">Notifications are required to receive SAR alerts</p>
+        {!allDone && (
+          <p className="text-center text-xs text-zinc-500 mt-3">All steps are required to receive SAR alerts</p>
         )}
       </div>
     </div>
