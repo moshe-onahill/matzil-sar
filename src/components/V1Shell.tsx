@@ -345,16 +345,18 @@ function NotifCard({ notif, fmt, onClick }: {
           {notif.body}
         </p>
       )}
+      {notif.location && (
+        <p className={`text-xs leading-snug line-clamp-1 ${isActive ? "text-red-300/70" : "text-zinc-500"}`}>
+          📍 {notif.location}
+        </p>
+      )}
       <div className="flex items-center justify-between gap-2">
         {notif.sender_name && (
-          <p className={`text-xs ${isActive ? "text-red-300/60" : "text-zinc-600"}`}>
+          <p className={`text-xs truncate ${isActive ? "text-red-300/60" : "text-zinc-600"}`}>
             👤 {notif.sender_name}
           </p>
         )}
-        {notif.location && (
-          <p className={`text-xs ${isActive ? "text-red-300/60" : "text-zinc-600"}`}>📍</p>
-        )}
-        <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${
+        <span className={`ml-auto shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${
           isActive ? "bg-red-700/60 text-red-200" : "bg-zinc-700 text-zinc-500"
         }`}>
           {isActive ? "ACTIVE" : "CLOSED"}
