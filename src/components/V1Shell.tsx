@@ -198,7 +198,7 @@ export default function V1Shell() {
       const senderMap = new Map<string, { name: string | null; unit: string | null }>();
       for (const s of (senders ?? []) as any[]) {
         const units = (s.user_units ?? []).flatMap((uu: any) => { const u = uu.units; return Array.isArray(u) ? u.map((x: any) => x.name) : u?.name ? [u.name] : []; });
-        senderMap.set(s.id, { name: s.full_name ?? s.call_sign ?? null, unit: units[0] ?? null });
+        senderMap.set(s.id, { name: [s.full_name, s.call_sign].filter(Boolean).join(" ") || null, unit: units[0] ?? null });
       }
       for (const n of deduped) {
         if (n.sender_id && !n.sender_name && senderMap.has(n.sender_id)) {
@@ -298,7 +298,7 @@ export default function V1Shell() {
       {isAdmin && composeOpen && (
         <ComposeScreen
           senderId={profile?.id ?? null}
-          senderName={profile?.full_name ?? profile?.call_sign ?? null}
+          senderName={[profile?.full_name, profile?.call_sign].filter(Boolean).join(" ") || null}
           senderUnit={profile?.teams[0] ?? null}
           editingCall={editingCall}
           onClose={() => { setComposeOpen(false); setEditingCall(null); }}
@@ -334,8 +334,8 @@ function CriticalAlertPopup({ notif, onDismiss }: { notif: Notif; onDismiss: () 
         {notif.location && (
           <p className="text-sm opacity-80 mb-2 flex items-center gap-1.5"><span>📍</span><span>{notif.location}</span></p>
         )}
-        {(notif.sender_name || notif.sender_unit) && (
-          <p className="text-xs opacity-70 mb-4">Sent by: {[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}</p>
+        {notif.sender_name && (
+          <p className="text-xs opacity-70 mb-4">Sent by: {notif.sender_name}</p>
         )}
         <button onClick={onDismiss}
           className="w-full rounded-xl bg-white/25 hover:bg-white/35 active:bg-white/40 py-3 font-bold text-white transition">
@@ -411,8 +411,8 @@ function NotifCard({ notif, isActive, isAdmin, isGlobalAdmin, adminId, fmt, onDe
           </div>
         </div>
         {notif.body && <p className="text-sm text-zinc-300 leading-relaxed">{notif.body}</p>}
-        {(notif.sender_name || notif.sender_unit) && (
-          <p className="text-xs text-zinc-500">👤 {[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}</p>
+        {notif.sender_name && (
+          <p className="text-xs text-zinc-500">👤 {notif.sender_name}</p>
         )}
         {notif.location && (
           <button onClick={openMaps}
@@ -465,8 +465,8 @@ function NotifCard({ notif, isActive, isAdmin, isGlobalAdmin, adminId, fmt, onDe
           <span>📍</span><span>{notif.location}</span>
         </p>
       )}
-      {(notif.sender_name || notif.sender_unit) && (
-        <p className="text-xs text-zinc-600">👤 {[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}</p>
+      {notif.sender_name && (
+        <p className="text-xs text-zinc-600">👤 {notif.sender_name}</p>
       )}
     </div>
   );

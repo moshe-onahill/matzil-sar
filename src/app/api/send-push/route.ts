@@ -147,7 +147,7 @@ export async function POST(req: Request) {
                 title,
                 msgBody || "",
                 location ? `📍 ${location}` : "",
-                sender_name ? `Sent by: ${[sender_name, sender_unit].filter(Boolean).join(" · ")}` : "",
+                sender_name ? `Sent by: ${sender_name}` : "",
                 `Time: ${new Date().toLocaleString("en-CA", { timeZone: "America/Toronto", hour12: true })}`,
                 ``,
                 `Open app for full details.`,
