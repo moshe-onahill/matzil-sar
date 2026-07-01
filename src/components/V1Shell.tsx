@@ -26,6 +26,7 @@ type Notif = {
   body: string | null;
   location: string | null;
   priority: string | null;
+  status: string | null;
   created_at: string;
   sender_id: string | null;
   sender_name: string | null;
@@ -43,7 +44,6 @@ function PullToRefresh({ onRefresh }: { onRefresh: () => void }) {
   const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef(0);
-  const THRESHOLD = 70;
 
   function onTouchStart(e: React.TouchEvent) { startY.current = e.touches[0].clientY; }
   function onTouchMove(e: React.TouchEvent) {
@@ -53,7 +53,7 @@ function PullToRefresh({ onRefresh }: { onRefresh: () => void }) {
   async function onTouchEnd(e: React.TouchEvent) {
     const dy = e.changedTouches[0].clientY - startY.current;
     setPulling(false);
-    if (dy >= THRESHOLD && window.scrollY === 0) {
+    if (dy >= 70 && window.scrollY === 0) {
       setRefreshing(true);
       onRefresh();
       await new Promise(r => setTimeout(r, 800));
@@ -76,16 +76,14 @@ function PullToRefresh({ onRefresh }: { onRefresh: () => void }) {
 
 // ─── Header ─────────────────────────────────────────────────────────────────
 
-function AppHeader({ profile, onProfileClick }: { profile: Profile | null; onProfileClick: () => void }) {
+function AppHeader({ onProfileClick }: { onProfileClick: () => void }) {
   return (
     <div className="sticky top-0 z-20 flex items-center justify-between bg-black px-4 pt-12 pb-3 border-b border-zinc-900">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/matzil-words.avif" alt="Matzil Search & Rescue" className="h-9 object-contain" />
-      <button
-        onClick={onProfileClick}
+      <button onClick={onProfileClick}
         className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#E94E1B] text-[#E94E1B] transition active:opacity-60"
-        aria-label="Account"
-      >
+        aria-label="Account">
         <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
           <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
         </svg>
@@ -103,13 +101,14 @@ export default function V1Shell() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [editingCall, setEditingCall] = useState<Notif | null>(null);
+  const [selectedNotif, setSelectedNotif] = useState<Notif | null>(null);
   const [criticalAlert, setCriticalAlert] = useState<Notif | null>(null);
   const role = getStoredRole();
   const isAdmin = ADMIN_ROLES.includes(role);
 
   useEffect(() => { void init(); }, []);
 
-  // Show in-app popup when app opened from a background FCM notification
+  // Show in-app popup when opened from a background FCM notification
   useEffect(() => {
     async function checkPendingAlert() {
       const { Capacitor } = await import("@capacitor/core");
@@ -117,7 +116,7 @@ export default function V1Shell() {
       try {
         const result = await (Capacitor as any).Plugins.AlertSettings.getPendingAlert();
         if (result?.found) {
-          setCriticalAlert({ id: "pending", broadcast_id: null, title: result.title, body: result.body, location: result.location, priority: "critical", created_at: new Date().toISOString(), sender_id: null, sender_name: null, sender_unit: null });
+          setCriticalAlert({ id: "pending", broadcast_id: null, title: result.title, body: result.body, location: result.location, priority: "critical", status: "sent", created_at: new Date().toISOString(), sender_id: null, sender_name: null, sender_unit: null });
           await (Capacitor as any).Plugins.AlertSettings.clearPendingAlert();
         }
       } catch { /* ignore on web */ }
@@ -132,18 +131,19 @@ export default function V1Shell() {
     if (!profile?.id) return;
     const uid = profile.id;
     const filter = isAdmin ? undefined : `user_id=eq.${uid}`;
+    const opts = filter ? { filter } : {};
     const channel = supabase
       .channel("v1-notifs")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notification_logs", ...(filter ? { filter } : {}) },
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notification_logs", ...opts },
         (payload) => {
           const n = payload.new as Notif;
           if (n.priority === "critical") setCriticalAlert({ ...n, sender_name: null, sender_unit: null });
           void loadNotifications(uid, isAdmin);
-        }
-      )
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notification_logs", ...(filter ? { filter } : {}) },
-        () => void loadNotifications(uid, isAdmin)
-      )
+        })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notification_logs", ...opts },
+        () => void loadNotifications(uid, isAdmin))
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notification_logs", ...opts },
+        () => void loadNotifications(uid, isAdmin))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, isAdmin]);
@@ -174,7 +174,7 @@ export default function V1Shell() {
   async function loadNotifications(uid: string, adminLoad = false) {
     let query = supabase
       .from("notification_logs")
-      .select("id,broadcast_id,title,body,location,priority,created_at,sender_id,sender_name,sender_unit")
+      .select("id,broadcast_id,title,body,location,priority,status,created_at,sender_id,sender_name,sender_unit")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -189,7 +189,7 @@ export default function V1Shell() {
       if (!seen.has(key)) { seen.add(key); deduped.push({ ...n, sender_name: n.sender_name ?? null, sender_unit: n.sender_unit ?? null }); }
     }
 
-    // Enrich missing sender info from users table
+    // Enrich missing sender info
     const needsLookup = deduped.filter(n => n.sender_id && !n.sender_name);
     if (needsLookup.length > 0) {
       const { data: senders } = await supabase
@@ -215,14 +215,28 @@ export default function V1Shell() {
     return new Date(d).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
+  async function closeNotif(n: Notif) {
+    const filter = n.broadcast_id ? { broadcast_id: n.broadcast_id } : { id: n.id };
+    if (n.broadcast_id) {
+      await supabase.from("notification_logs").update({ status: "closed" }).eq("broadcast_id", n.broadcast_id);
+    } else {
+      await supabase.from("notification_logs").update({ status: "closed" }).eq("id", n.id);
+    }
+    setNotifications(prev => prev.map(x => {
+      const match = n.broadcast_id ? x.broadcast_id === n.broadcast_id : x.id === n.id;
+      return match ? { ...x, status: "closed" } : x;
+    }));
+    setSelectedNotif(prev => prev && (n.broadcast_id ? prev.broadcast_id === n.broadcast_id : prev.id === n.id) ? { ...prev, status: "closed" } : prev);
+  }
+
   async function deleteNotif(n: Notif) {
-    const res = await fetch("/api/delete-notification", {
+    await fetch("/api/delete-notification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(n.broadcast_id ? { broadcast_id: n.broadcast_id } : { id: n.id }),
     });
-    if (!res.ok) return;
     setNotifications(prev => prev.filter(x => n.broadcast_id ? x.broadcast_id !== n.broadcast_id : x.id !== n.id));
+    setSelectedNotif(null);
   }
 
   if (loading) {
@@ -233,11 +247,9 @@ export default function V1Shell() {
     );
   }
 
-  const activeCall = notifications[0] ?? null;
-
   return (
     <div className="relative min-h-screen bg-black text-zinc-50">
-      <AppHeader profile={profile} onProfileClick={() => setAccountOpen(true)} />
+      <AppHeader onProfileClick={() => setAccountOpen(true)} />
 
       <PullToRefresh onRefresh={() => profile?.id ? void loadNotifications(profile.id, isAdmin) : undefined} />
 
@@ -250,32 +262,41 @@ export default function V1Shell() {
             </span>
           </div>
         ) : (
-          notifications.map((n, i) => (
+          notifications.map(n => (
             <NotifCard
               key={n.id}
               notif={n}
-              isActive={i === 0}
-              isAdmin={isAdmin}
-              isGlobalAdmin={role === "Global Admin"}
-              adminId={profile?.id ?? null}
               fmt={fmt}
-              onDelete={() => void deleteNotif(n)}
-              onEdit={() => { setEditingCall(n); setComposeOpen(true); }}
-              onUpdate={(updated) => setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, ...updated } : x))}
+              onClick={() => setSelectedNotif(n)}
             />
           ))
         )}
       </div>
 
-      {/* Admin bottom action bar — SEND/NEW ALERT only */}
+      {/* Admin SEND ALERT */}
       {isAdmin && (
         <div className="fixed bottom-0 inset-x-0 px-4 pb-8 pt-3 bg-gradient-to-t from-black via-black/90 to-transparent z-10">
           <button
             onClick={() => { setEditingCall(null); setComposeOpen(true); }}
             className="w-full rounded-full bg-red-600 py-5 text-xl font-black text-black transition active:bg-red-500">
-            {activeCall ? "NEW ALERT" : "SEND ALERT"}
+            SEND ALERT
           </button>
         </div>
+      )}
+
+      {/* Card detail sheet */}
+      {selectedNotif && (
+        <CardDetailSheet
+          notif={selectedNotif}
+          isAdmin={isAdmin}
+          isGlobalAdmin={role === "Global Admin"}
+          adminId={profile?.id ?? null}
+          fmt={fmt}
+          onClose={() => setSelectedNotif(null)}
+          onEdit={() => { setEditingCall(selectedNotif); setSelectedNotif(null); setComposeOpen(true); }}
+          onCloseCall={() => void closeNotif(selectedNotif)}
+          onDelete={() => void deleteNotif(selectedNotif)}
+        />
       )}
 
       {/* Overlays */}
@@ -299,6 +320,162 @@ export default function V1Shell() {
   );
 }
 
+// ─── Notification card (tap to open) ────────────────────────────────────────
+
+function NotifCard({ notif, fmt, onClick }: {
+  notif: Notif;
+  fmt: (d: string) => string;
+  onClick: () => void;
+}) {
+  const isActive = notif.status !== "closed";
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left rounded-2xl p-4 space-y-1.5 transition active:opacity-80 ${
+        isActive
+          ? "bg-red-900/70 border border-red-700/50"
+          : "bg-zinc-800 border border-zinc-700"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className={`font-bold text-sm leading-snug flex-1 min-w-0 ${isActive ? "text-white" : "text-zinc-400"}`}>
+          {notif.title}
+        </span>
+        <span className={`text-xs shrink-0 ${isActive ? "text-red-300/70" : "text-zinc-600"}`}>
+          {fmt(notif.created_at)}
+        </span>
+      </div>
+      {notif.body && (
+        <p className={`text-xs leading-relaxed line-clamp-2 ${isActive ? "text-red-200/80" : "text-zinc-500"}`}>
+          {notif.body}
+        </p>
+      )}
+      <div className="flex items-center justify-between gap-2">
+        {notif.sender_name && (
+          <p className={`text-xs ${isActive ? "text-red-300/60" : "text-zinc-600"}`}>
+            👤 {notif.sender_name}
+          </p>
+        )}
+        {notif.location && (
+          <p className={`text-xs ${isActive ? "text-red-300/60" : "text-zinc-600"}`}>📍</p>
+        )}
+        <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${
+          isActive ? "bg-red-700/60 text-red-200" : "bg-zinc-700 text-zinc-500"
+        }`}>
+          {isActive ? "ACTIVE" : "CLOSED"}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+// ─── Card detail sheet ───────────────────────────────────────────────────────
+
+function CardDetailSheet({ notif, isAdmin, isGlobalAdmin, adminId, fmt, onClose, onEdit, onCloseCall, onDelete }: {
+  notif: Notif;
+  isAdmin: boolean;
+  isGlobalAdmin: boolean;
+  adminId: string | null;
+  fmt: (d: string) => string;
+  onClose: () => void;
+  onEdit: () => void;
+  onCloseCall: () => void;
+  onDelete: () => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isActive = notif.status !== "closed";
+  const canEdit = isAdmin && notif.sender_id === adminId;
+  const canClose = isAdmin && isActive;
+  const canDelete = isGlobalAdmin;
+
+  function openMaps() {
+    if (!notif.location) return;
+    const url = notif.location.startsWith("http")
+      ? notif.location
+      : `https://maps.google.com/?q=${encodeURIComponent(notif.location)}`;
+    window.open(url, "_blank");
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg rounded-t-3xl bg-zinc-900 p-6 space-y-4 shadow-2xl max-h-[85vh] overflow-y-auto">
+        {/* Drag handle */}
+        <div className="flex justify-center -mt-2 mb-1">
+          <div className="h-1 w-10 rounded-full bg-zinc-700" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <span className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full mb-2 ${
+              isActive ? "bg-red-700/60 text-red-200" : "bg-zinc-700 text-zinc-400"
+            }`}>
+              {isActive ? "ACTIVE" : "CLOSED"}
+            </span>
+            <h2 className="text-lg font-bold text-white leading-snug">{notif.title}</h2>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-2xl leading-none shrink-0">✕</button>
+        </div>
+
+        {/* Body */}
+        {notif.body && <p className="text-sm text-zinc-300 leading-relaxed">{notif.body}</p>}
+
+        {/* Meta */}
+        <div className="space-y-1.5 text-sm text-zinc-500">
+          <p>🕐 {fmt(notif.created_at)}</p>
+          {notif.sender_name && <p>👤 {notif.sender_name}</p>}
+        </div>
+
+        {/* Open Maps */}
+        {notif.location && (
+          <button onClick={openMaps}
+            className="w-full rounded-full bg-zinc-700 py-3.5 text-sm font-bold text-zinc-200 transition active:bg-zinc-600">
+            📍 Open Maps
+          </button>
+        )}
+
+        {/* Admin actions */}
+        {(canEdit || canClose || canDelete) && (
+          <div className="space-y-2 pt-1 border-t border-zinc-800">
+            {canEdit && (
+              <button onClick={onEdit}
+                className="w-full rounded-full bg-zinc-700 py-3.5 text-sm font-bold text-zinc-200 transition active:bg-zinc-600">
+                EDIT CALL
+              </button>
+            )}
+            {canClose && (
+              <button onClick={() => { onCloseCall(); }}
+                className="w-full rounded-full bg-green-600 py-3.5 text-sm font-black text-black transition active:bg-green-500">
+                CLOSE CALL
+              </button>
+            )}
+            {canDelete && (
+              confirmDelete ? (
+                <div className="flex gap-2">
+                  <button onClick={() => { onDelete(); setConfirmDelete(false); }}
+                    className="flex-1 rounded-full bg-red-600 py-3 text-sm font-bold text-white transition active:bg-red-500">
+                    CONFIRM DELETE
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)}
+                    className="rounded-full bg-zinc-700 px-5 py-3 text-sm text-zinc-400 transition active:bg-zinc-600">
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)}
+                  className="w-full rounded-full bg-zinc-800 py-3 text-sm font-semibold text-red-500 transition active:bg-zinc-700">
+                  Delete
+                </button>
+              )
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Critical alert popup ────────────────────────────────────────────────────
 
 function CriticalAlertPopup({ notif, onDismiss }: { notif: Notif; onDismiss: () => void }) {
@@ -317,142 +494,13 @@ function CriticalAlertPopup({ notif, onDismiss }: { notif: Notif; onDismiss: () 
           </div>
         </div>
         {notif.body && <p className="text-sm opacity-90 mb-3 leading-relaxed">{notif.body}</p>}
-        {notif.location && (
-          <p className="text-sm opacity-80 mb-2 flex items-center gap-1.5"><span>📍</span><span>{notif.location}</span></p>
-        )}
-        {notif.sender_name && (
-          <p className="text-xs opacity-70 mb-4">Sent by: {notif.sender_name}</p>
-        )}
+        {notif.location && <p className="text-sm opacity-80 mb-2 flex items-center gap-1.5"><span>📍</span><span>{notif.location}</span></p>}
+        {notif.sender_name && <p className="text-xs opacity-70 mb-4">Sent by: {notif.sender_name}</p>}
         <button onClick={onDismiss}
           className="w-full rounded-xl bg-white/25 hover:bg-white/35 active:bg-white/40 py-3 font-bold text-white transition">
           Acknowledge
         </button>
       </div>
-    </div>
-  );
-}
-
-// ─── Notification card ───────────────────────────────────────────────────────
-
-function NotifCard({ notif, isActive, isAdmin, isGlobalAdmin, adminId, fmt, onDelete, onEdit, onUpdate }: {
-  notif: Notif;
-  isActive: boolean;
-  isAdmin: boolean;
-  isGlobalAdmin: boolean;
-  adminId: string | null;
-  fmt: (d: string) => string;
-  onDelete: () => void;
-  onEdit: () => void;
-  onUpdate: (patch: Partial<Notif>) => void;
-}) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const canEdit = isAdmin && notif.sender_id === adminId;
-  const canDelete = canEdit || isGlobalAdmin;
-
-  function openMaps() {
-    if (!notif.location) return;
-    const url = notif.location.startsWith("http")
-      ? notif.location
-      : `https://maps.google.com/?q=${encodeURIComponent(notif.location)}`;
-    window.open(url, "_blank");
-  }
-
-  // Active call — large prominent card with EDIT CALL / CLOSE CALL buttons
-  if (isActive) {
-    return (
-      <div className="rounded-3xl bg-zinc-700 p-5 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-xs text-zinc-400 font-medium">Call Message</p>
-          <span className="text-xs text-zinc-500">{fmt(notif.created_at)}</span>
-        </div>
-        <p className="text-base font-bold text-white leading-snug">{notif.title}</p>
-        {notif.body && <p className="text-sm text-zinc-300 leading-relaxed">{notif.body}</p>}
-        {notif.sender_name && (
-          <p className="text-xs text-zinc-500">👤 {notif.sender_name}</p>
-        )}
-        {notif.location && (
-          <button onClick={openMaps}
-            className="w-full rounded-full bg-zinc-600 py-3 text-sm font-bold text-black transition active:bg-zinc-500">
-            Open Maps
-          </button>
-        )}
-        {/* Admin actions — visible on the card itself */}
-        {(canEdit || canDelete) && (
-          <div className="flex gap-2 pt-1">
-            {canEdit && (
-              <button onClick={onEdit}
-                className="flex-1 rounded-full bg-zinc-600 py-2.5 text-xs font-bold text-zinc-300 transition active:bg-zinc-500">
-                EDIT CALL
-              </button>
-            )}
-            {canDelete && (
-              confirmDelete ? (
-                <>
-                  <button onClick={() => { onDelete(); setConfirmDelete(false); }}
-                    className="flex-1 rounded-full bg-red-600 py-2.5 text-xs font-bold text-white transition active:bg-red-500">
-                    CONFIRM CLOSE
-                  </button>
-                  <button onClick={() => setConfirmDelete(false)}
-                    className="rounded-full bg-zinc-600 px-4 py-2.5 text-xs text-zinc-400 transition active:bg-zinc-500">
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => setConfirmDelete(true)}
-                  className="flex-1 rounded-full bg-green-600 py-2.5 text-xs font-bold text-black transition active:bg-green-500">
-                  CLOSE CALL
-                </button>
-              )
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // History card — compact
-  return (
-    <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4 space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <span className="font-semibold text-sm text-zinc-200 leading-snug flex-1 min-w-0">{notif.title}</span>
-        <span className="text-xs text-zinc-600 shrink-0">{fmt(notif.created_at)}</span>
-      </div>
-      {notif.body && <p className="text-xs text-zinc-500 leading-relaxed">{notif.body}</p>}
-      {notif.location && (
-        <p className="text-xs text-zinc-600 flex items-center gap-1 cursor-pointer hover:text-zinc-400"
-          onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(notif.location!)}`, "_blank")}>
-          <span>📍</span><span>{notif.location}</span>
-        </p>
-      )}
-      {notif.sender_name && (
-        <p className="text-xs text-zinc-600">👤 {notif.sender_name}</p>
-      )}
-      {(canEdit || canDelete) && (
-        <div className="flex gap-2 pt-1">
-          {canEdit && (
-            <button onClick={onEdit}
-              className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs font-bold text-zinc-400 transition active:bg-zinc-700">
-              EDIT
-            </button>
-          )}
-          {canDelete && (
-            confirmDelete ? (
-              <>
-                <button onClick={() => { onDelete(); setConfirmDelete(false); }}
-                  className="rounded-full bg-red-700 px-4 py-1.5 text-xs font-bold text-white transition">CONFIRM</button>
-                <button onClick={() => setConfirmDelete(false)}
-                  className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs text-zinc-500 transition">Cancel</button>
-              </>
-            ) : (
-              <button onClick={() => setConfirmDelete(true)}
-                className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs font-bold text-green-500 transition active:bg-zinc-700">
-                CLOSE
-              </button>
-            )
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -623,27 +671,16 @@ function AddressSearch({ value, onChange, placeholder }: { value: string; onChan
     }, 350);
   }
 
-  function pick(display: string) {
-    setQuery(display);
-    onChange(display);
-    setSuggestions([]);
-    setOpen(false);
-  }
-
   return (
     <div className="relative">
-      <input
-        value={query}
-        onChange={(e) => handleInput(e.target.value)}
+      <input value={query} onChange={e => handleInput(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder ?? "Staging Link / Location (optional)"}
-        className="w-full rounded-full bg-zinc-600 px-6 py-4 text-base text-black placeholder-zinc-800 outline-none"
-      />
+        className="w-full rounded-full bg-zinc-600 px-6 py-4 text-base text-black placeholder-zinc-800 outline-none" />
       {open && (
         <ul className="absolute z-50 mt-1 w-full rounded-2xl border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
-          {suggestions.map((s) => (
-            <li key={s.place_id}
-              onMouseDown={() => pick(s.display_name)}
+          {suggestions.map(s => (
+            <li key={s.place_id} onMouseDown={() => { setQuery(s.display_name); onChange(s.display_name); setOpen(false); }}
               className="px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800 last:border-0 leading-snug">
               {s.display_name}
             </li>
@@ -692,17 +729,11 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
     } else {
       setUseCustom(false);
       setSelectedGroups(prev => {
-        const next = new Set(prev);
-        next.delete("ALL");
+        const next = new Set(prev); next.delete("ALL");
         next.has(g) ? next.delete(g) : next.add(g);
         return next;
       });
     }
-  }
-
-  function toggleCustom() {
-    setUseCustom(v => !v);
-    if (!useCustom) setSelectedGroups(new Set());
   }
 
   async function getTargetIds(): Promise<string[]> {
@@ -726,17 +757,16 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
     if (useCustom && customIds.size === 0) { setErrorMsg("Select at least one member."); return; }
     setSending(true); setErrorMsg(""); setDiagnostic("");
 
-    const targetIds = await getTargetIds();
-    const uniqueIds = [...new Set(targetIds)];
+    const uniqueIds = [...new Set(await getTargetIds())];
     if (uniqueIds.length === 0) { setErrorMsg("No recipients found."); setSending(false); return; }
 
-    // If editing, close old call first
+    // Close old call if editing
     if (editingCall) {
-      await fetch("/api/delete-notification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editingCall.broadcast_id ? { broadcast_id: editingCall.broadcast_id } : { id: editingCall.id }),
-      });
+      if (editingCall.broadcast_id) {
+        await supabase.from("notification_logs").update({ status: "closed" }).eq("broadcast_id", editingCall.broadcast_id);
+      } else {
+        await supabase.from("notification_logs").update({ status: "closed" }).eq("id", editingCall.id);
+      }
     }
 
     const broadcast_id = crypto.randomUUID();
@@ -772,7 +802,6 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
     const parts = [`${uniqueIds.length} recipients`, fcmConfigured ? `FCM: ${totalFcm} sent (${fcmTokensFound} tokens)` : "FCM: not configured", `SMS: ${totalSms}`];
     if (pushErrors.length) parts.push(`errors: ${[...new Set(pushErrors)].join("; ")}`);
     setDiagnostic(parts.join(" · "));
-
     setSending(false);
     setSent(true);
     onSent();
@@ -785,7 +814,6 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black overflow-y-auto">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 pt-12 pb-3 border-b border-zinc-900 shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/matzil-words.avif" alt="Matzil Search & Rescue" className="h-9 object-contain" />
@@ -795,14 +823,11 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
       <div className="flex-1 px-5 pt-4 pb-10 space-y-4">
         {/* Alert Group dropdown */}
         <div className="relative">
-          <button
-            onClick={() => setGroupOpen(v => !v)}
-            className={`w-full flex items-center justify-between rounded-full px-6 py-4 text-base font-bold text-black transition ${groupOpen || useCustom ? "bg-[#E94E1B]" : "bg-zinc-600"}`}
-          >
+          <button onClick={() => setGroupOpen(v => !v)}
+            className={`w-full flex items-center justify-between rounded-full px-6 py-4 text-base font-bold text-black transition ${groupOpen || useCustom ? "bg-[#E94E1B]" : "bg-zinc-600"}`}>
             <span>{groupLabel}</span>
             <span>{groupOpen ? "∧" : "∨"}</span>
           </button>
-
           {groupOpen && (
             <div className="absolute left-0 right-0 top-full z-50 rounded-2xl bg-zinc-600 overflow-hidden shadow-xl mt-1">
               {ALL_GROUPS.map((g, i) => (
@@ -814,9 +839,8 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
                   </span>
                 </button>
               ))}
-              {/* Custom group */}
-              <button onClick={() => { toggleCustom(); setGroupOpen(false); }}
-                className={`flex w-full items-center justify-between px-6 py-3.5 text-sm font-bold text-black transition hover:bg-zinc-500 border-t border-zinc-500`}>
+              <button onClick={() => { setUseCustom(v => !v); setSelectedGroups(new Set()); setGroupOpen(false); }}
+                className="flex w-full items-center justify-between px-6 py-3.5 text-sm font-bold text-black transition hover:bg-zinc-500 border-t border-zinc-500">
                 <span>CUSTOM</span>
                 <span className={`h-5 w-5 rounded-sm border-2 flex items-center justify-center transition ${useCustom ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-400 bg-transparent"}`}>
                   {useCustom && <svg viewBox="0 0 10 8" className="w-3 h-3 fill-none stroke-white stroke-2"><polyline points="1,4 4,7 9,1" /></svg>}
@@ -829,7 +853,7 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
         {/* Custom member picker */}
         {useCustom && (
           <div className="space-y-2">
-            <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} placeholder="Search members…"
+            <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Search members…"
               className="w-full rounded-full bg-zinc-600 px-6 py-3 text-sm text-black placeholder-zinc-800 outline-none" />
             <div className="max-h-44 overflow-y-auto rounded-2xl border border-zinc-800 divide-y divide-zinc-800 bg-zinc-900">
               {filteredMembers.map(m => (
@@ -845,19 +869,15 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
           </div>
         )}
 
-        {/* Title */}
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Alert Title *"
           className="w-full rounded-full bg-zinc-600 px-6 py-4 text-base text-black placeholder-zinc-800 outline-none" />
 
-        {/* Message textarea */}
         <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Type Message (optional details)"
           rows={5}
           className="w-full rounded-3xl bg-zinc-600 px-5 py-4 text-base text-black placeholder-zinc-800 outline-none resize-none" />
 
-        {/* Staging / Location */}
         <AddressSearch value={location} onChange={setLocation} placeholder="Staging Link / Location (optional)" />
 
-        {/* SMS toggle */}
         <label className="flex items-center gap-3 cursor-pointer select-none px-1">
           <div onClick={() => setTriggerSms(v => !v)}
             className={`w-5 h-5 rounded flex items-center justify-center border-2 transition ${triggerSms ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-600 bg-transparent"}`}>
@@ -868,13 +888,11 @@ function ComposeScreen({ senderId, senderName, senderUnit, editingCall, onClose,
 
         {errorMsg && <p className="rounded-2xl border border-red-700/50 bg-red-900/40 px-4 py-3 text-sm text-red-300">{errorMsg}</p>}
 
-        {/* Send button */}
         <button onClick={() => void send()} disabled={sending || !title.trim() || sent}
           className="w-full rounded-full bg-red-600 py-5 text-xl font-black text-black transition active:bg-red-500 disabled:opacity-50">
           {sent ? "SENT ✓" : sending ? "SENDING…" : "SEND ALERT"}
         </button>
 
-        {/* Diagnostic */}
         {diagnostic && (
           <div className="rounded-2xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-400">
             <div className="font-semibold text-green-400 mb-1">Notification sent</div>
