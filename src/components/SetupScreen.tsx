@@ -2,20 +2,22 @@
 
 import { useEffect, useState } from "react";
 
-type StepId = "notify" | "silent" | "dnd" | "overlay";
+type StepId = "notify" | "silent" | "dnd" | "overlay" | "fullscreen";
 
 const STEPS: { id: StepId; icon: string; title: string; body: string }[] = [
-  { id: "notify",  icon: "🔔", title: "Enable Notifications",     body: "Receive critical SAR alerts even when the app is closed." },
-  { id: "silent",  icon: "🔕", title: "Override Silent Mode",      body: "Alerts will sound even when your phone is silenced or vibrating." },
-  { id: "dnd",     icon: "🚫", title: "Do Not Disturb Exceptions", body: "Allow Matzil SAR to interrupt Do Not Disturb mode." },
-  { id: "overlay", icon: "📲", title: "Appear on Top",             body: "The app can open over other apps when an alert is sent." },
+  { id: "notify",     icon: "🔔", title: "Enable Notifications",       body: "Receive critical SAR alerts even when the app is closed." },
+  { id: "silent",     icon: "🔕", title: "Override Silent Mode",        body: "Alerts will sound even when your phone is silenced or vibrating." },
+  { id: "dnd",        icon: "🚫", title: "Do Not Disturb Exceptions",   body: "Allow Matzil SAR to interrupt Do Not Disturb mode." },
+  { id: "overlay",    icon: "📲", title: "Appear on Top",               body: "The app can display over other apps when an alert is sent." },
+  { id: "fullscreen", icon: "🚨", title: "Full-Screen Notifications",   body: "Opens the app automatically on your screen when a critical alert is sent." },
 ];
 
 const FLAGS: Record<StepId, string> = {
-  notify:  "fcm-registered",
-  silent:  "fcm-silent-done",
-  dnd:     "fcm-dnd-done",
-  overlay: "fcm-overlay-done",
+  notify:     "fcm-registered",
+  silent:     "fcm-silent-done",
+  dnd:        "fcm-dnd-done",
+  overlay:    "fcm-overlay-done",
+  fullscreen: "fcm-fullscreen-done",
 };
 
 async function alertPlugin() {
@@ -24,7 +26,7 @@ async function alertPlugin() {
 }
 
 export default function SetupScreen({ onComplete }: { onComplete: () => void }) {
-  const [done, setDone] = useState<Record<StepId, boolean>>({ notify: false, silent: false, dnd: false, overlay: false });
+  const [done, setDone] = useState<Record<StepId, boolean>>({ notify: false, silent: false, dnd: false, overlay: false, fullscreen: false });
   const [busy, setBusy] = useState<StepId | null>(null);
   const [activeStep, setActiveStep] = useState<StepId>("notify");
 
@@ -46,6 +48,16 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
 
   // Auto-advance active step to first incomplete one
   useEffect(() => {
+    // Auto-mark fullscreen done on Android < 14 (permission not needed)
+    async function checkFullscreen() {
+      try {
+        const p = await alertPlugin();
+        const result = await p.checkFullScreenPermission();
+        if (result?.granted) localStorage.setItem(FLAGS.fullscreen, "1");
+      } catch { localStorage.setItem(FLAGS.fullscreen, "1"); }
+      refresh();
+    }
+    void checkFullscreen();
     const first = STEPS.find(s => !done[s.id]);
     if (first) setActiveStep(first.id);
   }, [done]);
@@ -65,6 +77,9 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
       } else if (id === "overlay") {
         await (await alertPlugin()).openOverlaySettings();
         localStorage.setItem(FLAGS.overlay, "1");
+      } else if (id === "fullscreen") {
+        await (await alertPlugin()).openFullScreenSettings();
+        localStorage.setItem(FLAGS.fullscreen, "1");
       }
     } catch { /* ignore */ }
     setBusy(null);

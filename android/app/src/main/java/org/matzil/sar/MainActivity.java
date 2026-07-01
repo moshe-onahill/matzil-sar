@@ -1,9 +1,11 @@
 package org.matzil.sar;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.Settings;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.JSObject;
@@ -54,6 +56,39 @@ public class MainActivity extends BridgeActivity {
         public void checkOverlayPermission(PluginCall call) {
             JSObject ret = new JSObject();
             ret.put("granted", Settings.canDrawOverlays(getContext()));
+            call.resolve(ret);
+        }
+
+        @PluginMethod
+        public void openFullScreenSettings(PluginCall call) {
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    Intent i = new Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENTS");
+                    i.setData(Uri.parse("package:" + getContext().getPackageName()));
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(i);
+                } catch (Exception e) {
+                    // Fallback to app notification settings
+                    Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                    i.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(i);
+                }
+            }
+            call.resolve();
+        }
+
+        @PluginMethod
+        public void checkFullScreenPermission(PluginCall call) {
+            JSObject ret = new JSObject();
+            boolean granted = true;
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+                    granted = nm.canUseFullScreenIntent();
+                } catch (Exception e) { granted = true; }
+            }
+            ret.put("granted", granted);
             call.resolve(ret);
         }
 
