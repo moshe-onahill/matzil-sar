@@ -222,12 +222,11 @@ export default function V1Shell() {
   }
 
   async function closeNotif(n: Notif) {
-    const filter = n.broadcast_id ? { broadcast_id: n.broadcast_id } : { id: n.id };
-    if (n.broadcast_id) {
-      await supabase.from("notification_logs").update({ status: "closed" }).eq("broadcast_id", n.broadcast_id);
-    } else {
-      await supabase.from("notification_logs").update({ status: "closed" }).eq("id", n.id);
-    }
+    await fetch("/api/close-notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(n.broadcast_id ? { broadcast_id: n.broadcast_id } : { id: n.id }),
+    });
     setNotifications(prev => prev.map(x => {
       const match = n.broadcast_id ? x.broadcast_id === n.broadcast_id : x.id === n.id;
       return match ? { ...x, status: "closed" } : x;
