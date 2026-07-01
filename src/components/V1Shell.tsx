@@ -28,6 +28,8 @@ type Notif = {
   priority: string | null;
   created_at: string;
   sender_id: string | null;
+  sender_name: string | null;
+  sender_unit: string | null;
 };
 
 const ADMIN_ROLES = ["Dispatcher", "SAR Manager", "Global Admin"];
@@ -88,7 +90,7 @@ export default function V1Shell() {
       try {
         const result = await (Capacitor as any).Plugins.AlertSettings.getPendingAlert();
         if (result?.found) {
-          setCriticalAlert({ id: "pending", broadcast_id: null, title: result.title, body: result.body, location: result.location, priority: "critical", created_at: new Date().toISOString(), sender_id: null });
+          setCriticalAlert({ id: "pending", broadcast_id: null, title: result.title, body: result.body, location: result.location, priority: "critical", created_at: new Date().toISOString(), sender_id: null, sender_name: null, sender_unit: null });
           await (Capacitor as any).Plugins.AlertSettings.clearPendingAlert();
         }
       } catch { /* ignore on web */ }
@@ -102,21 +104,24 @@ export default function V1Shell() {
   useEffect(() => {
     if (!profile?.id) return;
     const uid = profile.id;
+    // Admins subscribe without user_id filter to catch all inserts
+    const insertFilter = isAdmin ? undefined : `user_id=eq.${uid}`;
+    const deleteFilter = isAdmin ? undefined : `user_id=eq.${uid}`;
     const channel = supabase
       .channel("v1-notifs")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notification_logs", filter: `user_id=eq.${uid}` },
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notification_logs", ...(insertFilter ? { filter: insertFilter } : {}) },
         (payload) => {
           const n = payload.new as Notif;
-          if (n.priority === "critical") setCriticalAlert(n);
-          void loadNotifications(uid);
+          if (n.priority === "critical") setCriticalAlert({ ...n, sender_name: null, sender_unit: null });
+          void loadNotifications(uid, isAdmin);
         }
       )
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notification_logs", filter: `user_id=eq.${uid}` },
-        () => void loadNotifications(uid)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notification_logs", ...(deleteFilter ? { filter: deleteFilter } : {}) },
+        () => void loadNotifications(uid, isAdmin)
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [profile?.id]);
+  }, [profile?.id, isAdmin]);
 
   async function init() {
     const email = getCurrentTestEmail();
@@ -139,28 +144,54 @@ export default function V1Shell() {
           return Array.isArray(u) ? u.map((x: any) => x.name) : u?.name ? [u.name] : [];
         });
       setProfile({ ...(user as any), teams });
-      await loadNotifications((user as any).id);
-
+      await loadNotifications((user as any).id, ADMIN_ROLES.includes(getStoredRole()));
     }
 
     setLoading(false);
   }
 
-  async function loadNotifications(uid: string) {
-    const { data } = await supabase
+  async function loadNotifications(uid: string, adminLoad = false) {
+    let query = supabase
       .from("notification_logs")
-      .select("id,broadcast_id,title,body,location,priority,created_at,sender_id")
-      .eq("user_id", uid)
+      .select("id,broadcast_id,title,body,location,priority,created_at,sender_id,sender_name,sender_unit")
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(200);
 
-    // Deduplicate by broadcast_id so admins don't see their own send as a duplicate
+    if (!adminLoad) query = query.eq("user_id", uid);
+
+    const { data } = await query;
+
+    // Deduplicate by broadcast_id
     const seen = new Set<string>();
-    const deduped: Notif[] = [];
-    for (const n of (data ?? []) as Notif[]) {
+    const deduped: (Notif)[] = [];
+    for (const n of (data ?? []) as any[]) {
       const key = n.broadcast_id ?? n.id;
-      if (!seen.has(key)) { seen.add(key); deduped.push(n); }
+      if (!seen.has(key)) { seen.add(key); deduped.push({ ...n, sender_name: null, sender_unit: null }); }
     }
+
+    // Enrich with sender name + unit for rows that don't have it stored
+    const needsLookup = deduped.filter(n => n.sender_id && !n.sender_name);
+    const senderIds = [...new Set(needsLookup.map(n => n.sender_id!))];
+    if (senderIds.length > 0) {
+      const { data: senders } = await supabase
+        .from("users")
+        .select("id,full_name,call_sign,user_units(units(name))")
+        .in("id", senderIds);
+      const senderMap = new Map<string, { name: string | null; unit: string | null }>();
+      for (const s of (senders ?? []) as any[]) {
+        const units = (s.user_units ?? [])
+          .flatMap((uu: any) => { const u = uu.units; return Array.isArray(u) ? u.map((x: any) => x.name) : u?.name ? [u.name] : []; });
+        senderMap.set(s.id, { name: s.full_name ?? s.call_sign ?? null, unit: units[0] ?? null });
+      }
+      for (const n of deduped) {
+        if (n.sender_id && !n.sender_name && senderMap.has(n.sender_id)) {
+          const info = senderMap.get(n.sender_id)!;
+          n.sender_name = info.name;
+          n.sender_unit = info.unit;
+        }
+      }
+    }
+
     setNotifications(deduped);
   }
 
@@ -218,7 +249,7 @@ export default function V1Shell() {
       </div>
 
       {/* Feed */}
-      <PullToRefresh onRefresh={() => profile?.id ? void loadNotifications(profile.id) : undefined} />
+      <PullToRefresh onRefresh={() => profile?.id ? void loadNotifications(profile.id, isAdmin) : undefined} />
       <div className="mx-auto max-w-lg px-4 py-4 space-y-3 pb-8">
         {notifications.length === 0 ? (
           <div className="py-20 text-center text-sm text-zinc-500">No notifications yet.</div>
@@ -252,7 +283,8 @@ export default function V1Shell() {
           onSent={(n) => setNotifications((prev) => [n, ...prev])}
           senderId={profile?.id ?? null}
           senderName={profile?.full_name ?? profile?.call_sign ?? null}
-          onRefresh={() => profile && void loadNotifications(profile.id)}
+          senderUnit={profile?.teams[0] ?? null}
+          onRefresh={() => profile && void loadNotifications(profile.id, isAdmin)}
         />
       )}
     </div>
@@ -277,8 +309,14 @@ function CriticalAlertPopup({ notif, onDismiss }: { notif: Notif; onDismiss: () 
         </div>
         {notif.body && <p className="text-sm opacity-90 mb-3 leading-relaxed">{notif.body}</p>}
         {notif.location && (
-          <p className="text-sm opacity-80 mb-4 flex items-center gap-1.5">
+          <p className="text-sm opacity-80 mb-2 flex items-center gap-1.5">
             <span>📍</span><span>{notif.location}</span>
+          </p>
+        )}
+        {(notif.sender_name || notif.sender_unit) && (
+          <p className="text-xs opacity-70 mb-4 flex items-center gap-1.5">
+            <span>👤</span>
+            <span>{[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}</span>
           </p>
         )}
         <button
@@ -423,6 +461,11 @@ function NotifCard({
       {notif.location && (
         <p className="text-xs opacity-75 flex items-center gap-1">
           <span>📍</span><span>{notif.location}</span>
+        </p>
+      )}
+      {(notif.sender_name || notif.sender_unit) && (
+        <p className="text-xs opacity-60 flex items-center gap-1">
+          <span>👤</span><span>{[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}</span>
         </p>
       )}
     </div>
@@ -625,7 +668,7 @@ function AddressSearch({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function ComposeModal({ onClose, onSent, senderId, senderName, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; senderName: string | null; onRefresh: () => void }) {
+function ComposeModal({ onClose, onSent, senderId, senderName, senderUnit, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; senderName: string | null; senderUnit: string | null; onRefresh: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
@@ -705,6 +748,8 @@ function ComposeModal({ onClose, onSent, senderId, senderName, onRefresh }: { on
       location: location.trim() || null,
       priority,
       status: "sent",
+      sender_name: senderName ?? null,
+      sender_unit: senderUnit ?? null,
     }));
 
     const { error: insertError } = await supabase.from("notification_logs").insert(rows);
@@ -715,7 +760,7 @@ function ComposeModal({ onClose, onSent, senderId, senderName, onRefresh }: { on
         fetch("/api/send-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined, sms: triggerSms, sender_name: senderName ?? undefined }),
+          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined, sms: triggerSms, sender_name: senderName ?? undefined, sender_unit: senderUnit ?? undefined }),
         }).then(r => r.json()).catch((e) => ({ error: e?.message }))
       )
     );

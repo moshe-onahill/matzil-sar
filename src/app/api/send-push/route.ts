@@ -33,11 +33,11 @@ export async function POST(req: Request) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean; location?: string; sms?: boolean; sender_name?: string };
+  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean; location?: string; sms?: boolean; sender_name?: string; sender_unit?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { user_id, title, body: msgBody, url, critical = false, location, sms: sendSms = false, sender_name } = body;
+  const { user_id, title, body: msgBody, url, critical = false, location, sms: sendSms = false, sender_name, sender_unit } = body;
   if (!user_id || !title) {
     return NextResponse.json({ error: "Missing user_id or title" }, { status: 400 });
   }
@@ -67,6 +67,8 @@ export async function POST(req: Request) {
               url: url || "/",
               critical: critical ? "true" : "false",
               ...(location ? { location } : {}),
+              ...(sender_name ? { sender_name } : {}),
+              ...(sender_unit ? { sender_unit } : {}),
             },
             ...(row.platform === "ios" ? {
               apns: {
@@ -145,7 +147,7 @@ export async function POST(req: Request) {
                 title,
                 msgBody || "",
                 location ? `📍 ${location}` : "",
-                sender_name ? `Sent by: ${sender_name}` : "",
+                sender_name ? `Sent by: ${[sender_name, sender_unit].filter(Boolean).join(" · ")}` : "",
                 `Time: ${new Date().toLocaleString("en-CA", { timeZone: "America/Toronto", hour12: true })}`,
                 ``,
                 `Open app for full details.`,
