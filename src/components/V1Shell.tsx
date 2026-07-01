@@ -251,6 +251,7 @@ export default function V1Shell() {
           onClose={() => setComposeOpen(false)}
           onSent={(n) => setNotifications((prev) => [n, ...prev])}
           senderId={profile?.id ?? null}
+          senderName={profile?.full_name ?? profile?.call_sign ?? null}
           onRefresh={() => profile && void loadNotifications(profile.id)}
         />
       )}
@@ -624,7 +625,7 @@ function AddressSearch({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; onRefresh: () => void }) {
+function ComposeModal({ onClose, onSent, senderId, senderName, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; senderName: string | null; onRefresh: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [location, setLocation] = useState("");
@@ -714,7 +715,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
         fetch("/api/send-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined, sms: triggerSms, sender_name: profile?.full_name ?? profile?.call_sign ?? undefined }),
+          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined, sms: triggerSms, sender_name: senderName ?? undefined }),
         }).then(r => r.json()).catch((e) => ({ error: e?.message }))
       )
     );
