@@ -267,23 +267,9 @@ export default function V1Shell() {
         )}
       </div>
 
-      {/* Admin bottom action bar */}
+      {/* Admin bottom action bar — SEND/NEW ALERT only */}
       {isAdmin && (
-        <div className="fixed bottom-0 inset-x-0 px-4 pb-8 pt-3 bg-gradient-to-t from-black via-black/90 to-transparent space-y-3 z-10">
-          {activeCall && (
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setEditingCall(activeCall); setComposeOpen(true); }}
-                className="flex-1 rounded-full bg-zinc-700 py-3.5 text-sm font-bold text-zinc-300 transition active:bg-zinc-600">
-                EDIT CALL
-              </button>
-              <button
-                onClick={() => void deleteNotif(activeCall)}
-                className="flex-1 rounded-full bg-green-600 py-3.5 text-sm font-black text-black transition active:bg-green-500">
-                CLOSE CALL
-              </button>
-            </div>
-          )}
+        <div className="fixed bottom-0 inset-x-0 px-4 pb-8 pt-3 bg-gradient-to-t from-black via-black/90 to-transparent z-10">
           <button
             onClick={() => { setEditingCall(null); setComposeOpen(true); }}
             className="w-full rounded-full bg-red-600 py-5 text-xl font-black text-black transition active:bg-red-500">
@@ -372,44 +358,15 @@ function NotifCard({ notif, isActive, isAdmin, isGlobalAdmin, adminId, fmt, onDe
     window.open(url, "_blank");
   }
 
-  // Active call gets a larger prominent display; history cards are compact
+  // Active call — large prominent card with EDIT CALL / CLOSE CALL buttons
   if (isActive) {
     return (
       <div className="rounded-3xl bg-zinc-700 p-5 space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-zinc-400 font-medium mb-1">Call Message</p>
-            <p className="text-base font-bold text-white leading-snug">{notif.title}</p>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {canEdit && !confirmDelete && (
-              <button onClick={onEdit} className="rounded-md p-1.5 hover:bg-white/10 transition" aria-label="Edit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-zinc-400">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </button>
-            )}
-            {canDelete && (
-              confirmDelete ? (
-                <>
-                  <button onClick={() => { onDelete(); setConfirmDelete(false); }}
-                    className="rounded-md px-2.5 py-1 text-xs font-semibold bg-red-600/80 text-white transition">Confirm</button>
-                  <button onClick={() => setConfirmDelete(false)}
-                    className="rounded-md px-2.5 py-1 text-xs bg-zinc-600 text-zinc-300 transition">Cancel</button>
-                </>
-              ) : (
-                <button onClick={() => setConfirmDelete(true)} className="rounded-md p-1.5 hover:bg-white/10 transition" aria-label="Delete">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-zinc-400">
-                    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                    <path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                  </svg>
-                </button>
-              )
-            )}
-            <span className="text-xs text-zinc-500 ml-1">{fmt(notif.created_at)}</span>
-          </div>
+          <p className="text-xs text-zinc-400 font-medium">Call Message</p>
+          <span className="text-xs text-zinc-500">{fmt(notif.created_at)}</span>
         </div>
+        <p className="text-base font-bold text-white leading-snug">{notif.title}</p>
         {notif.body && <p className="text-sm text-zinc-300 leading-relaxed">{notif.body}</p>}
         {notif.sender_name && (
           <p className="text-xs text-zinc-500">👤 {notif.sender_name}</p>
@@ -420,43 +377,46 @@ function NotifCard({ notif, isActive, isAdmin, isGlobalAdmin, adminId, fmt, onDe
             Open Maps
           </button>
         )}
+        {/* Admin actions — visible on the card itself */}
+        {(canEdit || canDelete) && (
+          <div className="flex gap-2 pt-1">
+            {canEdit && (
+              <button onClick={onEdit}
+                className="flex-1 rounded-full bg-zinc-600 py-2.5 text-xs font-bold text-zinc-300 transition active:bg-zinc-500">
+                EDIT CALL
+              </button>
+            )}
+            {canDelete && (
+              confirmDelete ? (
+                <>
+                  <button onClick={() => { onDelete(); setConfirmDelete(false); }}
+                    className="flex-1 rounded-full bg-red-600 py-2.5 text-xs font-bold text-white transition active:bg-red-500">
+                    CONFIRM CLOSE
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)}
+                    className="rounded-full bg-zinc-600 px-4 py-2.5 text-xs text-zinc-400 transition active:bg-zinc-500">
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)}
+                  className="flex-1 rounded-full bg-green-600 py-2.5 text-xs font-bold text-black transition active:bg-green-500">
+                  CLOSE CALL
+                </button>
+              )
+            )}
+          </div>
+        )}
       </div>
     );
   }
 
   // History card — compact
   return (
-    <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4 space-y-1.5">
+    <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <span className="font-semibold text-sm text-zinc-200 leading-snug flex-1 min-w-0">{notif.title}</span>
-        <div className="flex items-center gap-1 shrink-0">
-          {canEdit && !confirmDelete && (
-            <button onClick={onEdit} className="rounded-md p-1.5 hover:bg-zinc-800 transition" aria-label="Edit">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-zinc-500">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </button>
-          )}
-          {canDelete && (
-            confirmDelete ? (
-              <>
-                <button onClick={() => { onDelete(); setConfirmDelete(false); }}
-                  className="rounded px-2 py-0.5 text-xs font-semibold bg-red-700 text-white">Confirm</button>
-                <button onClick={() => setConfirmDelete(false)}
-                  className="rounded px-2 py-0.5 text-xs bg-zinc-800 text-zinc-400">Cancel</button>
-              </>
-            ) : (
-              <button onClick={() => setConfirmDelete(true)} className="rounded-md p-1.5 hover:bg-zinc-800 transition" aria-label="Delete">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-zinc-500">
-                  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                </svg>
-              </button>
-            )
-          )}
-          <span className="text-xs text-zinc-600 ml-1">{fmt(notif.created_at)}</span>
-        </div>
+        <span className="text-xs text-zinc-600 shrink-0">{fmt(notif.created_at)}</span>
       </div>
       {notif.body && <p className="text-xs text-zinc-500 leading-relaxed">{notif.body}</p>}
       {notif.location && (
@@ -467,6 +427,31 @@ function NotifCard({ notif, isActive, isAdmin, isGlobalAdmin, adminId, fmt, onDe
       )}
       {notif.sender_name && (
         <p className="text-xs text-zinc-600">👤 {notif.sender_name}</p>
+      )}
+      {(canEdit || canDelete) && (
+        <div className="flex gap-2 pt-1">
+          {canEdit && (
+            <button onClick={onEdit}
+              className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs font-bold text-zinc-400 transition active:bg-zinc-700">
+              EDIT
+            </button>
+          )}
+          {canDelete && (
+            confirmDelete ? (
+              <>
+                <button onClick={() => { onDelete(); setConfirmDelete(false); }}
+                  className="rounded-full bg-red-700 px-4 py-1.5 text-xs font-bold text-white transition">CONFIRM</button>
+                <button onClick={() => setConfirmDelete(false)}
+                  className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs text-zinc-500 transition">Cancel</button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)}
+                className="rounded-full bg-zinc-800 px-4 py-1.5 text-xs font-bold text-green-500 transition active:bg-zinc-700">
+                CLOSE
+              </button>
+            )
+          )}
+        </div>
       )}
     </div>
   );
