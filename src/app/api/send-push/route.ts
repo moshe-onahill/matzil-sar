@@ -59,32 +59,31 @@ export async function POST(req: Request) {
         await Promise.all(tokens.map(async (row: { token: string; platform: string }) => {
           const message: Message = {
             token: row.token,
-            notification: { title, body: msgBody || "" },
-            data: { url: url || "/", critical: critical ? "true" : "false", ...(location ? { location } : {}) },
+            // Data-only — no `notification` field so onMessageReceived always fires
+            // (notification messages are handled by system in background, bypassing our service)
+            data: {
+              title,
+              body: msgBody || "",
+              url: url || "/",
+              critical: critical ? "true" : "false",
+              ...(location ? { location } : {}),
+            },
             ...(row.platform === "ios" ? {
               apns: {
-                headers: critical ? { "apns-priority": "10" } : { "apns-priority": "5" },
+                headers: { "apns-priority": "10", "apns-push-type": "alert" },
                 payload: {
                   aps: {
-                    sound: critical
-                      ? { critical: true, name: "default", volume: 1.0 }
-                      : "default",
+                    alert: { title, body: msgBody || "" },
+                    sound: critical ? { critical: true, name: "default", volume: 1.0 } : "default",
                     badge: 1,
                     "interruption-level": critical ? "critical" : "active",
+                    "content-available": 1,
                   },
                 },
               },
             } : {
               android: {
                 priority: "high" as const,
-                notification: {
-                  channelId: critical ? "matzil_critical_v3" : "matzil_default",
-                  sound: "default",
-                  priority: critical ? "max" as const : "high" as const,
-                  defaultSound: true,
-                  defaultVibrateTimings: true,
-                  notificationPriority: critical ? "PRIORITY_MAX" as const : "PRIORITY_HIGH" as const,
-                },
               },
             }),
           };

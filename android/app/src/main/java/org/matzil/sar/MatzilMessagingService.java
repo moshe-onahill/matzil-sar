@@ -58,9 +58,9 @@ public class MatzilMessagingService extends MessagingService {
             .putLong("pending_ts", System.currentTimeMillis())
             .apply();
 
-        forceMaxVolume();
+        forceMaxVolume(); // always — data messages fire onMessageReceived regardless of app state
 
-        if (isAppInForeground()) return; // JS handles foreground popup
+        if (isAppInForeground()) return; // JS handles foreground popup via realtime
 
         Intent open = new Intent(this, MainActivity.class);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
