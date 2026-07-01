@@ -76,13 +76,19 @@ function PullToRefresh({ onRefresh }: { onRefresh: () => void }) {
 
 // ─── Header ─────────────────────────────────────────────────────────────────
 
-function AppHeader({ onProfileClick }: { onProfileClick: () => void }) {
+function AppHeader({ onProfileClick, isAdmin, onSendAlert }: { onProfileClick: () => void; isAdmin: boolean; onSendAlert: () => void }) {
   return (
-    <div className="sticky top-0 z-20 flex items-center justify-between bg-black px-4 pt-12 pb-3 border-b border-zinc-900">
+    <div className="sticky top-0 z-20 flex items-center justify-between gap-3 bg-black px-4 pt-12 pb-3 border-b border-zinc-900">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/matzil-words.avif" alt="Matzil Search & Rescue" className="h-9 object-contain" />
+      <img src="/matzil-words.avif" alt="Matzil Search & Rescue" className="h-9 object-contain shrink-0" />
+      {isAdmin && (
+        <button onClick={onSendAlert}
+          className="flex-1 rounded-full bg-red-600 py-2.5 text-sm font-black text-black transition active:bg-red-500">
+          SEND ALERT
+        </button>
+      )}
       <button onClick={onProfileClick}
-        className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#E94E1B] text-[#E94E1B] transition active:opacity-60"
+        className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#E94E1B] text-[#E94E1B] transition active:opacity-60 shrink-0"
         aria-label="Account">
         <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
           <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
@@ -249,12 +255,12 @@ export default function V1Shell() {
 
   return (
     <div className="relative min-h-screen bg-black text-zinc-50">
-      <AppHeader onProfileClick={() => setAccountOpen(true)} />
+      <AppHeader onProfileClick={() => setAccountOpen(true)} isAdmin={isAdmin} onSendAlert={() => { setEditingCall(null); setComposeOpen(true); }} />
 
       <PullToRefresh onRefresh={() => profile?.id ? void loadNotifications(profile.id, isAdmin) : undefined} />
 
       {/* Feed */}
-      <div className="mx-auto max-w-lg px-4 py-4 space-y-3 pb-40">
+      <div className="mx-auto max-w-lg px-4 py-4 space-y-3 pb-10">
         {notifications.length === 0 ? (
           <div className="flex justify-center pt-6">
             <span className="rounded-full bg-zinc-700 px-8 py-3 text-sm font-bold text-zinc-400 tracking-wider">
@@ -272,17 +278,6 @@ export default function V1Shell() {
           ))
         )}
       </div>
-
-      {/* Admin SEND ALERT */}
-      {isAdmin && (
-        <div className="fixed bottom-0 inset-x-0 px-4 pb-8 pt-3 bg-gradient-to-t from-black via-black/90 to-transparent z-10">
-          <button
-            onClick={() => { setEditingCall(null); setComposeOpen(true); }}
-            className="w-full rounded-full bg-red-600 py-5 text-xl font-black text-black transition active:bg-red-500">
-            SEND ALERT
-          </button>
-        </div>
-      )}
 
       {/* Card detail sheet */}
       {selectedNotif && (
