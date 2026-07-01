@@ -8,14 +8,7 @@ type Profile = {
   id: string;
   full_name: string | null;
   email: string;
-  phone: string | null;
   call_sign: string | null;
-  home_address: string | null;
-  car_make: string | null;
-  car_model: string | null;
-  car_color: string | null;
-  license_plate_state: string | null;
-  license_plate_number: string | null;
   teams: string[];
 };
 
@@ -34,48 +27,16 @@ type Notif = {
 
 const ADMIN_ROLES = ["Dispatcher", "SAR Manager", "Global Admin"];
 
-function PullToRefresh({ onRefresh }: { onRefresh: () => void }) {
-  const [pulling, setPulling] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const startY = useRef(0);
-  const THRESHOLD = 70;
-
-  function onTouchStart(e: React.TouchEvent) { startY.current = e.touches[0].clientY; }
-  function onTouchMove(e: React.TouchEvent) {
-    if (window.scrollY > 0) return;
-    const dy = e.touches[0].clientY - startY.current;
-    setPulling(dy > 20);
-  }
-  async function onTouchEnd(e: React.TouchEvent) {
-    const dy = e.changedTouches[0].clientY - startY.current;
-    setPulling(false);
-    if (dy >= THRESHOLD && window.scrollY === 0) {
-      setRefreshing(true);
-      onRefresh();
-      await new Promise(r => setTimeout(r, 800));
-      setRefreshing(false);
-    }
-  }
-
-  return (
-    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-      className="absolute inset-x-0 top-14 flex justify-center pointer-events-none z-10">
-      {(pulling || refreshing) && (
-        <div className={`mt-2 flex items-center gap-2 rounded-full bg-zinc-800 px-4 py-1.5 text-xs text-zinc-400 shadow-lg pointer-events-none transition-opacity ${refreshing ? "opacity-100" : "opacity-70"}`}>
-          <div className={`h-3.5 w-3.5 rounded-full border-2 border-zinc-600 border-t-[#E94E1B] ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Refreshing…" : "Release to refresh"}
-        </div>
-      )}
-    </div>
-  );
-}
+const ALL_GROUPS = ["ALL", "WILDERNESS", "WATER", "MRU", "SUPPORT", "MEDICAL", "DISPATCH", "SAR MANAGERS", "TRAINEES"] as const;
+type AlertGroup = typeof ALL_GROUPS[number];
 
 export default function V1Shell() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [notifications, setNotifications] = useState<Notif[]>([]);
+  const [activeCall, setActiveCall] = useState<Notif | null>(null);
   const [loading, setLoading] = useState(true);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [composeOpen, setComposeOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [view, setView] = useState<"main" | "compose">("main");
+  const [editingCall, setEditingCall] = useState<Notif | null>(null);
   const [criticalAlert, setCriticalAlert] = useState<Notif | null>(null);
   const role = getStoredRole();
   const isAdmin = ADMIN_ROLES.includes(role);
@@ -104,20 +65,18 @@ export default function V1Shell() {
   useEffect(() => {
     if (!profile?.id) return;
     const uid = profile.id;
-    // Admins subscribe without user_id filter to catch all inserts
     const insertFilter = isAdmin ? undefined : `user_id=eq.${uid}`;
-    const deleteFilter = isAdmin ? undefined : `user_id=eq.${uid}`;
     const channel = supabase
       .channel("v1-notifs")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notification_logs", ...(insertFilter ? { filter: insertFilter } : {}) },
         (payload) => {
           const n = payload.new as Notif;
           if (n.priority === "critical") setCriticalAlert({ ...n, sender_name: null, sender_unit: null });
-          void loadNotifications(uid, isAdmin);
+          void loadActiveCall(uid, isAdmin);
         }
       )
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notification_logs", ...(deleteFilter ? { filter: deleteFilter } : {}) },
-        () => void loadNotifications(uid, isAdmin)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notification_logs", ...(insertFilter ? { filter: insertFilter } : {}) },
+        () => void loadActiveCall(uid, isAdmin)
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -125,15 +84,9 @@ export default function V1Shell() {
 
   async function init() {
     const email = getCurrentTestEmail();
-
     const { data: user } = await supabase
       .from("users")
-      .select(`
-        id, full_name, email, phone, call_sign,
-        home_address, car_make, car_model, car_color,
-        license_plate_state, license_plate_number,
-        user_units ( units ( name ) )
-      `)
+      .select("id, full_name, email, call_sign, user_units(units(name))")
       .eq("email", email)
       .single();
 
@@ -143,44 +96,42 @@ export default function V1Shell() {
           const u = uu.units;
           return Array.isArray(u) ? u.map((x: any) => x.name) : u?.name ? [u.name] : [];
         });
-      setProfile({ ...(user as any), teams });
-      await loadNotifications((user as any).id, ADMIN_ROLES.includes(getStoredRole()));
+      const p: Profile = { ...(user as any), teams };
+      setProfile(p);
+      await loadActiveCall((user as any).id, ADMIN_ROLES.includes(getStoredRole()));
     }
-
     setLoading(false);
   }
 
-  async function loadNotifications(uid: string, adminLoad = false) {
+  async function loadActiveCall(uid: string, adminLoad = false) {
     let query = supabase
       .from("notification_logs")
       .select("id,broadcast_id,title,body,location,priority,created_at,sender_id,sender_name,sender_unit")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(50);
 
     if (!adminLoad) query = query.eq("user_id", uid);
 
     const { data } = await query;
 
-    // Deduplicate by broadcast_id
+    // Deduplicate by broadcast_id, take most recent
     const seen = new Set<string>();
-    const deduped: (Notif)[] = [];
+    const deduped: Notif[] = [];
     for (const n of (data ?? []) as any[]) {
       const key = n.broadcast_id ?? n.id;
-      if (!seen.has(key)) { seen.add(key); deduped.push({ ...n, sender_name: null, sender_unit: null }); }
+      if (!seen.has(key)) { seen.add(key); deduped.push({ ...n, sender_name: n.sender_name ?? null, sender_unit: n.sender_unit ?? null }); }
     }
 
-    // Enrich with sender name + unit for rows that don't have it stored
+    // Enrich missing sender info from users table
     const needsLookup = deduped.filter(n => n.sender_id && !n.sender_name);
-    const senderIds = [...new Set(needsLookup.map(n => n.sender_id!))];
-    if (senderIds.length > 0) {
+    if (needsLookup.length > 0) {
       const { data: senders } = await supabase
         .from("users")
         .select("id,full_name,call_sign,user_units(units(name))")
-        .in("id", senderIds);
+        .in("id", needsLookup.map(n => n.sender_id!));
       const senderMap = new Map<string, { name: string | null; unit: string | null }>();
       for (const s of (senders ?? []) as any[]) {
-        const units = (s.user_units ?? [])
-          .flatMap((uu: any) => { const u = uu.units; return Array.isArray(u) ? u.map((x: any) => x.name) : u?.name ? [u.name] : []; });
+        const units = (s.user_units ?? []).flatMap((uu: any) => { const u = uu.units; return Array.isArray(u) ? u.map((x: any) => x.name) : u?.name ? [u.name] : []; });
         senderMap.set(s.id, { name: s.full_name ?? s.call_sign ?? null, unit: units[0] ?? null });
       }
       for (const n of deduped) {
@@ -192,114 +143,371 @@ export default function V1Shell() {
       }
     }
 
-    setNotifications(deduped);
+    setActiveCall(deduped[0] ?? null);
   }
 
-  function fmt(d: string) {
-    return new Date(d).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  }
-
-  async function deleteNotif(n: Notif) {
-    const res = await fetch("/api/delete-notification", {
+  async function closeCall(n: Notif) {
+    const filter = n.broadcast_id ? { broadcast_id: n.broadcast_id } : { id: n.id };
+    await fetch("/api/delete-notification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(n.broadcast_id ? { broadcast_id: n.broadcast_id } : { id: n.id }),
+      body: JSON.stringify(filter),
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }));
-      console.error("Delete failed:", res.status, body);
-      return;
-    }
-    setNotifications((prev) => prev.filter((x) => (n.broadcast_id ? x.broadcast_id !== n.broadcast_id : x.id !== n.id)));
+    setActiveCall(null);
+    if (profile?.id) void loadActiveCall(profile.id, isAdmin);
+  }
+
+  function openMaps(location: string) {
+    const url = location.startsWith("http")
+      ? location
+      : `https://maps.google.com/?q=${encodeURIComponent(location)}`;
+    window.open(url, "_blank");
+  }
+
+  async function logout() {
+    localStorage.removeItem("auth-email");
+    localStorage.removeItem("real-role");
+    localStorage.removeItem("dev-role");
+    localStorage.removeItem("session-temporary");
+    await supabase.auth.signOut();
+    window.location.href = "/login";
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+      <div className="flex min-h-screen items-center justify-center bg-black">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-800 border-t-[#E94E1B]" />
       </div>
     );
   }
 
-  return (
-    <div className="relative min-h-screen bg-zinc-950 text-zinc-50">
-      {/* Header */}
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-900 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
-        <span className="text-lg font-bold">Matzil SAR</span>
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <button
-              onClick={() => setComposeOpen(true)}
-              className="rounded-lg bg-[#E94E1B] px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 transition"
-            >
-              Send Notification
-            </button>
-          )}
-          <button
-            onClick={() => setAccountOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition"
-            aria-label="Account"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </button>
-        </div>
-      </div>
+  if (view === "compose") {
+    return (
+      <ComposeScreen
+        profile={profile}
+        editingCall={editingCall}
+        onClose={() => { setView("main"); setEditingCall(null); }}
+        onSent={() => {
+          setView("main");
+          setEditingCall(null);
+          if (profile?.id) void loadActiveCall(profile.id, isAdmin);
+        }}
+      />
+    );
+  }
 
-      {/* Feed */}
-      <PullToRefresh onRefresh={() => profile?.id ? void loadNotifications(profile.id, isAdmin) : undefined} />
-      <div className="mx-auto max-w-lg px-4 py-4 space-y-3 pb-8">
-        {notifications.length === 0 ? (
-          <div className="py-20 text-center text-sm text-zinc-500">No notifications yet.</div>
+  return (
+    <div className="relative flex min-h-screen flex-col bg-black text-white">
+      <AppHeader
+        profile={profile}
+        profileOpen={profileOpen}
+        onProfileClick={() => setProfileOpen(v => !v)}
+        onSignOut={() => void logout()}
+      />
+
+      {/* Main content */}
+      <div className="flex flex-1 flex-col px-5 pt-6 pb-8">
+        {activeCall ? (
+          <div className="flex flex-1 flex-col gap-4">
+            {/* Call message box */}
+            <div className="flex-1 rounded-3xl bg-zinc-600 p-5 min-h-48">
+              <p className="text-sm text-zinc-800 font-medium mb-3">Call Message</p>
+              <p className="text-base text-black font-semibold leading-snug">{activeCall.title}</p>
+              {activeCall.body && <p className="mt-2 text-sm text-zinc-900 leading-relaxed">{activeCall.body}</p>}
+              {(activeCall.sender_name || activeCall.sender_unit) && (
+                <p className="mt-3 text-xs text-zinc-700">
+                  Sent by: {[activeCall.sender_name, activeCall.sender_unit].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+
+            {/* Open Maps */}
+            {activeCall.location && (
+              <button
+                onClick={() => openMaps(activeCall.location!)}
+                className="w-full rounded-full bg-zinc-600 py-4 text-base font-bold text-black transition active:bg-zinc-500">
+                Open Maps
+              </button>
+            )}
+
+            {/* Admin controls */}
+            {isAdmin && (
+              <div className="mt-auto space-y-3 pt-2">
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => { setEditingCall(activeCall); setView("compose"); }}
+                    className="rounded-full bg-zinc-700 px-8 py-3 text-sm font-bold text-zinc-300 transition active:bg-zinc-600">
+                    EDIT CALL
+                  </button>
+                </div>
+                <button
+                  onClick={() => void closeCall(activeCall)}
+                  className="w-full rounded-full bg-green-600 py-5 text-xl font-black text-black transition active:bg-green-500">
+                  CLOSE CALL
+                </button>
+                <button
+                  onClick={() => { setEditingCall(null); setView("compose"); }}
+                  className="w-full rounded-full bg-red-600 py-5 text-xl font-black text-black transition active:bg-red-500">
+                  NEW ALERT
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
-          notifications.map((n) => (
-            <NotifCard
-              key={n.id}
-              notif={n}
-              isAdmin={isAdmin}
-              isGlobalAdmin={role === "Global Admin"}
-              adminId={profile?.id ?? null}
-              fmt={fmt}
-              onDelete={() => void deleteNotif(n)}
-              onUpdate={(updated) =>
-                setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, ...updated } : x))
-              }
-            />
-          ))
+          <div className="flex flex-1 flex-col">
+            <div className="flex justify-center pt-4">
+              <span className="rounded-full bg-zinc-700 px-8 py-3 text-sm font-bold text-black tracking-wider">
+                NO CALLS
+              </span>
+            </div>
+            {isAdmin && (
+              <div className="mt-auto">
+                <button
+                  onClick={() => setView("compose")}
+                  className="w-full rounded-full bg-red-600 py-5 text-xl font-black text-black transition active:bg-red-500">
+                  SEND ALERT
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {criticalAlert && (
         <CriticalAlertPopup notif={criticalAlert} onDismiss={() => setCriticalAlert(null)} />
       )}
-      {accountOpen && (
-        <AccountPanel profile={profile} isAdmin={isAdmin} onClose={() => setAccountOpen(false)} />
-      )}
-      {isAdmin && composeOpen && (
-        <ComposeModal
-          onClose={() => setComposeOpen(false)}
-          onSent={(n) => setNotifications((prev) => [n, ...prev])}
-          senderId={profile?.id ?? null}
-          senderName={profile?.full_name ?? profile?.call_sign ?? null}
-          senderUnit={profile?.teams[0] ?? null}
-          onRefresh={() => profile && void loadNotifications(profile.id, isAdmin)}
+    </div>
+  );
+}
+
+function AppHeader({ profile, profileOpen, onProfileClick, onSignOut }: {
+  profile: Profile | null;
+  profileOpen: boolean;
+  onProfileClick: () => void;
+  onSignOut: () => void;
+}) {
+  return (
+    <div className="relative flex items-center justify-between px-4 pt-12 pb-4">
+      {/* Matzil logo wordmark */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/matzil-words.avif" alt="Matzil Search & Rescue" className="h-10 object-contain" />
+
+      {/* Profile button */}
+      <div className="relative">
+        <button
+          onClick={onProfileClick}
+          className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#E94E1B] text-[#E94E1B] transition active:opacity-70"
+          aria-label="Profile"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
+            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+          </svg>
+        </button>
+
+        {/* Profile dropdown */}
+        {profileOpen && (
+          <div className="absolute right-0 top-14 z-50 w-52">
+            <button
+              onClick={onSignOut}
+              className="w-full rounded-2xl bg-[#E94E1B] px-4 py-4 text-left transition active:bg-orange-600"
+            >
+              <div className="text-lg font-bold text-black">Sign-Out</div>
+              {profile?.call_sign && (
+                <div className="text-xs font-semibold text-black/70 mt-0.5">
+                  Signed-In As: {profile.call_sign}
+                </div>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ComposeScreen({ profile, editingCall, onClose, onSent }: {
+  profile: Profile | null;
+  editingCall: Notif | null;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [selectedGroups, setSelectedGroups] = useState<Set<AlertGroup>>(new Set(["ALL"]));
+  const [message, setMessage] = useState(editingCall ? [editingCall.title, editingCall.body].filter(Boolean).join("\n") : "");
+  const [stagingLink, setStagingLink] = useState(editingCall?.location ?? "");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  function toggleGroup(g: AlertGroup) {
+    setSelectedGroups(prev => {
+      const next = new Set(prev);
+      if (g === "ALL") {
+        return next.has("ALL") ? new Set() : new Set(["ALL"] as AlertGroup[]);
+      }
+      next.delete("ALL");
+      next.has(g) ? next.delete(g) : next.add(g);
+      return next;
+    });
+  }
+
+  async function getTargetIds(): Promise<string[]> {
+    const groups = [...selectedGroups];
+    const includeAll = groups.length === 0 || groups.includes("ALL");
+    if (includeAll) {
+      const { data } = await supabase.from("users").select("id");
+      return (data ?? []).map((r: any) => r.id);
+    }
+    const results = await Promise.all(
+      groups.map((g) =>
+        supabase.from("user_units").select("user_id, units!inner(name)").ilike("units.name", g)
+          .then(({ data }) => (data ?? []).map((r: any) => r.user_id as string))
+      )
+    );
+    return [...new Set(results.flat())];
+  }
+
+  async function send() {
+    if (!message.trim()) { setError("Enter a message."); return; }
+    setSending(true);
+    setError("");
+
+    const targetIds = await getTargetIds();
+    const uniqueIds = [...new Set(targetIds)];
+    if (uniqueIds.length === 0) { setError("No recipients found."); setSending(false); return; }
+
+    // If editing, close old call first
+    if (editingCall) {
+      await fetch("/api/delete-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingCall.broadcast_id ? { broadcast_id: editingCall.broadcast_id } : { id: editingCall.id }),
+      });
+    }
+
+    const broadcast_id = crypto.randomUUID();
+    const title = message.trim().split("\n")[0].slice(0, 120);
+    const body = message.trim().includes("\n") ? message.trim().split("\n").slice(1).join("\n").trim() || null : null;
+
+    const rows = uniqueIds.map((uid: string) => ({
+      user_id: uid,
+      sender_id: profile?.id,
+      broadcast_id,
+      channel: "app",
+      notification_type: "broadcast",
+      title,
+      body,
+      location: stagingLink.trim() || null,
+      priority: "critical",
+      status: "sent",
+      sender_name: profile?.full_name ?? profile?.call_sign ?? null,
+      sender_unit: profile?.teams[0] ?? null,
+    }));
+
+    const { error: insertErr } = await supabase.from("notification_logs").insert(rows);
+    if (insertErr) { setError(`Send failed: ${insertErr.message}`); setSending(false); return; }
+
+    await Promise.all(
+      uniqueIds.map((user_id: string) =>
+        fetch("/api/send-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id, title, body: body ?? undefined, url: "/",
+            critical: true,
+            location: stagingLink.trim() || undefined,
+            sms: true,
+            sender_name: profile?.full_name ?? profile?.call_sign ?? undefined,
+            sender_unit: profile?.teams[0] ?? undefined,
+          }),
+        }).catch(() => null)
+      )
+    );
+
+    setSending(false);
+    onSent();
+  }
+
+  const groupLabel = selectedGroups.size === 0 ? "Alert Group"
+    : selectedGroups.has("ALL") ? "ALL"
+    : [...selectedGroups].join(", ");
+
+  return (
+    <div className="flex min-h-screen flex-col bg-black text-white">
+      <AppHeader profile={profile} profileOpen={false} onProfileClick={() => {}} onSignOut={() => {}} />
+
+      <div className="flex flex-1 flex-col px-5 pt-2 pb-8 gap-4">
+        {/* Alert Group dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setGroupOpen(v => !v)}
+            className={`w-full flex items-center justify-between rounded-full px-6 py-4 text-base font-bold text-black transition ${groupOpen ? "bg-[#E94E1B]" : "bg-zinc-600"}`}
+          >
+            <span>{groupLabel}</span>
+            <span className="text-lg">{groupOpen ? "∧" : "∨"}</span>
+          </button>
+
+          {groupOpen && (
+            <div className="absolute left-0 right-0 top-full z-50 rounded-2xl bg-zinc-600 overflow-hidden border border-zinc-500 shadow-xl">
+              {ALL_GROUPS.map((g, i) => (
+                <button
+                  key={g}
+                  onClick={() => toggleGroup(g)}
+                  className={`flex w-full items-center justify-between px-6 py-3.5 text-sm font-bold text-black transition hover:bg-zinc-500 ${i < ALL_GROUPS.length - 1 ? "border-b border-zinc-500" : ""}`}
+                >
+                  <span>{g}</span>
+                  <span className={`h-5 w-5 rounded-sm border-2 flex items-center justify-center transition ${selectedGroups.has(g) ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-400 bg-transparent"}`}>
+                    {selectedGroups.has(g) && (
+                      <svg viewBox="0 0 10 8" className="w-3 h-3 fill-none stroke-white stroke-2"><polyline points="1,4 4,7 9,1" /></svg>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Message textarea */}
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Type Message"
+          rows={8}
+          className="w-full flex-1 rounded-3xl bg-zinc-600 px-5 py-4 text-base text-black placeholder-zinc-800 outline-none resize-none"
         />
-      )}
+
+        {/* Staging Link */}
+        <input
+          value={stagingLink}
+          onChange={(e) => setStagingLink(e.target.value)}
+          placeholder="Staging Link"
+          className="w-full rounded-full bg-zinc-600 px-6 py-4 text-base text-black placeholder-zinc-800 outline-none"
+        />
+
+        {error && <p className="text-sm text-red-400 px-2">{error}</p>}
+
+        {/* Send Alert */}
+        <div className="mt-auto pt-2">
+          <button
+            onClick={() => void send()}
+            disabled={sending}
+            className="w-full rounded-full bg-red-600 py-5 text-xl font-black text-black transition active:bg-red-500 disabled:opacity-50"
+          >
+            {sending ? "SENDING…" : "SEND ALERT"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 function CriticalAlertPopup({ notif, onDismiss }: { notif: Notif; onDismiss: () => void }) {
   useEffect(() => {
-    // Vibrate on mobile if supported
     if (navigator.vibrate) navigator.vibrate([500, 100, 500, 100, 500]);
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-3xl bg-red-600 p-6 shadow-2xl text-white animate-bounce-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90">
+      <div className="w-full max-w-sm rounded-3xl bg-red-600 p-6 shadow-2xl text-white">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-3xl">🚨</span>
           <div>
@@ -314,552 +522,16 @@ function CriticalAlertPopup({ notif, onDismiss }: { notif: Notif; onDismiss: () 
           </p>
         )}
         {(notif.sender_name || notif.sender_unit) && (
-          <p className="text-xs opacity-70 mb-4 flex items-center gap-1.5">
-            <span>👤</span>
-            <span>{[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}</span>
+          <p className="text-xs opacity-70 mb-4">
+            Sent by: {[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}
           </p>
         )}
         <button
           onClick={onDismiss}
-          className="w-full rounded-xl bg-white/25 hover:bg-white/35 active:bg-white/40 py-3 font-bold text-white transition"
+          className="w-full rounded-xl bg-white/25 hover:bg-white/35 py-3 font-bold text-white transition"
         >
           Acknowledge
         </button>
-      </div>
-    </div>
-  );
-}
-
-function NotifCard({
-  notif,
-  isAdmin,
-  isGlobalAdmin,
-  adminId,
-  fmt,
-  onDelete,
-  onUpdate,
-}: {
-  notif: Notif;
-  isAdmin: boolean;
-  isGlobalAdmin: boolean;
-  adminId: string | null;
-  fmt: (d: string) => string;
-  onDelete: () => void;
-  onUpdate: (patch: Partial<Notif>) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(notif.title);
-  const [body, setBody] = useState(notif.body ?? "");
-  const [location, setLocation] = useState(notif.location ?? "");
-  const [priority, setPriority] = useState<string>(notif.priority ?? "critical");
-  const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const canEdit = isAdmin && notif.sender_id === adminId;
-  const canDelete = canEdit || isGlobalAdmin;
-
-  async function save() {
-    setSaving(true);
-    const patch = {
-      title: title.trim(),
-      body: body.trim() || null,
-      location: location.trim() || null,
-      priority,
-    };
-    if (notif.broadcast_id) {
-      await supabase.from("notification_logs").update(patch).eq("broadcast_id", notif.broadcast_id);
-    } else {
-      await supabase.from("notification_logs").update(patch).eq("id", notif.id);
-    }
-    setSaving(false);
-    setEditing(false);
-    onUpdate(patch);
-  }
-
-  const bg = priority === "critical" ? "bg-red-600" : "bg-[#E94E1B]";
-
-  if (editing) {
-    return (
-      <div className={`rounded-2xl p-4 space-y-3 ${bg} text-white`}>
-        <div className="flex gap-2">
-          <button onClick={() => setPriority("critical")}
-            className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${priority === "critical" ? "bg-white/30" : "bg-white/10 hover:bg-white/20"}`}>
-            ⚠ Critical
-          </button>
-        </div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-lg bg-white/20 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30"
-          placeholder="Title" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2}
-          className="w-full rounded-lg bg-white/20 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30 resize-none"
-          placeholder="Description (optional)" />
-        <input value={location} onChange={(e) => setLocation(e.target.value)}
-          className="w-full rounded-lg bg-white/20 px-3 py-2 text-sm text-white placeholder-white/60 outline-none focus:bg-white/30"
-          placeholder="Location (optional)" />
-        <div className="flex gap-2">
-          <button onClick={() => void save()} disabled={saving || !title.trim()}
-            className="rounded-lg bg-white/30 px-4 py-1.5 text-sm font-semibold hover:bg-white/40 disabled:opacity-50 transition">
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button onClick={() => setEditing(false)}
-            className="rounded-lg bg-white/10 px-4 py-1.5 text-sm hover:bg-white/20 transition">
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`rounded-2xl p-4 space-y-1.5 ${bg} text-white`}>
-      {/* Title + actions row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <span className="font-bold text-base leading-snug">{notif.title}</span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {canEdit && !confirmDelete && (
-            <button onClick={() => setEditing(true)}
-              className="rounded-md p-1.5 hover:bg-white/20 transition" aria-label="Edit">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </button>
-          )}
-          {canDelete && (
-            confirmDelete ? (
-              <>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete(); setConfirmDelete(false); }}
-                  className="rounded-md px-2.5 py-1 text-xs font-semibold bg-white/30 hover:bg-white/50 active:bg-white/60 transition">
-                  Confirm
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
-                  className="rounded-md px-2.5 py-1 text-xs bg-white/10 hover:bg-white/20 transition">
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
-                className="rounded-md p-1.5 hover:bg-white/20 transition" aria-label="Delete">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                </svg>
-              </button>
-            )
-          )}
-          <span className="text-xs opacity-70 ml-1">{fmt(notif.created_at)}</span>
-        </div>
-      </div>
-      {notif.body && <p className="text-sm opacity-90 leading-relaxed">{notif.body}</p>}
-      {notif.location && (
-        <p className="text-xs opacity-75 flex items-center gap-1">
-          <span>📍</span><span>{notif.location}</span>
-        </p>
-      )}
-      {(notif.sender_name || notif.sender_unit) && (
-        <p className="text-xs opacity-60 flex items-center gap-1">
-          <span>👤</span><span>{[notif.sender_name, notif.sender_unit].filter(Boolean).join(" · ")}</span>
-        </p>
-      )}
-    </div>
-  );
-}
-
-function PushSetupRow() {
-  const [status, setStatus] = useState<"idle" | "busy" | "ok" | "error">("idle");
-  const [detail, setDetail] = useState("");
-  const [isNative, setIsNative] = useState(false);
-  const [registered, setRegistered] = useState(false);
-
-  useEffect(() => {
-    import("@capacitor/core").then(({ Capacitor }) => {
-      if (!Capacitor.isNativePlatform()) return;
-      setIsNative(true);
-      if (localStorage.getItem("fcm-registered") === "1") setRegistered(true);
-    });
-  }, []);
-
-  if (!isNative || registered) return null;
-
-  async function setup() {
-    setStatus("busy"); setDetail("");
-    try {
-      const { Capacitor } = await import("@capacitor/core");
-      const { FirebaseMessaging } = await import("@capacitor-firebase/messaging");
-      const perm = await FirebaseMessaging.requestPermissions();
-      if (perm.receive !== "granted") { setDetail("Permission: " + perm.receive); setStatus("error"); return; }
-      const { token } = await FirebaseMessaging.getToken();
-      if (!token) { setDetail("No token returned"); setStatus("error"); return; }
-      const { data: authData } = await supabase.auth.getUser();
-      const email = authData.user?.email;
-      if (!email) { setDetail("Not logged in"); setStatus("error"); return; }
-      const { data: user } = await supabase.from("users").select("id").ilike("email", email).maybeSingle();
-      if (!user?.id) { setDetail("User not found: " + email); setStatus("error"); return; }
-      const { error } = await supabase.from("fcm_tokens").upsert(
-        { user_id: user.id, token, platform: Capacitor.getPlatform() },
-        { onConflict: "user_id,platform" }
-      );
-      if (error) { setDetail("DB error: " + error.message); setStatus("error"); return; }
-      const { data: saved } = await supabase.from("fcm_tokens").select("token").eq("user_id", user.id).maybeSingle();
-      if (!saved) { setDetail(`Saved but read-back failed. user_id=${user.id}`); setStatus("error"); return; }
-      localStorage.setItem("fcm-registered", "1");
-      setDetail(`Token saved ✓  uid=${user.id.slice(0, 8)}… token=${token.slice(0, 12)}…`);
-      setStatus("ok");
-      setTimeout(() => setRegistered(true), 1500);
-    } catch (e: any) { setDetail(e?.message ?? String(e)); setStatus("error"); }
-  }
-
-  return (
-    <button onClick={() => void setup()} disabled={status === "busy"}
-      className={`w-full rounded-xl px-4 py-3 text-sm font-medium text-left transition ${
-        status === "ok" ? "bg-green-900/40 text-green-300" :
-        status === "error" ? "bg-red-900/40 text-red-300" :
-        "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"}`}>
-      {status === "busy" ? "Registering…" : status === "ok" ? "Push notifications active ✓" : "Set up push notifications"}
-      {detail && <div className="mt-0.5 text-xs opacity-70 break-all">{detail}</div>}
-    </button>
-  );
-}
-
-function AccountPanel({ profile, isAdmin, onClose }: { profile: Profile | null; isAdmin: boolean; onClose: () => void }) {
-  const [resetSent, setResetSent] = useState(false);
-
-  async function resetPassword() {
-    if (!profile?.email) return;
-    await supabase.auth.resetPasswordForEmail(profile.email, { redirectTo: `${window.location.origin}/auth/callback?type=recovery` });
-    setResetSent(true);
-  }
-
-  async function logout() {
-    localStorage.removeItem("auth-email");
-    localStorage.removeItem("real-role");
-    localStorage.removeItem("dev-role");
-    localStorage.removeItem("session-temporary");
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-10 flex h-full w-full max-w-sm flex-col overflow-y-auto bg-zinc-900 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-          <h2 className="font-semibold text-zinc-50">Account</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">✕</button>
-        </div>
-        {profile && (
-          <div className="flex-1 p-5 space-y-5">
-            <div>
-              <div className="text-xl font-bold text-zinc-50">{profile.full_name ?? "—"}</div>
-              {profile.call_sign && <div className="text-sm font-mono font-semibold text-[#E94E1B] mt-0.5">{profile.call_sign}</div>}
-            </div>
-            <div className="space-y-3">
-              <InfoRow label="Email" value={profile.email} />
-              <InfoRow label="Phone" value={profile.phone} />
-              <InfoRow label="Home Address" value={profile.home_address} />
-              {profile.teams.length > 0 && <InfoRow label="Assigned Teams" value={profile.teams.join(", ")} />}
-            </div>
-            {(profile.car_make || profile.car_model || profile.car_color || profile.license_plate_number) && (
-              <div className="rounded-xl bg-zinc-800 p-4 space-y-1.5">
-                <div className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Vehicle</div>
-                <div className="text-sm text-zinc-100">{[profile.car_color, profile.car_make, profile.car_model].filter(Boolean).join(" ") || "—"}</div>
-                {profile.license_plate_number && (
-                  <div className="text-sm text-zinc-400">{[profile.license_plate_state, profile.license_plate_number].filter(Boolean).join(" · ")}</div>
-                )}
-              </div>
-            )}
-            <div className="space-y-2 pt-2 border-t border-zinc-800">
-              <PushSetupRow />
-              <button onClick={() => void resetPassword()} disabled={resetSent}
-                className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-700 transition text-left">
-                {resetSent ? "Reset email sent ✓" : "Reset Password"}
-              </button>
-              {isAdmin && (
-                <button onClick={() => { sessionStorage.setItem("v2-mode", "1"); window.location.reload(); }}
-                  className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-[#E94E1B] hover:bg-zinc-700 transition text-left">
-                  Switch to V2 →
-                </button>
-              )}
-              <button onClick={() => void logout()}
-                className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm font-medium text-red-400 hover:bg-zinc-700 transition text-left">
-                Log Out
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div>
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="text-sm text-zinc-200">{value || "—"}</div>
-    </div>
-  );
-}
-
-const TEAM_GROUPS = ["WATER", "WILDERNESS", "MRU", "SUPPORT"] as const;
-type TeamGroup = typeof TEAM_GROUPS[number];
-
-type NominatimResult = { display_name: string; place_id: number };
-
-function AddressSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [query, setQuery] = useState(value);
-  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
-  const [open, setOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function handleInput(v: string) {
-    setQuery(v);
-    onChange(v);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (v.length < 3) { setSuggestions([]); setOpen(false); return; }
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(v)}&limit=5&countrycodes=ca,us`,
-          { headers: { "Accept-Language": "en" } }
-        );
-        const data: NominatimResult[] = await res.json();
-        setSuggestions(data);
-        setOpen(data.length > 0);
-      } catch { /* ignore */ }
-    }, 350);
-  }
-
-  function pick(display: string) {
-    setQuery(display);
-    onChange(display);
-    setSuggestions([]);
-    setOpen(false);
-  }
-
-  return (
-    <div className="relative">
-      <input
-        value={query}
-        onChange={(e) => handleInput(e.target.value)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Location (optional)"
-        className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600"
-      />
-      {open && (
-        <ul className="absolute z-50 mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
-          {suggestions.map((s) => (
-            <li key={s.place_id}
-              onMouseDown={() => pick(s.display_name)}
-              className="px-3 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800 last:border-0 leading-snug">
-              {s.display_name}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function ComposeModal({ onClose, onSent, senderId, senderName, senderUnit, onRefresh }: { onClose: () => void; onSent: (n: Notif) => void; senderId: string | null; senderName: string | null; senderUnit: string | null; onRefresh: () => void }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [location, setLocation] = useState("");
-  const [priority, setPriority] = useState<"routine" | "critical">("critical");
-  // selectedGroups: set of team names; empty = ALL; "CUSTOM" uses customIds
-  const [selectedGroups, setSelectedGroups] = useState<Set<TeamGroup>>(new Set());
-  const [useCustom, setUseCustom] = useState(false);
-  const [members, setMembers] = useState<{ id: string; full_name: string | null; call_sign: string | null }[]>([]);
-  const [customIds, setCustomIds] = useState<Set<string>>(new Set());
-  const [memberSearch, setMemberSearch] = useState("");
-  const [triggerSms, setTriggerSms] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (useCustom) {
-      supabase.from("users").select("id,full_name,call_sign").order("call_sign")
-        .then(({ data }) => setMembers((data ?? []) as any));
-    }
-  }, [useCustom]);
-
-  function toggleGroup(g: TeamGroup) {
-    setUseCustom(false);
-    setSelectedGroups((prev) => {
-      const next = new Set(prev);
-      next.has(g) ? next.delete(g) : next.add(g);
-      return next;
-    });
-  }
-
-  function toggleCustom() {
-    setUseCustom((v) => !v);
-    if (!useCustom) setSelectedGroups(new Set());
-  }
-
-  function toggleMember(id: string) {
-    setCustomIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
-
-  async function getTargetIds(): Promise<string[]> {
-    if (useCustom) return [...customIds];
-    // No groups selected = all members
-    if (selectedGroups.size === 0) {
-      const { data } = await supabase.from("users").select("id");
-      return (data ?? []).map((r: any) => r.id);
-    }
-    // Fetch members for each selected group and union them
-    const results = await Promise.all(
-      [...selectedGroups].map((g) =>
-        supabase.from("user_units").select("user_id, units!inner(name)").ilike("units.name", g)
-          .then(({ data }) => (data ?? []).map((r: any) => r.user_id as string))
-      )
-    );
-    return [...new Set(results.flat())];
-  }
-
-  async function send() {
-    if (!title.trim()) return;
-    if (useCustom && customIds.size === 0) { setErrorMsg("Select at least one member."); return; }
-    setSending(true);
-    setErrorMsg(null);
-
-    const targetIds = await getTargetIds();
-    const uniqueTargetIds = [...new Set(targetIds)];
-    if (uniqueTargetIds.length === 0) { setErrorMsg("No recipients found."); setSending(false); return; }
-
-    const broadcast_id = crypto.randomUUID();
-    const rows = uniqueTargetIds.map((uid: string) => ({
-      user_id: uid,
-      sender_id: senderId,
-      broadcast_id,
-      channel: "app",
-      notification_type: "broadcast",
-      title: title.trim(),
-      body: body.trim() || null,
-      location: location.trim() || null,
-      priority,
-      status: "sent",
-      sender_name: senderName ?? null,
-      sender_unit: senderUnit ?? null,
-    }));
-
-    const { error: insertError } = await supabase.from("notification_logs").insert(rows);
-    if (insertError) { setErrorMsg(`Send failed: ${insertError.message}`); setSending(false); return; }
-
-    const pushResults = await Promise.all(
-      uniqueTargetIds.map((user_id: string) =>
-        fetch("/api/send-push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined, sms: triggerSms, sender_name: senderName ?? undefined, sender_unit: senderUnit ?? undefined }),
-        }).then(r => r.json()).catch((e) => ({ error: e?.message }))
-      )
-    );
-    const totalFcm = pushResults.reduce((s: number, r: any) => s + (r?.fcm ?? 0), 0);
-    const totalSms = pushResults.reduce((s: number, r: any) => s + (r?.sms ? 1 : 0), 0);
-    const pushErrors = pushResults.flatMap((r: any) => r?.errors ?? []);
-    const fcmConfigured = pushResults.some((r: any) => r?.fcmConfigured);
-    const fcmTokensFound = pushResults.reduce((s: number, r: any) => s + (r?.fcmTokensFound ?? 0), 0);
-    const parts = [`${uniqueTargetIds.length} recipients`, fcmConfigured ? `FCM: ${totalFcm} sent (${fcmTokensFound} tokens)` : "FCM: not configured", totalSms ? `SMS: ${totalSms}` : "SMS: 0"];
-    if (pushErrors.length) parts.push(`errors: ${[...new Set(pushErrors)].join("; ")}`);
-    const summary = parts.join(" · ");
-
-    setSending(false);
-    setSent(true);
-    setErrorMsg(summary);
-    onRefresh();
-  }
-
-  const filteredMembers = memberSearch.trim()
-    ? members.filter((m) => [m.full_name, m.call_sign].join(" ").toLowerCase().includes(memberSearch.toLowerCase()))
-    : members;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-2xl bg-zinc-900 p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-zinc-50 text-lg">Send Notification</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg leading-none">✕</button>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setPriority("critical")}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${priority === "critical" ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-            ⚠ Critical
-          </button>
-        </div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title *"
-          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Description (optional)" rows={2}
-          className="w-full rounded-xl bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600 resize-none" />
-        <AddressSearch value={location} onChange={setLocation} />
-
-        {/* Group selector */}
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-zinc-400">Send to</div>
-          <div className="grid grid-cols-4 gap-2">
-            {TEAM_GROUPS.map((g) => (
-              <button key={g} onClick={() => toggleGroup(g)}
-                className={`rounded-lg py-2 text-xs font-semibold transition ${!useCustom && (selectedGroups.has(g) || selectedGroups.size === 0) ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-                {g}
-              </button>
-            ))}
-          </div>
-          <button onClick={toggleCustom}
-            className={`w-full rounded-lg py-2 text-xs font-semibold transition ${useCustom ? "bg-[#E94E1B] text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"}`}>
-            CUSTOM GROUP
-          </button>
-        </div>
-
-        {/* Custom member picker */}
-        {useCustom && (
-          <div className="space-y-2">
-            <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} placeholder="Search members…"
-              className="w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-1 focus:ring-[#E94E1B] placeholder-zinc-600" />
-            <div className="max-h-44 overflow-y-auto rounded-lg border border-zinc-800 divide-y divide-zinc-800">
-              {(memberSearch.trim() ? members.filter((m) => [m.full_name, m.call_sign].join(" ").toLowerCase().includes(memberSearch.toLowerCase())) : members).map((m) => (
-                <button key={m.id} onClick={() => toggleMember(m.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-800 transition">
-                  <span className={`h-4 w-4 rounded border-2 shrink-0 transition ${customIds.has(m.id) ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-600"}`} />
-                  <span className="font-mono text-sm text-zinc-100">{m.call_sign ?? "—"}</span>
-                  <span className="text-sm text-zinc-400">{m.full_name}</span>
-                </button>
-              ))}
-            </div>
-            {customIds.size > 0 && <div className="text-xs text-zinc-500">{customIds.size} selected</div>}
-          </div>
-        )}
-
-        <label className="flex items-center gap-3 cursor-pointer select-none">
-          <div onClick={() => setTriggerSms(v => !v)}
-            className={`w-5 h-5 rounded flex items-center justify-center border-2 transition ${triggerSms ? "bg-[#E94E1B] border-[#E94E1B]" : "border-zinc-600 bg-transparent"}`}>
-            {triggerSms && <svg viewBox="0 0 10 8" className="w-3 h-3 text-white fill-none stroke-current stroke-2"><polyline points="1,4 4,7 9,1"/></svg>}
-          </div>
-          <span className="text-sm font-medium text-zinc-300">Trigger SMS</span>
-        </label>
-
-        {!sent && errorMsg && (
-          <p className="rounded-lg border px-3 py-2 text-sm bg-red-900/40 border-red-700/50 text-red-300">{errorMsg}</p>
-        )}
-        <button onClick={() => void send()} disabled={sending || !title.trim() || sent}
-          className="w-full rounded-xl bg-[#E94E1B] py-3 font-semibold text-white disabled:opacity-50 transition hover:bg-orange-600">
-          {sent ? "Sent ✓" : sending ? "Sending…" : "Send"}
-        </button>
-        {sent && errorMsg && (
-          <div className="rounded-xl border border-zinc-600 bg-zinc-800 px-4 py-3 text-sm text-zinc-200">
-            <div className="font-semibold text-green-400 mb-1">Notification sent</div>
-            <div className="text-zinc-400">{errorMsg}</div>
-          </div>
-        )}
       </div>
     </div>
   );
