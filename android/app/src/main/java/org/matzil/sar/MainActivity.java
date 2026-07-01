@@ -9,7 +9,6 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import java.util.ArrayList;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -23,34 +22,37 @@ public class MainActivity extends BridgeActivity {
 
         @PluginMethod
         public void openChannelSettings(PluginCall call) {
-            Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
-            intent.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
-            intent.putExtra(Settings.EXTRA_CHANNEL_ID, "matzil_critical_v2");
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(intent);
+            Intent i = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
+            i.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+            i.putExtra(Settings.EXTRA_CHANNEL_ID, "matzil_critical_v2");
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
             call.resolve();
         }
 
         @PluginMethod
-        public void openFullScreenIntentSettings(PluginCall call) {
-            if (Build.VERSION.SDK_INT >= 34) { // Android 14+
-                Intent intent = new Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENTS");
-                intent.setData(Uri.parse("package:" + getContext().getPackageName()));
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getContext().startActivity(intent);
-            }
+        public void openDndSettings(PluginCall call) {
+            Intent i = new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
             call.resolve();
         }
 
         @PluginMethod
-        public void canUseFullScreenIntent(PluginCall call) {
-            boolean allowed = true;
-            if (Build.VERSION.SDK_INT >= 34) {
-                android.app.NotificationManager nm = (android.app.NotificationManager)
-                    getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE);
-                allowed = nm.canUseFullScreenIntent();
-            }
-            call.resolve(new com.getcapacitor.JSObject().put("allowed", allowed));
+        public void openOverlaySettings(PluginCall call) {
+            Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + getContext().getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        }
+
+        @PluginMethod
+        public void checkOverlayPermission(PluginCall call) {
+            boolean granted = Settings.canDrawOverlays(getContext());
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("granted", granted);
+            call.resolve(ret);
         }
     }
 }
