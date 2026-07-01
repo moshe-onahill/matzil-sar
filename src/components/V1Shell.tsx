@@ -80,6 +80,25 @@ export default function V1Shell() {
 
   useEffect(() => { void init(); }, []);
 
+  // Show in-app popup when app is opened from a background FCM notification
+  useEffect(() => {
+    async function checkPendingAlert() {
+      const { Capacitor } = await import("@capacitor/core");
+      if (!Capacitor.isNativePlatform()) return;
+      try {
+        const result = await (Capacitor as any).Plugins.AlertSettings.getPendingAlert();
+        if (result?.found) {
+          setCriticalAlert({ id: "pending", broadcast_id: null, title: result.title, body: result.body, location: result.location, priority: "critical", created_at: new Date().toISOString(), sender_id: null });
+          await (Capacitor as any).Plugins.AlertSettings.clearPendingAlert();
+        }
+      } catch { /* ignore on web */ }
+    }
+    void checkPendingAlert();
+    import("@capacitor/app").then(({ App }) => {
+      App.addListener("appStateChange", ({ isActive }) => { if (isActive) void checkPendingAlert(); });
+    });
+  }, []);
+
   useEffect(() => {
     if (!profile?.id) return;
     const uid = profile.id;
@@ -695,7 +714,7 @@ function ComposeModal({ onClose, onSent, senderId, onRefresh }: { onClose: () =>
         fetch("/api/send-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined, sms: triggerSms }),
+          body: JSON.stringify({ user_id, title: title.trim(), body: body.trim() || undefined, url: "/", critical: priority === "critical", location: location.trim() || undefined, sms: triggerSms, sender_name: profile?.full_name ?? profile?.call_sign ?? undefined }),
         }).then(r => r.json()).catch((e) => ({ error: e?.message }))
       )
     );

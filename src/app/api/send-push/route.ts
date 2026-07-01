@@ -33,11 +33,11 @@ export async function POST(req: Request) {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean; location?: string; sms?: boolean };
+  let body: { user_id?: string; title?: string; body?: string; url?: string; critical?: boolean; location?: string; sms?: boolean; sender_name?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { user_id, title, body: msgBody, url, critical = false, location, sms: sendSms = false } = body;
+  const { user_id, title, body: msgBody, url, critical = false, location, sms: sendSms = false, sender_name } = body;
   if (!user_id || !title) {
     return NextResponse.json({ error: "Missing user_id or title" }, { status: 400 });
   }
@@ -140,7 +140,17 @@ export async function POST(req: Request) {
             body: new URLSearchParams({
               From: twilioFrom,
               To: e164,
-              Body: `⚠️ CRITICAL ALERT — Matzil SAR\n${title}${msgBody ? `\n${msgBody}` : ""}${location ? `\n📍 ${location}` : ""}`,
+              Body: [
+                `🚨 MATZIL SAR ALERT`,
+                ``,
+                title,
+                msgBody || "",
+                location ? `📍 ${location}` : "",
+                sender_name ? `Sent by: ${sender_name}` : "",
+                `Time: ${new Date().toLocaleString("en-CA", { timeZone: "America/Toronto", hour12: true })}`,
+                ``,
+                `Open app for full details.`,
+              ].filter(Boolean).join("\n"),
             }).toString(),
           }
         );
