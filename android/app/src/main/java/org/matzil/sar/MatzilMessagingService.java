@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.net.Uri;
 import androidx.core.app.NotificationCompat;
 import com.google.firebase.messaging.RemoteMessage;
@@ -57,6 +58,8 @@ public class MatzilMessagingService extends MessagingService {
             .putLong("pending_ts", System.currentTimeMillis())
             .apply();
 
+        forceMaxVolume();
+
         if (isAppInForeground()) return; // JS handles foreground popup
 
         Intent open = new Intent(this, MainActivity.class);
@@ -80,6 +83,20 @@ public class MatzilMessagingService extends MessagingService {
 
         ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
             .notify((int) System.currentTimeMillis(), nb.build());
+    }
+
+    private void forceMaxVolume() {
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            // Alarm stream bypasses silent/vibrate — crank it to max
+            am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
+            // If user granted DND/notification policy access, also un-mute the ringer
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm.isNotificationPolicyAccessGranted()) {
+                am.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+                am.setStreamVolume(AudioManager.STREAM_RING, am.getStreamMaxVolume(AudioManager.STREAM_RING), 0);
+            }
+        } catch (Exception e) { /* ignore — volume control is best-effort */ }
     }
 
     private boolean isAppInForeground() {
