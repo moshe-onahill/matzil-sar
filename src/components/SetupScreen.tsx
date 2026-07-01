@@ -32,10 +32,11 @@ export default function SetupScreen({ onComplete }: { onComplete: () => void }) 
 
   function refresh() {
     setDone({
-      notify:  localStorage.getItem(FLAGS.notify)  === "1",
-      silent:  localStorage.getItem(FLAGS.silent)  === "1",
-      dnd:     localStorage.getItem(FLAGS.dnd)     === "1",
-      overlay: localStorage.getItem(FLAGS.overlay) === "1",
+      notify:     localStorage.getItem(FLAGS.notify)     === "1",
+      silent:     localStorage.getItem(FLAGS.silent)     === "1",
+      dnd:        localStorage.getItem(FLAGS.dnd)        === "1",
+      overlay:    localStorage.getItem(FLAGS.overlay)    === "1",
+      fullscreen: localStorage.getItem(FLAGS.fullscreen) === "1",
     });
   }
 
