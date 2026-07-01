@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getStoredRole } from "@/lib/dev-user";
 import V1Shell from "./V1Shell";
 import PushPermission from "./PushPermission";
+import SetupScreen from "./SetupScreen";
 import NotificationListener from "./NotificationListener";
 import SwipeNav from "./SwipeNav";
 import NavContentWrapper from "./NavContentWrapper";
@@ -22,10 +23,18 @@ const PUBLIC_PATHS = ["/login", "/reset-password"];
 
 export default function V1Gate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // Read synchronously on first render — no flash, no useEffect needed
   const [v2] = useState(isV2Session);
+  const [setupDone, setSetupDone] = useState(true); // start true to avoid flash
+  const [isNative, setIsNative] = useState(false);
 
-  // Pass through on public routes so the login/reset pages render normally
+  useEffect(() => {
+    import("@capacitor/core").then(({ Capacitor }) => {
+      if (!Capacitor.isNativePlatform()) return;
+      setIsNative(true);
+      setSetupDone(localStorage.getItem("setup-complete") === "1");
+    });
+  }, []);
+
   if (PUBLIC_PATHS.includes(pathname)) return <>{children}</>;
 
   if (v2) {
@@ -42,10 +51,10 @@ export default function V1Gate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
-    <>
-      <PushPermission />
-      <V1Shell />
-    </>
-  );
+  // Show setup screen on native if not yet completed
+  if (isNative && !setupDone) {
+    return <SetupScreen onComplete={() => setSetupDone(true)} />;
+  }
+
+  return <V1Shell />;
 }
