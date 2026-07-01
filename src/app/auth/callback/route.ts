@@ -43,9 +43,11 @@ export async function GET(request: NextRequest) {
       } else {
         next = searchParams.get("next") ?? "/";
       }
-      return NextResponse.redirect(`${origin}${next}`);
+      const base = process.env.NEXT_PUBLIC_SITE_URL ?? origin;
+      return NextResponse.redirect(`${base}${next}`);
     }
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? origin;
+  return NextResponse.redirect(`${base}/login?error=auth`);
 }
