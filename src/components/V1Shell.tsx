@@ -563,7 +563,7 @@ function AccountPanel({ profile, isAdmin, onClose }: { profile: Profile | null; 
 
   async function resetPassword() {
     if (!profile?.email) return;
-    await supabase.auth.resetPasswordForEmail(profile.email, { redirectTo: `${window.location.origin}/auth/callback?type=recovery` });
+    await supabase.auth.resetPasswordForEmail(profile.email, { redirectTo: `https://matzil-sar.vercel.app/auth/callback?type=recovery` });
     setResetSent(true);
   }
 

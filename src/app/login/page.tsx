@@ -53,7 +53,7 @@ export default function LoginPage() {
   async function loginWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `https://matzil-sar.vercel.app/auth/callback` },
     });
     if (error) setError(error.message);
   }
@@ -62,7 +62,7 @@ export default function LoginPage() {
     if (!resetEmail.trim()) { setError("Enter your email address."); return; }
     setResetLoading(true);
     await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+      redirectTo: `https://matzil-sar.vercel.app/auth/callback?type=recovery`,
     });
     setResetLoading(false);
     setResetSent(true);
